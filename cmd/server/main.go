@@ -79,7 +79,7 @@ func main() {
 	authH       := handlers.NewAuthHandler(pool, jwtSecret, cfg.BaseURL)
 	teamH       := handlers.NewTeamHandler(pool, jwtSecret, cfg.BaseURL)
 	settingsH   := handlers.NewSettingsHandler(pool)
-	onboardingH := handlers.NewOnboardingHandler(pool, jwtSecret)
+	onboardingH := handlers.NewOnboardingHandler(pool, jwtSecret, cfg.WA.PhoneNumberID, cfg.WA.AccessToken)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -93,8 +93,9 @@ func main() {
 
 	// ── Auth & onboarding (public) ────────────────────────────────────────────
 	authH.Mount(r)
-	r.Get("/onboarding",       onboardingH.Page)
-	r.Post("/onboarding/admin", onboardingH.CreateAdmin)
+	r.Route("/onboarding", func(r chi.Router) {
+		onboardingH.Mount(r)
+	})
 
 	// ── Click tracking (public) ───────────────────────────────────────────────
 	r.Route("/c", func(r chi.Router) {

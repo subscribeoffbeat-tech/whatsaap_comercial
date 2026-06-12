@@ -52,6 +52,21 @@ func GetConfigInt(ctx context.Context, pool *pgxpool.Pool, key string) (int64, e
 	return n, nil
 }
 
+// GetConfigBool reads a boolean app_config value by key.
+func GetConfigBool(ctx context.Context, pool *pgxpool.Pool, key string) (bool, error) {
+	var raw json.RawMessage
+	if err := pool.QueryRow(ctx,
+		`SELECT value FROM app_config WHERE key = $1`, key,
+	).Scan(&raw); err != nil {
+		return false, fmt.Errorf("get_config %q: %w", key, err)
+	}
+	var b bool
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return false, fmt.Errorf("parse config %q as bool: %w", key, err)
+	}
+	return b, nil
+}
+
 // SetConfig upserts a config value by key.
 func SetConfig(ctx context.Context, pool *pgxpool.Pool, key string, value any) error {
 	raw, err := json.Marshal(value)

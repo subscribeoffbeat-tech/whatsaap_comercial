@@ -265,9 +265,10 @@ func AgentPerformance(ctx context.Context, pool *pgxpool.Pool, from, to time.Tim
 type DashboardStats struct {
 	SentToday      int64
 	DeliveredToday int64
-	ChatsWaiting   int64  // open conversations not assigned
+	ChatsWaiting   int64   // open conversations not assigned
 	CostThisMonth  float64
 	QualityRating  string
+	DailyCap       int64   // 90%-of-tier cap — same source as WizardAudience and LimitGuardCheck
 }
 
 // GetDashboardStats returns the quick-stat numbers for the dashboard.
@@ -307,9 +308,10 @@ func GetDashboardStats(ctx context.Context, pool *pgxpool.Pool) (DashboardStats,
 		return s, err
 	}
 
-	// Quality rating
+	// Quality rating + daily cap (qi.DailyCap already calls DailyCap(ctx,pool) — same source as WizardAudience)
 	qi, _ := GetQualityInfo(ctx, pool)
 	s.QualityRating = qi.QualityRating
+	s.DailyCap = qi.DailyCap
 
 	return s, nil
 }

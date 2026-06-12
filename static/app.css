@@ -515,3 +515,106 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background:
   border-color: var(--danger);
   color: var(--danger-text);
 }
+
+/* ── Page layout shared (used by dashboard, analytics, campaigns…) ── */
+.page-wrap { max-width: 1100px; margin: 0 auto; padding: 0 0 2rem; }
+.page-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.page-hd h1 { margin: 0; font-size: 1.5rem; font-weight: 700; }
+
+/* ── Tier-cap progress bar (dashboard) ── */
+.tier-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+}
+.tier-bar-wrap {
+  flex: 1;
+  height: 8px;
+  background: var(--divider);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.tier-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+.tier-bar-fill--warn { background: var(--warning); }
+.tier-bar-lbl { color: var(--text-muted); white-space: nowrap; }
+
+/* ── Onboarding step indicator ── */
+.onb-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  counter-reset: step;
+}
+.onb-steps .s {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 0.25rem 0.6rem 0.25rem 0;
+  white-space: nowrap;
+}
+.onb-steps .s::before {
+  content: counter(step);
+  counter-increment: step;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--divider);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.onb-steps .s.on { color: var(--primary); font-weight: 600; }
+.onb-steps .s.on::before { background: var(--primary); color: #fff; }
+.onb-steps .s.done::before { background: var(--success-fill); color: #fff; content: '✓'; }
+
+/* ── Setup checklist ── */
+.onb-checklist { border: 1px solid var(--divider); border-radius: var(--radius); overflow: hidden; }
+.ci {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid var(--divider);
+  font-size: 0.875rem;
+}
+.ci:last-child { border-bottom: none; }
+.ci-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.ci.ok .ci-icon { background: var(--success-fill); color: #fff; }
+.ci.no .ci-icon { background: var(--divider); color: var(--text-muted); }
+.ci-lbl { font-weight: 500; line-height: 1.4; }
+.ci.ok .ci-lbl { color: var(--text-strong); }
+.ci.no .ci-lbl { color: var(--text-muted); }
+.ci-hint { font-size: 0.775rem; color: var(--text-muted); margin-top: 0.15rem; }
