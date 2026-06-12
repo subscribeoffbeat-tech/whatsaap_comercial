@@ -133,7 +133,7 @@
 .an-bar {
   width: 100%;
   min-height: 4px;
-  background: #3b82f6;
+  background: var(--primary);
   border-radius: 2px 2px 0 0;
 }
 
@@ -213,3 +213,69 @@
   background: var(--divider);
   color: var(--text);
 }
+
+/* ── Stat card danger value (failed %) ── */
+.an-val--danger { color: var(--danger); }
+
+/* ── Two-column grid: daily chart + cost split ── */
+.an-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 720px) {
+  .an-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Cost split panel ── */
+.an-cost-total {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-strong);
+  margin-bottom: 0.75rem;
+}
+
+.an-cost-period {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.cost-split-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--divider);
+  margin-bottom: 0.75rem;
+}
+
+.split-seg {
+  height: 100%;
+  flex-shrink: 0;
+}
+
+.split-seg--utility    { background: var(--info); }
+.split-seg--marketing  { background: var(--warning); }
+.split-seg--auth       { background: var(--success-fill); }
+
+.cost-split-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.legend-item--utility::before  { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--info); }
+.legend-item--marketing::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--warning); }
+.legend-item--auth::before      { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--success-fill); }

@@ -41,8 +41,11 @@ func (h *AnalyticsHandler) Page(w http.ResponseWriter, r *http.Request) {
 	var agentStats []db.AgentStat
 
 	if agent.Role == "agent" {
-		// Agents see only their own sent-message stats; no cost data.
+		// Agents see only their own delivery stats. Cost fields are excluded at
+		// the DB layer (GetAgentOverviewStats returns 0::numeric for cost_inr).
+		// Zeroing here is defense-in-depth: the template also gates on role.
 		overview, _ = db.GetAgentOverviewStats(ctx, h.pool, from, to, agent.ID)
+		overview.CostINR = 0 // never expose financial data to agents
 		allStats, err := db.AgentPerformance(ctx, h.pool, from, to)
 		if err != nil {
 			log.Printf("analytics agents: %v", err)
@@ -53,7 +56,7 @@ func (h *AnalyticsHandler) Page(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
-		// byCat and byCamp remain nil — cost sections won't render
+		// byCat and byCamp remain nil — cost panels must not render for agents
 	} else {
 		var err error
 		overview, err = db.GetOverviewStats(ctx, h.pool, from, to)
