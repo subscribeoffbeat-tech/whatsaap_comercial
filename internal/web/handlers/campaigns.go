@@ -64,11 +64,12 @@ func (h *CampaignHandler) WizardAudience(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	agent := mw.AgentFromCtx(r.Context())
+
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
 		tags, _ := db.ListTags(r.Context(), h.pool)
-		state := templates.WizardState{Step: 1}
-		templates.WizardStep1(state, tags).Render(r.Context(), w)
+		templates.WizardNewPage(agent, tags).Render(r.Context(), w)
 		return
 	}
 
@@ -82,6 +83,10 @@ func (h *CampaignHandler) WizardAudience(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Snapshot daily cap and today's sent count for the tier-cap banner (step 4).
+	dailySent, _ := db.DailyMessagesSent(r.Context(), h.pool)
+	dailyCap := db.DailyCap(r.Context(), h.pool)
+
 	state := templates.WizardState{
 		Step:          2,
 		Name:          name,
@@ -89,10 +94,12 @@ func (h *CampaignHandler) WizardAudience(w http.ResponseWriter, r *http.Request)
 		ExcludeTags:   exclTags,
 		EligibleCount: len(eligible),
 		SkipReport:    report,
+		DailySent:     int(dailySent),
+		DailyCap:      int(dailyCap),
 	}
 
 	tmplList, _ := db.ListTemplates(r.Context(), h.pool)
-	templates.WizardStep2(state, approvedTemplates(tmplList)).Render(r.Context(), w)
+	templates.WizardStep2Page(agent, state, approvedTemplates(tmplList)).Render(r.Context(), w)
 }
 
 func (h *CampaignHandler) WizardMessage(w http.ResponseWriter, r *http.Request) {
@@ -106,11 +113,13 @@ func (h *CampaignHandler) WizardMessage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	agent := mw.AgentFromCtx(r.Context())
+
 	templateID := r.FormValue("template_id")
 	if templateID == "" {
 		tmplList, _ := db.ListTemplates(r.Context(), h.pool)
 		state.Step = 2
-		templates.WizardStep2(state, approvedTemplates(tmplList)).Render(r.Context(), w)
+		templates.WizardStep2Page(agent, state, approvedTemplates(tmplList)).Render(r.Context(), w)
 		return
 	}
 
@@ -130,7 +139,7 @@ func (h *CampaignHandler) WizardMessage(w http.ResponseWriter, r *http.Request) 
 	state.VarMap = varMap
 	state.Fallbacks = fallbacks
 
-	templates.WizardStep3(state).Render(r.Context(), w)
+	templates.WizardStep3Page(agent, state).Render(r.Context(), w)
 }
 
 func (h *CampaignHandler) WizardSchedule(w http.ResponseWriter, r *http.Request) {
@@ -144,6 +153,8 @@ func (h *CampaignHandler) WizardSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	agent := mw.AgentFromCtx(r.Context())
+
 	schedType := r.FormValue("schedule_type")
 	if schedType == "" {
 		schedType = "now"
@@ -153,16 +164,16 @@ func (h *CampaignHandler) WizardSchedule(w http.ResponseWriter, r *http.Request)
 	if schedType == "scheduled" {
 		dtStr := r.FormValue("scheduled_at")
 		if dtStr == "" {
-			templates.WizardStep3Error(state, "Please select a date and time.").Render(r.Context(), w)
+			templates.WizardStep3ErrorPage(agent, state, "Please select a date and time.").Render(r.Context(), w)
 			return
 		}
 		t, parseErr := parseLocalDateTime(dtStr)
 		if parseErr != nil {
-			templates.WizardStep3Error(state, "Invalid date format.").Render(r.Context(), w)
+			templates.WizardStep3ErrorPage(agent, state, "Invalid date format.").Render(r.Context(), w)
 			return
 		}
 		if campaigns.IsQuietHours(t) {
-			templates.WizardStep3Error(state, "Quiet hours: 9pm–9am IST. Choose a time between 9am and 9pm IST.").Render(r.Context(), w)
+			templates.WizardStep3ErrorPage(agent, state, "Quiet hours: 9pm–9am IST. Choose a time between 9am and 9pm IST.").Render(r.Context(), w)
 			return
 		}
 		state.ScheduledAt = &t
@@ -178,7 +189,7 @@ func (h *CampaignHandler) WizardSchedule(w http.ResponseWriter, r *http.Request)
 	state.EstCost = campaigns.CalcTotalCost(tmpl.Category, state.EligibleCount, rates)
 	state.Step = 4
 
-	templates.WizardStep4(state, tmpl).Render(r.Context(), w)
+	templates.WizardStep4Page(agent, state, tmpl).Render(r.Context(), w)
 }
 
 func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {

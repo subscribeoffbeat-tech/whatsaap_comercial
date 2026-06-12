@@ -326,3 +326,113 @@
   align-items: center;
   gap: 1rem;
 }
+
+/* ── Callouts (guardrail notices) ────────────────────────────────────────── */
+
+[x-cloak] { display: none !important; }
+
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+
+.callout--warning {
+  background: var(--warning-tint);
+  border-color: var(--warning);
+  color: var(--warning-text);
+}
+
+.callout--danger {
+  background: var(--danger-tint);
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+}
+
+.callout--info {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+/* ── Danger button variant ───────────────────────────────────────────────── */
+
+.btn--danger {
+  background: var(--danger-tint);
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+.btn--danger:hover {
+  background: var(--danger);
+  color: var(--surface);
+  border-color: var(--danger);
+}
+
+/* ── Confirm launch dialog ───────────────────────────────────────────────── */
+
+.confirm-dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  max-width: 460px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+}
+
+.confirm-dialog::backdrop {
+  background: rgba(0,0,0,0.45);
+}
+
+.confirm-dialog h2 {
+  margin: 0 0 1.25rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.confirm-summary {
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.confirm-summary dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 1.25rem;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.confirm-summary dt { color: var(--text-muted); }
+.confirm-summary dd { margin: 0; font-weight: 500; color: var(--text-strong); }
+
+.confirm-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0 0 1.25rem;
+}
+
+.confirm-btns {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+/* ── Disabled button state ───────────────────────────────────────────────── */
+
+.btn[disabled],
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
