@@ -1,0 +1,127 @@
+/* WhatsApp Tool — inbox styles */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* inbox-specific layout vars only — colors come from tokens.css */
+  --bubble:    #E7FFDB;   /* outbound bubble tint — decorative, no text on it */
+  --green-l:   #E7FFDB;   /* compat alias used in contacts.css hover */
+  --list-w:    300px;
+  --contact-w: 270px;
+}
+
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+       font-size: 14px; color: var(--text); background: var(--bg-page); height: 100vh; overflow: hidden; }
+
+/* ── 3-pane layout ─────────────────────────────────────────────── */
+.ibx-wrap { display: flex; height: 100vh; overflow: hidden; }
+
+.ibx-list    { width: var(--list-w); min-width: var(--list-w); background: var(--surface);
+               border-right: 1px solid var(--divider); display: flex; flex-direction: column; overflow: hidden; }
+.ibx-thread  { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.ibx-contact { width: var(--contact-w); min-width: var(--contact-w); background: var(--surface);
+               border-left: 1px solid var(--divider); overflow-y: auto; }
+
+/* ── Left pane ─────────────────────────────────────────────────── */
+.ibx-search { padding: 8px 12px; border-bottom: 1px solid var(--divider); }
+.search-input { width: 100%; padding: 6px 10px; border: 1px solid var(--border);
+                border-radius: 20px; font-size: 13px; background: var(--bg-page); }
+.search-input:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(14,122,64,0.30); }
+
+.ibx-filters { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--divider); }
+.chip { padding: 4px 10px; border-radius: 16px; border: 1px solid var(--border);
+        background: transparent; cursor: pointer; font-size: 12px; color: var(--text-muted); }
+.chip.sel, .chip:hover { background: var(--primary); color: white; border-color: var(--primary); }
+
+.convs { flex: 1; overflow-y: auto; }
+.conv-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+.conv { display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+        cursor: pointer; border-bottom: 1px solid var(--divider); transition: background .12s; }
+.conv:hover { background: var(--bg-page); }
+.conv.sel  { background: var(--green-l); }
+
+.conv-av { width: 42px; height: 42px; border-radius: 50%; background: var(--primary);
+           color: white; display: flex; align-items: center; justify-content: center;
+           font-size: 16px; font-weight: 600; flex-shrink: 0; }
+.conv-info { flex: 1; min-width: 0; }
+.conv-name    { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-preview { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.conv-time { font-size: 11px; color: var(--text-muted); }
+.conv-badge { background: var(--primary); color: white; border-radius: 50%;
+              width: 18px; height: 18px; font-size: 11px;
+              display: flex; align-items: center; justify-content: center; }
+
+/* ── Center pane: thread ───────────────────────────────────────── */
+.th-empty { flex: 1; display: flex; align-items: center; justify-content: center;
+            color: var(--text-muted); font-size: 15px; }
+.th-wrap  { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+.th-hd { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+         border-bottom: 1px solid var(--divider); background: var(--surface); }
+.th-av  { width: 40px; height: 40px; border-radius: 50%; background: var(--primary-hover);
+          color: white; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.th-info { flex: 1; min-width: 0; }
+.th-name   { font-weight: 600; font-size: 15px; }
+.th-status { font-size: 12px; color: var(--text-muted); }
+.win-badge       { background: #FEF9C3; color: #854D0E; padding: 2px 8px; border-radius: 10px; font-size: 11.5px; }
+.win-badge.win-closed { background: #FEE2E2; color: #991B1B; }
+.th-actions { display: flex; gap: 8px; }
+
+.th-body { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; background: #EBF0F0; }
+
+/* ── Message bubbles ───────────────────────────────────────────── */
+.bub { max-width: 66%; padding: 8px 12px; border-radius: 12px; word-break: break-word; line-height: 1.45; }
+.bub.in  { align-self: flex-start; background: var(--surface); border-top-left-radius: 2px; }
+.bub.out { align-self: flex-end;   background: var(--bubble);  border-top-right-radius: 2px; }
+.bub-body { font-size: 14px; }
+.bub-meta { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 2px; }
+.t { font-size: 10.5px; color: var(--text-muted); }
+
+/* ── Message status ticks ──────────────────────────────────────────── */
+/* Five states: queued (clock), sent (1 tick), delivered (2 ticks gray),
+   read (2 ticks blue + heavier stroke), failed (exclamation).
+   Told apart by SHAPE + COUNT + optionally color — never color alone. */
+.stat { display: inline-flex; align-items: center; gap: 4px; }
+.stat svg { display: block; }
+
+.tick { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.ico  { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+.stat--sent      .tick { stroke: var(--status-sent);      stroke-width: 1.8; }
+.stat--delivered .tick { stroke: var(--status-delivered); stroke-width: 1.8; }
+/* heavier stroke = grayscale-safe cue; blue (#2563EB) and gray (#4B5563)
+   share similar luminance, so weight carries the distinction without color */
+.stat--read      .tick { stroke: var(--status-read);      stroke-width: 2.6; }
+.stat--queued    .ico  { stroke: var(--status-queued);    stroke-width: 1.8; }
+.stat--failed    .ico  { stroke: var(--status-failed);    stroke-width: 1.8; }
+
+/* ── Composer ──────────────────────────────────────────────────── */
+.composer { display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+            border-top: 1px solid var(--divider); background: var(--surface); }
+.emoji-btn { background: none; border: none; font-size: 20px; cursor: pointer; padding: 0 4px; }
+.composer-input { flex: 1; padding: 8px 14px; border: 1px solid var(--border);
+                  border-radius: 20px; font-size: 14px; background: var(--bg-page); }
+.composer-input:focus { border-color: var(--border-focus); background: var(--surface); box-shadow: 0 0 0 3px rgba(14,122,64,0.30); }
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
+       background: var(--surface); cursor: pointer; font-size: 13px; font-weight: 500; }
+.btn:hover { background: var(--bg-page); }
+.btn.pri { background: var(--primary); color: white; border-color: var(--primary); }
+.btn.pri:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.btn.sm { padding: 4px 10px; font-size: 12px; }
+
+/* ── Right contact panel ───────────────────────────────────────── */
+.ibx-contact { padding: 16px; }
+.field { margin-bottom: 14px; }
+.field label { font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: .05em; }
+.field p { font-size: 13.5px; margin-top: 2px; }
+.chip.g { background: #D1FAE5; color: #065F46; }
+.chip.b { background: #DBEAFE; color: #1E40AF; }
+
+/* ── Scrollbar ─────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }

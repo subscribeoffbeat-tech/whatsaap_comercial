@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Our WhatsApp Tool — playing by Meta's rules</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Patrick+Hand&family=Gloria+Hallelujah&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF8F0;--grid:rgba(120,120,140,0.07);--ink:#2A2A38;--ink-soft:#52525f;
+    --admin:#6B5BD2;--agent:#2F7FD1;--cust:#1F9D55;--sys:#E0852F;--warn:#E0533D;
+    --hi-yellow:#FFE680;--hi-green:#C9F2D6;--hi-pink:#FAD1DE;
+    --note:#FFF3B0;--note-pink:#FBD3DE;--note-blue:#CFE6FB;
+    --green:#1F9D55;--yellow:#E0A21F;--red:#E0533D;
+  }
+  *{box-sizing:border-box}html{scroll-behavior:smooth}
+  body{margin:0;font-family:'Patrick Hand','Comic Sans MS',cursive;color:var(--ink);
+    background-color:var(--paper);
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:28px 28px;font-size:19px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:940px;margin:0 auto;padding:32px 22px 80px}
+  h1,h2,h3{font-family:'Caveat',cursive;font-weight:700;line-height:1.05;margin:0}
+  p{margin:.5em 0}.mono{font-family:'Space Mono',monospace;font-size:.72em;letter-spacing:-.5px}
+  .rough{filter:url(#rough)}
+  .hero{text-align:center;margin:18px 0 10px}
+  .hero .kicker{font-family:'Gloria Hallelujah',cursive;font-size:15px;color:var(--ink-soft);transform:rotate(-2deg);display:inline-block}
+  .hero h1{font-size:clamp(36px,8vw,66px);color:var(--ink);margin:.1em 0}
+  .hero h1 .r{color:var(--warn)}
+  .hero .sub{font-size:21px;color:var(--ink-soft);max-width:620px;margin:6px auto 0}
+  .underline-doodle{display:block;margin:2px auto 0;width:300px;height:18px}
+  .chapter{background:#fff;border:2.5px solid var(--ink);
+    border-radius:255px 14px 225px 16px/16px 225px 14px 255px;
+    padding:26px 26px 28px;margin:30px 0;box-shadow:6px 7px 0 rgba(42,42,56,.13);position:relative}
+  .chapter:nth-child(even){border-radius:18px 240px 16px 230px/230px 16px 240px 16px}
+  .tape{position:absolute;top:-13px;left:50%;transform:translateX(-50%) rotate(-3deg);
+    width:120px;height:26px;background:rgba(255,230,128,.7);border:1px dashed rgba(42,42,56,.25)}
+  .ch-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+  .ch-num{flex:0 0 auto;width:52px;height:52px;display:grid;place-items:center;
+    font-family:'Caveat';font-weight:700;font-size:30px;color:#fff;position:relative}
+  .ch-num svg{position:absolute}.ch-num span{position:relative;z-index:2}
+  .ch-head h2{font-size:clamp(27px,4.8vw,40px)}
+  .lead{font-size:20px;color:var(--ink-soft);margin-top:2px}
+  mark{padding:0 4px;border-radius:6px;background:var(--hi-yellow);color:var(--ink)}
+  mark.g{background:var(--hi-green)}mark.p{background:var(--hi-pink)}
+  .pen-warn{color:var(--warn);font-weight:700}.pen-sys{color:var(--sys);font-weight:700}.pen-cust{color:var(--cust);font-weight:700}
+
+  /* quality lights */
+  .lights{display:flex;gap:14px;margin-top:12px;flex-wrap:wrap}
+  .light{flex:1;min-width:180px;border:2.5px solid var(--ink);border-radius:14px;padding:12px 14px;background:#fff}
+  .light .bulb{display:inline-block;width:16px;height:16px;border-radius:50%;border:2px solid var(--ink);vertical-align:middle;margin-right:8px}
+  .light h3{display:inline;font-size:24px}.light p{font-size:17px;margin:.3em 0 0}
+  .bg-green{background:var(--green)}.bg-yellow{background:var(--yellow)}.bg-red{background:var(--red)}
+
+  /* rule -> enforcement table */
+  .rules{margin-top:12px}
+  .rule{display:grid;grid-template-columns:1fr 26px 1fr;gap:8px;align-items:center;
+    border-bottom:2px dotted rgba(42,42,56,.22);padding:11px 0}
+  .rule .meta{background:#FFF1EC;border:2px solid var(--warn);border-radius:10px;padding:9px 12px}
+  .rule .ours{background:#EFFBF3;border:2px solid var(--cust);border-radius:10px;padding:9px 12px}
+  .rule .meta b,.rule .ours b{font-family:'Caveat';font-size:21px}
+  .rule .meta b{color:var(--warn)}.rule .ours b{color:var(--cust)}
+  .rule small{display:block;font-size:16px;color:var(--ink);margin-top:1px}
+  .rule .ar{font-family:'Caveat';font-size:28px;text-align:center;color:var(--ink-soft)}
+
+  .notes{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:14px}
+  .note{padding:15px 17px;border-radius:4px;box-shadow:3px 4px 0 rgba(42,42,56,.16);transform:rotate(-1.2deg)}
+  .note:nth-child(even){transform:rotate(1.4deg)}
+  .note h3{font-size:24px}.note p{font-size:17px;margin:.3em 0 0}
+  .n-yellow{background:var(--note)}.n-blue{background:var(--note-blue)}.n-pink{background:var(--note-pink)}.n-green{background:var(--hi-green)}
+
+  .divider{display:block;margin:8px auto;width:60%;height:16px}
+  .closing{text-align:center;font-family:'Caveat';font-size:32px;color:var(--ink-soft);margin-top:34px;transform:rotate(-1deg)}
+  @media(max-width:680px){
+    body{font-size:18px}.notes{grid-template-columns:1fr}
+    .chapter{border-radius:14px!important}.note{transform:none}
+    .rule{grid-template-columns:1fr;gap:6px}.rule .ar{display:none}
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"/></filter>
+  <marker id="ah" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L8 5 L1 9" fill="none" stroke="#2A2A38" stroke-width="2"/></marker>
+</svg>
+
+<div class="wrap">
+  <div class="hero">
+    <span class="kicker">part 3 — how we avoid getting our number banned ↓</span>
+    <h1>Playing by <span class="r">Meta's</span> rules</h1>
+    <svg class="underline-doodle rough" viewBox="0 0 300 18"><path d="M4 11 C80 4,180 16,296 6" fill="none" stroke="#E0533D" stroke-width="4" stroke-linecap="round"/></svg>
+    <p class="sub">Part 1 had the ideas right. Here are the <i>exact</i> 2026 numbers — and the code that actually enforces each one.</p>
+  </div>
+
+  <!-- CH1 the 3 things -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0533D" stroke="#2A2A38" stroke-width="2.5"/></svg><span>1</span></div><h2>Meta is watching 3 things</h2></div>
+    <p class="lead">Break any of these and you get throttled, frozen, or banned. Everything in this doc protects one of them.</p>
+    <div class="notes">
+      <div class="note n-pink"><h3>1 · Approval</h3><p>Any message <i>you</i> start must use a template Meta pre-checked. No approval = it won't send.</p></div>
+      <div class="note n-yellow"><h3>2 · Quality</h3><p>Blocks &amp; "report spam" tank your <b>quality rating</b> (Green→Yellow→Red). Low quality = limits cut.</p></div>
+      <div class="note n-blue"><h3>3 · Limits</h3><p>You can only reach so many new people per 24h. Try more and the extras are rejected.</p></div>
+      <div class="note n-green"><h3>The golden rule</h3><p>Only message <b>opted-in</b> people, relevant stuff, well-paced. Do that and limits rise on their own.</p></div>
+    </div>
+  </div>
+
+  <!-- CH2 approval -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#6B5BD2" stroke="#2A2A38" stroke-width="2.5"/></svg><span>2</span></div><h2>Rule A — Template approval</h2></div>
+    <p>Every business-initiated message is a <b>template</b> in one of three buckets, and Meta reviews the wording (minutes to a day):</p>
+    <div class="notes">
+      <div class="note n-blue"><h3>Marketing</h3><p>Promos, offers, re-engagement. Pricier, and the most scrutinised.</p></div>
+      <div class="note n-green"><h3>Utility</h3><p>Order updates, receipts, reminders. Cheap; free if sent inside the 24h window.</p></div>
+      <div class="note n-yellow"><h3>Authentication</h3><p>OTPs / login codes. Strict format rules.</p></div>
+    </div>
+    <p style="margin-top:12px"><span class="pen-warn">Gets rejected for:</span> mismatched category, spammy wording, broken variables, or promo content hiding in a "utility" template. Meta can also re-categorise a template and bill it at the higher rate.</p>
+  </div>
+
+  <!-- CH3 quality -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0852F" stroke="#2A2A38" stroke-width="2.5"/></svg><span>3</span></div><h2>Rule B — Quality &amp; delivery</h2></div>
+    <p class="lead">Quality is a traffic light, judged on blocks, reports, and how people engage.</p>
+    <div class="lights">
+      <div class="light"><span class="bulb bg-green"></span><h3>Green</h3><p>Healthy. Limits keep climbing.</p></div>
+      <div class="light"><span class="bulb bg-yellow"></span><h3>Yellow</h3><p>Warning. Your tier <b>freezes</b> — no growth.</p></div>
+      <div class="light"><span class="bulb bg-red"></span><h3>Red</h3><p>Danger. Limit <b>cut</b>, or the number <b>paused</b>.</p></div>
+    </div>
+    <p style="margin-top:12px">Two extra delivery rules that bite: a user can get only <mark>~2 marketing messages per day across all brands</mark> (over that, Meta returns saturation <span class="mono">error 131049</span> and drops it), and since April 2025 <span class="pen-warn">no marketing templates to US (+1) numbers</span> at all.</p>
+  </div>
+
+  <!-- CH4 limits ladder -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#2F7FD1" stroke="#2A2A38" stroke-width="2.5"/></svg><span>4</span></div><h2>Rule C — The sending limits</h2></div>
+    <p class="lead">How many <b>new people</b> you can reach per rolling 24h. It's a ladder you climb by behaving.</p>
+    <svg viewBox="0 0 900 280" class="rough" style="width:100%;height:auto;margin-top:6px">
+      <g font-family="Caveat" font-weight="700" font-size="22">
+        <rect x="20" y="200" width="150" height="46" rx="9" fill="#FCEBEB" stroke="#2A2A38" stroke-width="2.5"/><text x="95" y="223" text-anchor="middle" fill="#E0533D">250 / day</text><text x="95" y="240" text-anchor="middle" font-family="Patrick Hand" font-size="12" fill="#52525f">start here (Tier 0)</text>
+        <rect x="195" y="158" width="150" height="46" rx="9" fill="#fff" stroke="#2A2A38" stroke-width="2.5"/><text x="270" y="187" text-anchor="middle">1,000</text>
+        <rect x="370" y="116" width="150" height="46" rx="9" fill="#fff" stroke="#2A2A38" stroke-width="2.5"/><text x="445" y="145" text-anchor="middle">10,000</text>
+        <rect x="545" y="74" width="150" height="46" rx="9" fill="#fff" stroke="#2A2A38" stroke-width="2.5"/><text x="620" y="103" text-anchor="middle">100,000</text>
+        <rect x="720" y="32" width="160" height="46" rx="9" fill="#E6F6EC" stroke="#2A2A38" stroke-width="2.5"/><text x="800" y="61" text-anchor="middle" fill="#1F9D55">Unlimited</text>
+      </g>
+      <path d="M172 212 L193 188" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <path d="M347 170 L368 146" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <path d="M522 128 L543 104" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <path d="M697 86 L718 62" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <text x="150" y="180" font-family="Gloria Hallelujah" font-size="12" fill="#52525f" transform="rotate(-14 150 180)">↑ verify business to pass 250</text>
+      <text x="470" y="245" font-family="Patrick Hand" font-size="15" fill="#52525f">Meta re-checks every 6 hours · climbs only if quality is Green &amp; you use ≥ half your limit</text>
+    </svg>
+    <p style="margin-top:10px"><span class="pen-warn">The 2025–26 changes that trip people up:</span> you must <b>verify your business</b> to move past 250 (no workaround); limits are now <mark>shared across every number in your Business Portfolio</mark> (since Oct 2025), so a new number inherits the portfolio's tier; and throughput is <mark>~80 messages/sec</mark> by default (up to 1,000/sec at the top tier) — <i>not</i> the 40/sec figure in the old blueprint.</p>
+    <p style="font-size:15px;color:var(--ink-soft)">Exact intermediate thresholds shift over time — always read the limit from Meta's live <span class="mono">business_capability_update</span> webhook rather than hard-coding it.</p>
+  </div>
+
+  <!-- CH5 enforcement -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#1F9D55" stroke="#2A2A38" stroke-width="2.5"/></svg><span>5</span></div><h2>How our tool actually obeys</h2></div>
+    <p class="lead">Left = what Meta demands. Right = the code/feature that guarantees it.</p>
+    <div class="rules">
+      <div class="rule"><div class="meta"><b>Only send approved templates</b><small>unapproved = blocked anyway</small></div><div class="ar">→</div><div class="ours"><b>Status gate</b><small>send button is locked until the template shows ✅; we track approval via webhook</small></div></div>
+      <div class="rule"><div class="meta"><b>Free chat only inside 24h</b><small>else template required</small></div><div class="ar">→</div><div class="ours"><b>Window timer per contact</b><small>composer auto-switches to "template only" when the clock runs out</small></div></div>
+      <div class="rule"><div class="meta"><b>Stay under the daily limit</b><small>extras get rejected, hurts quality</small></div><div class="ar">→</div><div class="ours"><b>Limit guard + counter</b><small>reads tier from the webhook, counts unique recipients today, stops queuing before the cap</small></div></div>
+      <div class="rule"><div class="meta"><b>~80 msg/sec, no bursts</b><small>bursts look like spam</small></div><div class="ar">→</div><div class="ours"><b>Token-bucket throttle</b><small>worker paces to a safe rate; exponential backoff + 3 retries on transient errors</small></div></div>
+      <div class="rule"><div class="meta"><b>Only message opt-ins</b><small>blocks &amp; reports kill quality</small></div><div class="ar">→</div><div class="ours"><b>Consent flag + unsubscribe</b><small>non-opted contacts can't be added to a campaign; one-tap opt-out honoured instantly</small></div></div>
+      <div class="rule"><div class="meta"><b>Don't over-message</b><small>~2 marketing/day cap</small></div><div class="ar">→</div><div class="ours"><b>Frequency cap</b><small>per-contact send budget; skips anyone messaged too recently</small></div></div>
+      <div class="rule"><div class="meta"><b>Keep quality Green</b><small>Yellow freezes, Red cuts</small></div><div class="ar">→</div><div class="ours"><b>Quality watch</b><small>show the rating on the dashboard; auto-slow sending &amp; alert the admin on Yellow/Red</small></div></div>
+      <div class="rule"><div class="meta"><b>Handle error codes</b><small>e.g. 131049 saturation</small></div><div class="ar">→</div><div class="ours"><b>Smart failure handling</b><small>read Meta's error per message; pause/re-pace instead of blindly resending</small></div></div>
+      <div class="rule"><div class="meta"><b>No marketing to US numbers</b><small>blocked since Apr 2025</small></div><div class="ar">→</div><div class="ours"><b>Region check</b><small>+1 numbers excluded from marketing campaigns at build time</small></div></div>
+    </div>
+  </div>
+
+  <!-- CH6 gotchas -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0852F" stroke="#2A2A38" stroke-width="2.5"/></svg><span>6</span></div><h2>Don't get caught out by these</h2></div>
+    <div class="notes">
+      <div class="note n-yellow"><h3>Rules move</h3><p>Limits, rates &amp; categories change a few times a year. Read limits from the webhook; review Meta's docs quarterly. Don't hard-code numbers.</p></div>
+      <div class="note n-blue"><h3>Webhook field change</h3><p>The limit field renamed: <span class="mono">max_daily_conversation_per_phone</span> (v23 &amp; older) is retiring; v24+ uses <span class="mono">max_daily_conversations_per_business</span>. Handle both through early 2026.</p></div>
+      <div class="note n-pink"><h3>Verify first, build second</h3><p>Until the business is verified, you're stuck at 250/day forever. Get verification started on day one — it takes a few days.</p></div>
+      <div class="note n-green"><h3>Warm up new numbers</h3><p>Don't blast a fresh number. Start small, send relevant stuff, let the tier climb over days. Patience = higher ceilings.</p></div>
+    </div>
+  </div>
+
+  <svg class="divider rough" viewBox="0 0 200 16"><path d="M4 8 q20 -8 40 0 t40 0 t40 0 t40 0 t36 0" fill="none" stroke="#52525f" stroke-width="2.5" stroke-linecap="round"/></svg>
+  <p class="closing">obey these and the limits grow for free. fight them and the number dies. ✎</p>
+</div>
+</body>
+</html>

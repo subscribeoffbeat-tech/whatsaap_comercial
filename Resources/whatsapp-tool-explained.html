@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Our WhatsApp Tool — explained on a napkin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Patrick+Hand&family=Gloria+Hallelujah&family=Space+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF8F0;
+    --grid:rgba(120,120,140,0.07);
+    --ink:#2A2A38;
+    --ink-soft:#52525f;
+    --admin:#6B5BD2;
+    --agent:#2F7FD1;
+    --cust:#1F9D55;
+    --sys:#E0852F;
+    --warn:#E0533D;
+    --hi-yellow:#FFE680;
+    --hi-green:#C9F2D6;
+    --hi-pink:#FAD1DE;
+    --note:#FFF3B0;
+    --note-pink:#FBD3DE;
+    --note-blue:#CFE6FB;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    font-family:'Patrick Hand', 'Comic Sans MS', cursive;
+    color:var(--ink);
+    background-color:var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size:28px 28px;
+    font-size:19px;
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:32px 22px 80px}
+  h1,h2,h3{font-family:'Caveat',cursive;font-weight:700;line-height:1.05;margin:0}
+  p{margin:.5em 0}
+  .mono{font-family:'Space Mono',monospace;font-size:.72em;letter-spacing:-.5px}
+
+  /* hand-drawn wobble for decorative svg */
+  .rough{filter:url(#rough)}
+
+  /* hero */
+  .hero{text-align:center;margin:18px 0 10px;position:relative}
+  .hero .kicker{font-family:'Gloria Hallelujah',cursive;font-size:15px;color:var(--ink-soft);transform:rotate(-2deg);display:inline-block}
+  .hero h1{font-size:clamp(40px,9vw,74px);color:var(--ink);margin:.1em 0}
+  .hero h1 .g{color:var(--cust)}
+  .hero .sub{font-size:22px;color:var(--ink-soft);max-width:560px;margin:6px auto 0}
+  .underline-doodle{display:block;margin:2px auto 0;width:280px;height:18px}
+
+  /* chapter card */
+  .chapter{
+    background:#fff;
+    border:2.5px solid var(--ink);
+    border-radius:255px 14px 225px 16px/16px 225px 14px 255px;
+    padding:26px 26px 28px;
+    margin:30px 0;
+    box-shadow:6px 7px 0 rgba(42,42,56,.13);
+    position:relative;
+  }
+  .chapter:nth-child(even){border-radius:18px 240px 16px 230px/230px 16px 240px 16px}
+  .tape{
+    position:absolute;top:-13px;left:50%;transform:translateX(-50%) rotate(-3deg);
+    width:120px;height:26px;background:rgba(255,230,128,.7);
+    border:1px dashed rgba(42,42,56,.25);
+    box-shadow:1px 1px 0 rgba(0,0,0,.05);
+  }
+  .ch-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+  .ch-num{
+    flex:0 0 auto;width:52px;height:52px;display:grid;place-items:center;
+    font-family:'Caveat',cursive;font-weight:700;font-size:30px;color:#fff;
+  }
+  .ch-num svg{position:absolute}
+  .ch-num span{position:relative;z-index:2}
+  .ch-head h2{font-size:clamp(30px,5.4vw,42px)}
+  .lead{font-size:20px;color:var(--ink-soft);margin-top:2px}
+
+  mark{padding:0 4px;border-radius:6px;background:var(--hi-yellow);color:var(--ink)}
+  mark.g{background:var(--hi-green)} mark.p{background:var(--hi-pink)}
+  .pen-admin{color:var(--admin);font-weight:700} .pen-agent{color:var(--agent);font-weight:700}
+  .pen-cust{color:var(--cust);font-weight:700} .pen-sys{color:var(--sys);font-weight:700}
+  .pen-warn{color:var(--warn);font-weight:700}
+
+  /* cast row */
+  .cast{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:14px}
+  .who{
+    text-align:center;padding:14px 10px;border:2px dashed var(--ink);
+    border-radius:18px 230px 18px 230px/230px 18px 230px 18px;background:#fff;
+  }
+  .who h3{font-size:28px;margin:6px 0 2px}
+  .who .role{font-size:16px;color:var(--ink-soft)}
+  .who svg{height:96px}
+
+  /* step flow */
+  .steps{margin-top:14px;display:flex;flex-direction:column;gap:0}
+  .step{display:flex;gap:16px;align-items:flex-start;padding:12px 0}
+  .step .dot{
+    flex:0 0 auto;width:42px;height:42px;border-radius:50%;
+    display:grid;place-items:center;color:#fff;font-family:'Caveat';font-weight:700;font-size:24px;
+    border:2.5px solid var(--ink);
+  }
+  .step .body h3{font-size:25px;margin-bottom:2px}
+  .step .body{flex:1}
+  .arrow-down{height:26px;display:block;margin-left:20px}
+
+  /* sticky notes grid */
+  .notes{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:16px}
+  .note{
+    padding:16px 18px 18px;border-radius:4px;
+    box-shadow:3px 4px 0 rgba(42,42,56,.16);
+    transform:rotate(-1.4deg);
+  }
+  .note:nth-child(even){transform:rotate(1.6deg)}
+  .note h3{font-size:26px;margin-bottom:2px}
+  .note p{font-size:18px;margin:.3em 0 0}
+  .n-yellow{background:var(--note)} .n-pink{background:var(--note-pink)} .n-blue{background:var(--note-blue)}
+  .n-green{background:var(--hi-green)}
+
+  /* under the hood machine */
+  .machine{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:14px}
+  .box-sketch{
+    border:2.5px solid var(--ink);border-radius:14px;padding:14px 16px;background:#fff;
+    border-radius:230px 16px 230px 16px/16px 230px 16px 230px;
+  }
+  .box-sketch h3{font-size:24px}
+  .box-sketch .mono{display:inline-block;margin-top:4px;background:#f0eee4;padding:1px 7px;border-radius:5px}
+
+  /* tech stack */
+  .stack{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:14px}
+  .tech{display:flex;gap:12px;align-items:flex-start;border-bottom:2px dotted rgba(42,42,56,.25);padding-bottom:10px}
+  .tech .chip{flex:0 0 auto;font-family:'Caveat';font-weight:700;font-size:21px;color:#fff;padding:3px 12px;border-radius:14px;border:2px solid var(--ink);white-space:nowrap}
+  .tech b{font-size:20px}
+
+  /* scope two columns */
+  .scope{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:14px}
+  .col{border:2.5px solid var(--ink);border-radius:16px;padding:8px 18px 16px;background:#fff}
+  .col.now{background:#F1FBF4}.col.later{background:#FFF6EC}
+  .col h3{font-size:28px;margin:8px 0 4px}
+  .col ul{margin:0;padding-left:4px;list-style:none}
+  .col li{padding:5px 0 5px 28px;position:relative;font-size:18px}
+  .col.now li::before{content:"✔";position:absolute;left:0;color:var(--cust);font-weight:700}
+  .col.later li::before{content:"◷";position:absolute;left:0;color:var(--sys);font-weight:700}
+
+  .divider{display:block;margin:8px auto;width:60%;height:16px}
+  .closing{text-align:center;font-family:'Caveat';font-size:34px;color:var(--ink-soft);margin-top:36px;transform:rotate(-1deg)}
+
+  @media(max-width:680px){
+    body{font-size:18px}
+    .cast{grid-template-columns:1fr}
+    .notes,.machine,.stack,.scope{grid-template-columns:1fr}
+    .chapter{border-radius:14px!important;transform:none}
+    .note{transform:none}
+  }
+  @media(prefers-reduced-motion:no-preference){
+    .who:hover{transform:rotate(-2deg) scale(1.02);transition:.2s}
+    .note:hover{transform:rotate(0) scale(1.03);transition:.2s}
+  }
+</style>
+</head>
+<body>
+
+<!-- global hand-drawn wobble filter + arrow defs -->
+<svg width="0" height="0" style="position:absolute">
+  <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4"/></filter>
+</svg>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <div class="hero">
+    <span class="kicker">grab a coffee, this is the whole thing on one page ↓</span>
+    <h1>How our <span class="g">WhatsApp</span> tool works</h1>
+    <svg class="underline-doodle rough" viewBox="0 0 280 18"><path d="M4 11 C70 4, 150 16, 276 6" fill="none" stroke="#1F9D55" stroke-width="4" stroke-linecap="round"/></svg>
+    <p class="sub">No jargon. Just the idea, the people who use it, and what happens click-by-click — like I'm scribbling it next to you.</p>
+  </div>
+
+  <!-- CH 1 : BIG IDEA -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head">
+      <div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#6B5BD2" stroke="#2A2A38" stroke-width="2.5"/></svg><span>1</span></div>
+      <h2>So… what are we even building?</h2>
+    </div>
+    <p>Imagine a tool that lets a business <mark>chat with thousands of customers on WhatsApp</mark> — send promos, answer questions, fire off order updates — all from one dashboard. That's apps like AiSensy.</p>
+    <p>We're building <mark class="g">our own version</mark>, but living on <span class="pen-sys">our own server (VPS)</span> instead of renting someone else's. Why? No monthly software fee, no "pay per agent," and we own all the data.</p>
+    <p>The one thing we <b>can't</b> build ourselves is WhatsApp itself — so we talk to <span class="pen-cust">Meta's official WhatsApp API</span> for the actual sending. Everything around it is ours.</p>
+    <svg viewBox="0 0 620 120" class="rough" style="width:100%;height:auto;margin-top:8px">
+      <rect x="20" y="40" width="150" height="48" rx="10" fill="#fff" stroke="#2A2A38" stroke-width="2.5"/>
+      <text x="95" y="62" text-anchor="middle" font-family="Caveat" font-size="22" font-weight="700" fill="#E0852F">Our app</text>
+      <text x="95" y="80" text-anchor="middle" font-family="Patrick Hand" font-size="13" fill="#52525f">(on our VPS)</text>
+      <rect x="235" y="40" width="150" height="48" rx="10" fill="#fff" stroke="#2A2A38" stroke-width="2.5"/>
+      <text x="310" y="68" text-anchor="middle" font-family="Caveat" font-size="22" font-weight="700" fill="#1F9D55">Meta WhatsApp</text>
+      <rect x="450" y="40" width="150" height="48" rx="10" fill="#fff" stroke="#2A2A38" stroke-width="2.5"/>
+      <text x="525" y="68" text-anchor="middle" font-family="Caveat" font-size="22" font-weight="700" fill="#2F7FD1">Customers 📱</text>
+      <path d="M172 64 H231" fill="none" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <path d="M387 64 H446" fill="none" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L8 5 L1 9" fill="none" stroke="#2A2A38" stroke-width="2"/></marker></defs>
+    </svg>
+  </div>
+
+  <!-- CH 2 : THE CAST -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head">
+      <div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#2F7FD1" stroke="#2A2A38" stroke-width="2.5"/></svg><span>2</span></div>
+      <h2>Meet the 3 people in the story</h2>
+    </div>
+    <p class="lead">Two of them are on <i>our</i> team (the Admin & the Agent). The third is the customer out in the world.</p>
+    <div class="cast">
+      <div class="who">
+        <svg viewBox="0 0 80 96"><circle cx="40" cy="30" r="16" fill="#EDE9FB" stroke="#6B5BD2" stroke-width="3"/><path d="M26 22 Q40 8 54 22" fill="#6B5BD2"/><path d="M22 86 Q40 56 58 86" fill="none" stroke="#6B5BD2" stroke-width="3"/><path d="M30 48 l20 0 0 8 -20 0z" fill="#6B5BD2"/></svg>
+        <h3 class="pen-admin">The Admin</h3>
+        <div class="role">the boss / owner. Sets everything up, runs campaigns.</div>
+      </div>
+      <div class="who">
+        <svg viewBox="0 0 80 96"><circle cx="40" cy="32" r="16" fill="#E1EEFB" stroke="#2F7FD1" stroke-width="3"/><path d="M24 32 a16 16 0 0 1 32 0" fill="none" stroke="#2F7FD1" stroke-width="3"/><circle cx="24" cy="36" r="4" fill="#2F7FD1"/><circle cx="56" cy="36" r="4" fill="#2F7FD1"/><path d="M24 86 Q40 58 56 86" fill="none" stroke="#2F7FD1" stroke-width="3"/></svg>
+        <h3 class="pen-agent">The Agent</h3>
+        <div class="role">support/sales staff. Lives in the chat inbox, talks to people.</div>
+      </div>
+      <div class="who">
+        <svg viewBox="0 0 80 96"><rect x="28" y="14" width="34" height="60" rx="6" fill="#E6F6EC" stroke="#1F9D55" stroke-width="3"/><path d="M10 30 q-6 0 -6 8 l0 8 q0 8 8 8 l10 0 -8 8z" fill="#fff" stroke="#1F9D55" stroke-width="2.5"/><circle cx="45" cy="68" r="2.5" fill="#1F9D55"/></svg>
+        <h3 class="pen-cust">The Customer</h3>
+        <div class="role">a regular person on WhatsApp. Never sees our app — just chats.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CH 3 : ADMIN JOURNEY -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head">
+      <div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#6B5BD2" stroke="#2A2A38" stroke-width="2.5"/></svg><span>3</span></div>
+      <h2 class="pen-admin">The Admin's journey — from "sign up" to "send"</h2>
+    </div>
+    <p class="lead">This is the setup person. They do these steps roughly once, then mostly run campaigns.</p>
+    <div class="steps">
+      <div class="step"><div class="dot" style="background:#6B5BD2">1</div><div class="body"><h3>Signs up & creates the workspace</h3><p>Enters email + password → a fresh, empty workspace is created just for their business. Right now it's a blank slate.</p></div></div>
+      <svg class="arrow-down rough" width="20" height="26"><path d="M10 2 V22" stroke="#6B5BD2" stroke-width="3" marker-end="url(#av)"/><defs><marker id="av" viewBox="0 0 10 10" refX="5" refY="8" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 2 L5 8 L9 2" fill="none" stroke="#6B5BD2" stroke-width="2"/></marker></defs></svg>
+
+      <div class="step"><div class="dot" style="background:#6B5BD2">2</div><div class="body"><h3>Connects WhatsApp (the Meta part)</h3><p>Links their verified business + phone number to Meta and pastes in an access key. <mark>This is the only "outside" connection</mark> — it's how messages physically leave and arrive. Done once.</p></div></div>
+      <svg class="arrow-down rough" width="20" height="26"><path d="M10 2 V22" stroke="#6B5BD2" stroke-width="3" marker-end="url(#av)"/></svg>
+
+      <div class="step"><div class="dot" style="background:#6B5BD2">3</div><div class="body"><h3>Imports contacts & tags them</h3><p>Uploads their customer list (people who <span class="pen-warn">agreed to be messaged</span> — important!) and sticks labels on them like <span class="mono">vip</span>, <span class="mono">new-lead</span>, <span class="mono">delhi</span>. Tags are how you target campaigns later.</p></div></div>
+      <svg class="arrow-down rough" width="20" height="26"><path d="M10 2 V22" stroke="#6B5BD2" stroke-width="3" marker-end="url(#av)"/></svg>
+
+      <div class="step"><div class="dot" style="background:#6B5BD2">4</div><div class="body"><h3>Writes message templates → sends to Meta for approval</h3><p>For promos/notifications you can't just type anything — WhatsApp must <mark>pre-approve</mark> the wording (so businesses don't spam). The admin drafts them; Meta reviews in a few minutes-to-hours and says ✅ or ❌.</p></div></div>
+      <svg class="arrow-down rough" width="20" height="26"><path d="M10 2 V22" stroke="#6B5BD2" stroke-width="3" marker-end="url(#av)"/></svg>
+
+      <div class="step"><div class="dot" style="background:#6B5BD2">5</div><div class="body"><h3>Invites the agents</h3><p>Adds team members by email. Each gets a login so several people can answer the <i>same</i> WhatsApp number at once without stepping on each other.</p></div></div>
+      <svg class="arrow-down rough" width="20" height="26"><path d="M10 2 V22" stroke="#6B5BD2" stroke-width="3" marker-end="url(#av)"/></svg>
+
+      <div class="step"><div class="dot" style="background:#6B5BD2">6</div><div class="body"><h3>Builds a campaign</h3><p>Picks <b>who</b> (a tag/segment), <b>what</b> (an approved template), and <b>when</b> (now or scheduled). Hits <mark class="g">Send</mark>.</p></div></div>
+      <svg class="arrow-down rough" width="20" height="26"><path d="M10 2 V22" stroke="#6B5BD2" stroke-width="3" marker-end="url(#av)"/></svg>
+
+      <div class="step"><div class="dot" style="background:#6B5BD2">7</div><div class="body"><h3>Watches it go out & checks results</h3><p>The system <span class="pen-sys">paces the sending</span> (more on that later) and the admin sees a live tally: delivered, read, failed. Done!</p></div></div>
+    </div>
+  </div>
+
+  <!-- CH 4 : AGENT JOURNEY -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head">
+      <div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#2F7FD1" stroke="#2A2A38" stroke-width="2.5"/></svg><span>4</span></div>
+      <h2 class="pen-agent">The Agent's journey — a day in the inbox</h2>
+    </div>
+    <p class="lead">The agent doesn't set anything up. They just talk to people, all day, from a shared inbox.</p>
+    <div class="steps">
+      <div class="step"><div class="dot" style="background:#2F7FD1">1</div><div class="body"><h3>Gets the invite & logs in</h3><p>Clicks the invite link, sets a password, lands in the dashboard.</p></div></div>
+      <svg class="arrow-down rough" width="20" height="26"><path d="M10 2 V22" stroke="#2F7FD1" stroke-width="3" marker-end="url(#av2)"/><defs><marker id="av2" viewBox="0 0 10 10" refX="5" refY="8" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 2 L5 8 L9 2" fill="none" stroke="#2F7FD1" stroke-width="2"/></marker></defs></svg>
+
+      <div class="step"><div class="dot" style="background:#2F7FD1">2</div><div class="body"><h3>Sees the shared inbox</h3><p>One screen with every live conversation — like a team WhatsApp Web. New messages pop in instantly (no refresh).</p></div></div>
+      <svg class="arrow-down rough" width="20" height="26"><path d="M10 2 V22" stroke="#2F7FD1" stroke-width="3" marker-end="url(#av2)"/></svg>
+
+      <div class="step"><div class="dot" style="background:#2F7FD1">3</div><div class="body"><h3>A chat gets routed to them</h3><p>When a customer writes in, the system <mark>hands the chat to a free agent</mark> (or one matching a tag, e.g. all "billing" chats to the billing person).</p></div></div>
+      <svg class="arrow-down rough" width="20" height="26"><path d="M10 2 V22" stroke="#2F7FD1" stroke-width="3" marker-end="url(#av2)"/></svg>
+
+      <div class="step"><div class="dot" style="background:#2F7FD1">4</div><div class="body"><h3>Replies live</h3><p>Opens the chat, sees the full history, types back. Because the customer messaged first, there's a <mark class="g">free 24-hour window</mark> to chat normally (no template needed, no cost).</p></div></div>
+      <svg class="arrow-down rough" width="20" height="26"><path d="M10 2 V22" stroke="#2F7FD1" stroke-width="3" marker-end="url(#av2)"/></svg>
+
+      <div class="step"><div class="dot" style="background:#2F7FD1">5</div><div class="body"><h3>Tags, notes, resolves</h3><p>Labels the customer (<span class="mono">interested</span>, <span class="mono">refund</span>), jots a private note, then marks the chat done. Next time that person writes, the history's all there.</p></div></div>
+      <svg class="arrow-down rough" width="20" height="26"><path d="M10 2 V22" stroke="#2F7FD1" stroke-width="3" marker-end="url(#av2)"/></svg>
+
+      <div class="step"><div class="dot" style="background:#2F7FD1">6</div><div class="body"><h3>Hands off if stuck</h3><p>Can pass a tricky chat to a manager. Nothing is lost — it just moves to another agent's queue.</p></div></div>
+    </div>
+  </div>
+
+  <!-- CH 5 : CUSTOMER SIDE -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head">
+      <div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#1F9D55" stroke="#2A2A38" stroke-width="2.5"/></svg><span>5</span></div>
+      <h2 class="pen-cust">What the customer actually feels</h2>
+    </div>
+    <p>From their side it's just… WhatsApp. They never know there's a whole system behind it. Two things can happen:</p>
+    <div class="notes">
+      <div class="note n-green"><h3>They message us first</h3><p>→ maybe an <b>instant auto-reply</b> ("Hi! Type 1 for orders…") <br>→ or it quietly lands in an agent's inbox and a human replies. That message opened the free 24-hour window.</p></div>
+      <div class="note n-blue"><h3>We message them first</h3><p>→ a <b>broadcast</b> arrives: a sale, an order update, an OTP. If they reply, it flips into the case on the left — straight to a human.</p></div>
+    </div>
+  </div>
+
+  <!-- CH 6 : UNDER THE HOOD -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head">
+      <div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0852F" stroke="#2A2A38" stroke-width="2.5"/></svg><span>6</span></div>
+      <h2 class="pen-sys">Peeking under the hood (still simple, promise)</h2>
+    </div>
+    <p>There are really just <mark>two directions</mark> messages flow, and a tiny crew of parts handling them:</p>
+    <div class="machine">
+      <div class="box-sketch"><h3>⬅️ Messages coming IN</h3><p>Meta rings our <b>"doorbell"</b> (a webhook). Our app catches it, saves it, checks if a robot can answer — if not, shows it to an agent. <br><span class="mono">webhook → save → auto-reply or route</span></p></div>
+      <div class="box-sketch"><h3>➡️ Messages going OUT</h3><p>A campaign drops thousands of messages into a <b>to-do list (a queue)</b>. A worker pulls them one-by-one at a safe speed and hands each to Meta. <br><span class="mono">queue → paced worker → Meta</span></p></div>
+    </div>
+    <p style="margin-top:14px">Why the "safe speed"? If we blast everything at once, WhatsApp thinks we're spam and can <span class="pen-warn">ban the number</span>. So the worker is like a polite person handing out flyers — steady, not shouting. If a send fails, it waits and quietly tries again.</p>
+    <svg viewBox="0 0 620 80" class="rough" style="width:100%;height:auto;margin-top:6px">
+      <text x="20" y="30" font-family="Caveat" font-size="20" font-weight="700" fill="#E0852F">campaign of 5000</text>
+      <rect x="190" y="14" width="90" height="34" rx="6" fill="#FFF3B0" stroke="#2A2A38" stroke-width="2"/><text x="235" y="36" text-anchor="middle" font-family="Patrick Hand" font-size="14">the queue</text>
+      <path d="M180 31 H188" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <circle cx="330" cy="31" r="18" fill="#E1EEFB" stroke="#2F7FD1" stroke-width="2.5"/><text x="330" y="37" text-anchor="middle" font-size="16">🧑‍🏭</text>
+      <path d="M282 31 H310" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <text x="330" y="66" text-anchor="middle" font-family="Patrick Hand" font-size="13" fill="#52525f">~40/sec, calm</text>
+      <path d="M352 31 H410" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <text x="470" y="36" text-anchor="middle" font-family="Caveat" font-size="20" font-weight="700" fill="#1F9D55">Meta → 📱📱📱</text>
+    </svg>
+  </div>
+
+  <!-- CH 7 : KEY CONCEPTS -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head">
+      <div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0533D" stroke="#2A2A38" stroke-width="2.5"/></svg><span>7</span></div>
+      <h2>4 ideas that explain 90% of the "rules"</h2>
+    </div>
+    <div class="notes">
+      <div class="note n-yellow"><h3>🕒 The 24-hour window</h3><p>When a customer messages you, a 24-hour clock starts. Inside it, you can chat <b>freely & for free</b>. After it closes, you can only reach them with a pre-approved template.</p></div>
+      <div class="note n-pink"><h3>📝 Templates need approval</h3><p>Any message <i>you</i> start (promos, OTPs, updates) must use wording Meta okayed first. Keeps WhatsApp from turning into spam.</p></div>
+      <div class="note n-blue"><h3>🐢 Slow & steady sending</h3><p>New numbers start with small daily limits and grow as you behave well. Pacing + good behaviour = higher limits over time.</p></div>
+      <div class="note n-green"><h3>✅ Only message opt-ins</h3><p>Message people who said "yes." Buying random lists and blasting them is the #1 way to get the number killed.</p></div>
+    </div>
+  </div>
+
+  <!-- CH 8 : TECH STACK -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head">
+      <div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#2F7FD1" stroke="#2A2A38" stroke-width="2.5"/></svg><span>8</span></div>
+      <h2>The toolbox (in plain words)</h2>
+    </div>
+    <p class="lead">Chosen to be cheap to run and simple for one AI dev + one supervisor to manage.</p>
+    <div class="stack">
+      <div class="tech"><span class="chip" style="background:#2F7FD1">Go</span><div><b>The engine.</b> One strong, fast program that does all the work and handles thousands of sends at once. Ships as a single file — easy to deploy.</div></div>
+      <div class="tech"><span class="chip" style="background:#E0852F">PostgreSQL</span><div><b>The filing cabinet.</b> Stores contacts, messages, tags — everything, safely.</div></div>
+      <div class="tech"><span class="chip" style="background:#6B5BD2">River</span><div><b>The to-do list.</b> The queue that holds outbound messages, living inside Postgres (so no extra software).</div></div>
+      <div class="tech"><span class="chip" style="background:#1F9D55">HTMX</span><div><b>The dashboard.</b> Keeps the screen simple and lets the same Go program draw the UI — fewer moving parts.</div></div>
+      <div class="tech"><span class="chip" style="background:#52525f">Our VPS</span><div><b>Our house.</b> The rented server it all runs on. We control it; no monthly software fees.</div></div>
+      <div class="tech"><span class="chip" style="background:#1F9D55">Meta API</span><div><b>The post office.</b> The only outside service — it does the actual WhatsApp delivery.</div></div>
+    </div>
+  </div>
+
+  <!-- CH 9 : SCOPE -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head">
+      <div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#1F9D55" stroke="#2A2A38" stroke-width="2.5"/></svg><span>9</span></div>
+      <h2>What we build first vs. later</h2>
+    </div>
+    <p class="lead">Version 1 = match the <i>core</i> of AiSensy. The big fancy stuff comes later, on purpose.</p>
+    <div class="scope">
+      <div class="col now"><h3>Building now</h3><ul>
+        <li>Bulk broadcasts to tagged segments</li>
+        <li>Contact list with tags & custom fields</li>
+        <li>Shared multi-agent inbox (one number)</li>
+        <li>Templates + approval flow</li>
+        <li>Rule-based auto-replies</li>
+        <li>Scheduling + delivery/read analytics</li>
+        <li>Smart chat routing & click tracking</li>
+      </ul></div>
+      <div class="col later"><h3>Maybe later</h3><ul>
+        <li>Drag-&-drop visual chatbot builder</li>
+        <li>AI / NLP chatbot</li>
+        <li>Click-to-WhatsApp ad manager</li>
+        <li>Product catalog + in-chat payments</li>
+        <li>WhatsApp Flows / native forms</li>
+        <li>Shopify / Zapier / HubSpot integrations</li>
+      </ul></div>
+    </div>
+    <p style="margin-top:14px"><span class="pen-warn">Heads up:</span> the two "later" items that quietly double the work are the <b>visual flow builder</b> and the <b>AI chatbot</b> — worth a real yes/no before committing.</p>
+  </div>
+
+  <svg class="divider rough" viewBox="0 0 200 16"><path d="M4 8 q20 -8 40 0 t40 0 t40 0 t40 0 t36 0" fill="none" stroke="#52525f" stroke-width="2.5" stroke-linecap="round"/></svg>
+  <p class="closing">that's the whole thing. questions? just point at a box. ✎</p>
+
+</div>
+</body>
+</html>

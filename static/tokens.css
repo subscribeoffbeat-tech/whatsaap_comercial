@@ -1,0 +1,140 @@
+/* ============================================================================
+   tokens.css — single source of truth for the WhatsApp tool's design tokens
+   ----------------------------------------------------------------------------
+   Import this FIRST on every page, before any other stylesheet:
+       <link rel="stylesheet" href="/static/tokens.css">
+       <link rel="stylesheet" href="/static/app.css">  (etc.)
+
+   This file resolves the systemic audit findings S1–S6. Contrast ratios are
+   noted inline (WCAG 2.1). Targets: 4.5:1 for text, 3:1 for UI boundaries
+   (1.4.11) and large/bold text.
+
+   Migration: the old per-file hex literals and variable names are aliased at the
+   bottom (COMPAT block), so files that already use vars are corrected instantly,
+   and the remaining hardcoded hexes can be find-replaced onto these names.
+   ============================================================================ */
+
+:root {
+
+  /* --- BRAND / INTERACTIVE FILL (S1) ----------------------------------------
+     #25d366 carries white text at only 1.98:1 — never use it as a filled
+     button/pill/active-state background. These greens are darkened so white
+     text passes. */
+  --primary:        #0E7A40;   /* white text 5.4:1 — main actions, active states */
+  --primary-hover:  #0B642F;
+  --primary-active: #094E26;
+  /* NOTE: this supersedes #128C4A from the button mockup (that was ~4.3:1,
+     a marginal fail for normal-weight text). Update the button widget to match. */
+
+  /* Bright brand green — ONLY for non-text indicators (status dots, the WA
+     glyph), never behind text. */
+  --accent-online:  #25D366;
+
+  /* --- SUCCESS / DONE FILL --------------------------------------------------
+     The wizard "done" emerald #10b981 fails white text at 2.53:1. Use this for
+     any filled badge/circle/check that carries white text. */
+  --success-fill:   #047857;   /* white text 5.5:1 */
+  --success-text:   #166534;   /* on light-green tint, 6.5:1 — already passing */
+  --success-tint:   #DCFCE7;
+
+  /* --- FEEDBACK -------------------------------------------------------------- */
+  --danger:         #DC2626;   /* white text 4.83:1 */
+  --danger-hover:   #B91C1C;
+  --danger-text:    #9A3412;   /* on warm tint, 6.8:1 */
+  --danger-tint:    #FEF2F2;
+  --danger-border:  #FCA5A5;
+
+  --warning:        #B45309;   /* amber accent — toast border/icon on white surface */
+  --warning-text:   #713F12;   /* on yellow tint, 7.9:1 — used in guardrail callouts */
+  --warning-tint:   #FEFCE8;
+
+  --info:           #2563EB;   /* darker than #3b82f6; readable as link/read-tick */
+  --info-hover:     #1D4ED8;
+
+  /* --- TEXT (S2, S3) --------------------------------------------------------- */
+  --text:           #1F2937;   /* body text, ≥10:1 on white */
+  --text-strong:    #111827;   /* headings */
+  --text-muted:     #4B5563;   /* the ONLY muted text token. 7.56:1 on white,
+                                  6.64:1 on the tinted page bg — passes everywhere.
+                                  (Floor is well above 4.5:1; don't read these
+                                  numbers as a budget to pick a lighter shade.)
+                                  Replaces old --t3 (#6b7280, failed on bg) and
+                                  RETIRES --t4 (#9ca3af, 2.5:1) as a text color. */
+
+  /* --- SURFACES -------------------------------------------------------------- */
+  --bg-page:        #EEF0F7;   /* app canvas */
+  --surface:        #FFFFFF;   /* cards, panels, inputs */
+  --sidebar-bg:     #1E2D3D;
+  --sidebar-text:   #8899AA;   /* 4.78:1 on sidebar — use for section labels too,
+                                  NOT rgba(255,255,255,.25) which was 1.53:1.
+                                  (Also raise those labels to 11px; 9px is sub-legible.) */
+  --sidebar-active: #FFFFFF;
+
+  /* --- BORDERS (S5) ---------------------------------------------------------- */
+  --border:         #7B8999;   /* control boundary, 3.58:1 on white — inputs,
+                                  selects, textareas. Replaces #d1d5db (1.47:1).
+                                  NB: #94A3B8 looks right but is only 2.56:1 — its
+                                  blue channel lifts luminance; don't substitute it. */
+  --border-focus:   var(--primary);  /* focus boundary, 4.1:1 on white */
+  --divider:        #E2E8F0;   /* DECORATIVE hairlines only (card separators) —
+                                  not a UI-control boundary, so 3:1 not required.
+                                  Point old decorative uses of --t4 here. */
+
+  /* --- MESSAGE STATUS --------------------------------------------------------
+     Colors below are readable, but delivered-vs-read must ALSO differ by shape,
+     not color alone (audit failure #5) — fix in the tick markup, not here. */
+  --status-queued:    #6B7280;            /* clock/pending icon only — NO tick rendered */
+  --status-sent:      #6B7280;            /* single ✓ — one tick, gray */
+  --status-delivered: var(--text-muted);  /* double ✓✓ — two ticks, darker gray */
+  --status-read:      var(--info);        /* double ✓✓ — two ticks, blue (#2563EB) */
+  --status-failed:    var(--danger);      /* alert icon, red */
+  /* CONTRACT: queued and sent share a hex on purpose — they're told apart by
+     TICK COUNT (none vs one), per audit finding #5. Never render both as a
+     single gray tick, or they become indistinguishable. */
+
+  /* --- FOCUS ----------------------------------------------------------------- */
+  --focus-ring:     var(--primary);
+
+  /* --- SHAPE ----------------------------------------------------------------- */
+  --radius-sm: 6px;
+  --radius:    8px;
+  --radius-lg: 14px;
+
+  /* ===========================================================================
+     COMPAT ALIASES — keep existing CSS working during migration.
+     Files using these old names get the corrected values for free. Once every
+     file is repointed to the canonical names above, delete this block.
+     =========================================================================== */
+  /* per-file aliases used in contacts.css / templates.css before migration */
+  --panel:    var(--surface);
+  --muted:    var(--text-muted);
+
+  --green:    var(--primary);        /* was #25d366 */
+  --green-d:  var(--primary-hover);
+  --gr:       var(--primary);        /* green link/text — was unreadable #25d366.
+                                        SIDE-EFFECT: --gr is also used for DECORATIVE
+                                        green in some files (progress fills .pf-g,
+                                        status dots .qd-g, .unread-dot). This alias
+                                        darkens those to forest green. During
+                                        migration, repoint those specific rules to
+                                        var(--accent-online) so the bright green is
+                                        kept for non-text indicators. */
+  --t1:       var(--text-strong);
+  --t2:       var(--text);
+  --t3:       var(--text-muted);     /* was #6b7280 */
+  --t4:       var(--text-muted);     /* was #9ca3af — aliased to readable.
+                                        If a rule used --t4 for a decorative
+                                        hairline, point THAT rule at --divider. */
+  --bg:       var(--bg-page);
+}
+
+/* ============================================================================
+   S4 — keyboard focus. No :focus-visible rule existed anywhere in the screens,
+   leaving the entire interactive layer keyboard-invisible. This one base rule
+   fixes it app-wide. Remove any `outline:none` overrides elsewhere.
+   ============================================================================ */
+:where(a, button, input, select, textarea, [tabindex], [role="button"]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}

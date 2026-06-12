@@ -1,0 +1,328 @@
+/* ── Campaign list ─────────────────────────────────────────────────────────── */
+
+.campaign-table-wrap,
+.table-wrap {
+  overflow-x: auto;
+}
+
+.campaign-table,
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.campaign-table th,
+.data-table th {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 2px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.campaign-table td,
+.data-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.campaign-table tr:hover td,
+.data-table tr:hover td {
+  background: var(--bg-hover, var(--surface));
+}
+
+.row-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Status badges */
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.badge.status-scheduled,
+.status-scheduled { background: #e0f2fe; color: #0369a1; }
+.badge.status-running,
+.status-running   { background: var(--success-tint); color: var(--success-text); }
+.badge.status-completed,
+.status-completed { background: #f0fdf4; color: #166534; }
+.badge.status-cancelled,
+.status-cancelled { background: #fef2f2; color: #dc2626; }
+.badge.status-paused,
+.status-paused    { background: #fefce8; color: #854d0e; }
+
+/* ── Progress bar ──────────────────────────────────────────────────────────── */
+
+.prog-wrap {
+  display: inline-block;
+  width: 100px;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.prog-fill {
+  height: 100%;
+  background: var(--primary, #0E7A40);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.prog-label {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+
+/* ── Wizard ────────────────────────────────────────────────────────────────── */
+
+.wizard {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.wizard-nav {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  background: #f8fafc;
+}
+
+.wizard-nav li {
+  flex: 1;
+  text-align: center;
+  padding: 0.75rem 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+  font-weight: 500;
+  cursor: default;
+}
+
+.wizard-nav li:last-child { border-right: none; }
+.wizard-nav li.active { color: var(--primary, #0E7A40); background: #eff6ff; font-weight: 700; }
+.wizard-nav li.done   { color: var(--success-text); }
+
+.wizard-body {
+  padding: 1.5rem;
+}
+
+.wizard-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Tag grid ──────────────────────────────────────────────────────────────── */
+
+.tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
+.tag-check input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tag-check input:checked + .chip {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0.25rem 0.65rem;
+  border-radius: 99px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.chip:hover { opacity: 0.85; }
+
+/* ── Audience summary ──────────────────────────────────────────────────────── */
+
+.audience-summary {
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--success-tint);
+  border-radius: 6px;
+  border-left: 3px solid var(--success-text);
+}
+
+.skip-note {
+  color: var(--text-muted);
+}
+
+/* ── Variable rows ─────────────────────────────────────────────────────────── */
+
+.vars-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.vars-section h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.var-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.var-name {
+  width: 60px;
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: #7c3aed;   /* violet — template variable token placeholder, intentional */
+  flex-shrink: 0;
+}
+
+.form-control.sm { max-width: 180px; }
+
+/* ── Schedule step ─────────────────────────────────────────────────────────── */
+
+.radio-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* ── Review card ───────────────────────────────────────────────────────────── */
+
+.review-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.review-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.review-row:last-child { border-bottom: none; }
+.review-row > span { color: var(--text-muted); }
+.review-cost { background: #fffbeb; }
+
+.btn-launch {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-launch:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+
+/* ── Report page ───────────────────────────────────────────────────────────── */
+
+.report-funnel {
+  margin: 1.5rem 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.funnel-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.funnel-row:last-child { border-bottom: none; }
+
+.funnel-label {
+  width: 90px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.funnel-wrap {
+  flex: 1;
+  height: 10px;
+  background: var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.funnel-fill {
+  height: 100%;
+  border-radius: 5px;
+}
+
+.funnel-stat {
+  width: 90px;
+  text-align: right;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.sent      .funnel-fill { background: var(--info); }
+.delivered .funnel-fill { background: var(--success-fill); }
+.read      .funnel-fill { background: #9333ea; }
+.clicked   .funnel-fill { background: #ea580c; }
+.failed    .funnel-fill { background: var(--danger); }
+
+.cost-card {
+  padding: 1rem 1.25rem;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.retarget-box {
+  padding: 1rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}

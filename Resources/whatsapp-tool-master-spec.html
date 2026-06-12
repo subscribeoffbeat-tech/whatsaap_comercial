@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Tool — Master Spec (build-ready)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Patrick+Hand&family=Gloria+Hallelujah&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF8F0;--grid:rgba(120,120,140,0.07);--ink:#2A2A38;--ink-soft:#52525f;
+    --admin:#6B5BD2;--agent:#2F7FD1;--cust:#1F9D55;--sys:#E0852F;--warn:#E0533D;
+    --hi-yellow:#FFE680;--hi-green:#C9F2D6;--hi-pink:#FAD1DE;
+    --note:#FFF3B0;--note-pink:#FBD3DE;--note-blue:#CFE6FB;
+  }
+  *{box-sizing:border-box}html{scroll-behavior:smooth}
+  body{margin:0;font-family:'Patrick Hand','Comic Sans MS',cursive;color:var(--ink);
+    background-color:var(--paper);
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:28px 28px;font-size:19px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 22px 80px}
+  h1,h2,h3{font-family:'Caveat',cursive;font-weight:700;line-height:1.05;margin:0}
+  p{margin:.5em 0}.mono{font-family:'Space Mono',monospace;font-size:.72em;letter-spacing:-.5px}
+  .rough{filter:url(#rough)}
+  .hero{text-align:center;margin:18px 0 6px}
+  .hero .kicker{font-family:'Gloria Hallelujah',cursive;font-size:15px;color:var(--ink-soft);transform:rotate(-2deg);display:inline-block}
+  .hero h1{font-size:clamp(38px,8vw,68px);color:var(--ink);margin:.1em 0}
+  .hero h1 .v{color:var(--cust)}
+  .hero .sub{font-size:21px;color:var(--ink-soft);max-width:640px;margin:6px auto 0}
+  .stamp{display:inline-block;border:3px solid var(--cust);color:var(--cust);font-family:'Caveat';font-weight:700;
+    font-size:24px;padding:2px 16px;border-radius:8px;transform:rotate(-4deg);margin-top:10px}
+  .underline-doodle{display:block;margin:2px auto 0;width:300px;height:18px}
+
+  /* TOC */
+  .toc{background:#fff;border:2.5px solid var(--ink);border-radius:16px;padding:14px 18px;margin:22px 0;box-shadow:5px 6px 0 rgba(42,42,56,.12)}
+  .toc h3{font-size:24px;margin-bottom:6px}
+  .toc-grid{display:flex;flex-wrap:wrap;gap:8px}
+  .toc-grid a{text-decoration:none;color:var(--ink);border:2px solid var(--ink);border-radius:12px;padding:4px 11px;font-size:16px;background:#FDFCF7}
+  .toc-grid a:hover{background:var(--hi-yellow)}
+
+  .chapter{background:#fff;border:2.5px solid var(--ink);
+    border-radius:255px 14px 225px 16px/16px 225px 14px 255px;
+    padding:26px 26px 28px;margin:30px 0;box-shadow:6px 7px 0 rgba(42,42,56,.13);position:relative}
+  .chapter:nth-child(even){border-radius:18px 240px 16px 230px/230px 16px 240px 16px}
+  .tape{position:absolute;top:-13px;left:50%;transform:translateX(-50%) rotate(-3deg);
+    width:120px;height:26px;background:rgba(255,230,128,.7);border:1px dashed rgba(42,42,56,.25)}
+  .ch-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+  .ch-num{flex:0 0 auto;width:52px;height:52px;display:grid;place-items:center;
+    font-family:'Caveat';font-weight:700;font-size:30px;color:#fff;position:relative}
+  .ch-num svg{position:absolute}.ch-num span{position:relative;z-index:2}
+  .ch-head h2{font-size:clamp(26px,4.6vw,38px)}
+  .lead{font-size:20px;color:var(--ink-soft);margin-top:2px}
+  mark{padding:0 4px;border-radius:6px;background:var(--hi-yellow);color:var(--ink)}
+  mark.g{background:var(--hi-green)}mark.p{background:var(--hi-pink)}
+  .pen-admin{color:var(--admin);font-weight:700}.pen-agent{color:var(--agent);font-weight:700}
+  .pen-cust{color:var(--cust);font-weight:700}.pen-sys{color:var(--sys);font-weight:700}.pen-warn{color:var(--warn);font-weight:700}
+  b{font-weight:700}
+
+  /* in/out scope */
+  .scope{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:14px}
+  .col{border:2.5px solid var(--ink);border-radius:16px;padding:8px 18px 16px}
+  .col.in{background:#F1FBF4}.col.out{background:#FDF0EE}
+  .col h3{font-size:26px;margin:8px 0 4px}
+  .col ul{margin:0;padding-left:4px;list-style:none}
+  .col li{padding:4px 0 4px 26px;position:relative;font-size:17px}
+  .col.in li::before{content:"✔";position:absolute;left:0;color:var(--cust);font-weight:700}
+  .col.out li::before{content:"✗";position:absolute;left:0;color:var(--warn);font-weight:700}
+
+  .notes{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:14px}
+  .note{padding:15px 17px;border-radius:4px;box-shadow:3px 4px 0 rgba(42,42,56,.16);transform:rotate(-1.2deg)}
+  .note:nth-child(even){transform:rotate(1.4deg)}
+  .note h3{font-size:23px}.note p{font-size:16.5px;margin:.3em 0 0}
+  .n-yellow{background:var(--note)}.n-blue{background:var(--note-blue)}.n-pink{background:var(--note-pink)}.n-green{background:var(--hi-green)}
+
+  /* matrix */
+  table.matrix{width:100%;border-collapse:collapse;margin-top:12px;font-size:16px}
+  table.matrix th,table.matrix td{border:2px solid var(--ink);padding:7px 9px;text-align:center}
+  table.matrix th{font-family:'Caveat';font-size:21px;background:#f0eee4}
+  table.matrix td:first-child,table.matrix th:first-child{text-align:left;font-size:16px}
+  .yes{color:var(--cust);font-weight:700}.no{color:var(--warn)}
+
+  /* workflow cards */
+  .wf{border:2.5px solid var(--ink);border-radius:14px;background:#fff;padding:14px 16px;margin:14px 0;box-shadow:3px 4px 0 rgba(42,42,56,.1)}
+  .wf h3{font-size:24px;margin-bottom:6px}
+  .wf-meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+  .badge{font-size:14px;font-family:'Space Mono';font-weight:700;padding:2px 9px;border-radius:20px;border:2px solid var(--ink);color:#fff}
+  .b-admin{background:#6B5BD2}.b-mgr{background:#2F7FD1}.b-agent{background:#1F9D55}.b-sys{background:#E0852F}
+  .b-free{background:#1F9D55}.b-cost{background:#E0533D}.b-perm{background:#52525f}
+  .flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0;font-size:16px}
+  .pill{border:2px solid var(--ink);border-radius:18px;padding:3px 10px;background:#FDFCF7;font-family:'Caveat';font-weight:700;font-size:18px}
+  .flow .ar{color:var(--ink-soft);font-size:18px}
+  .wf-rule{font-size:15.5px;color:var(--ink-soft);border-top:2px dotted rgba(42,42,56,.25);padding-top:7px;margin-top:4px}
+  .wf-rule b{color:var(--warn)}
+
+  /* cost */
+  .cost{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px}
+  .cc{border:2.5px solid var(--ink);border-radius:12px;padding:10px;text-align:center;background:#fff}
+  .cc b{font-family:'Caveat';font-size:26px;display:block}
+  .cc small{color:var(--ink-soft);font-size:13.5px}
+  .cc.free b{color:var(--cust)}.cc.util b{color:var(--agent)}.cc.auth b{color:var(--sys)}.cc.mkt b{color:var(--warn)}
+  .bill{margin-top:14px;border:2.5px dashed var(--sys);border-radius:14px;padding:12px 18px;background:#FFF8EF}
+  .bill table{width:100%;border-collapse:collapse;font-size:17px}
+  .bill td{padding:3px 0}.bill td:last-child{text-align:right;font-family:'Space Mono';font-size:15px}
+  .bill .tot td{border-top:2px solid var(--ink);font-weight:700;padding-top:6px}
+
+  /* rule rows */
+  .rules{margin-top:12px}
+  .rule{display:grid;grid-template-columns:1fr 26px 1.2fr;gap:8px;align-items:center;border-bottom:2px dotted rgba(42,42,56,.22);padding:10px 0}
+  .rule .meta{background:#FFF1EC;border:2px solid var(--warn);border-radius:10px;padding:8px 11px;font-size:16px}
+  .rule .ours{background:#EFFBF3;border:2px solid var(--cust);border-radius:10px;padding:8px 11px;font-size:16px}
+  .rule b{font-family:'Caveat';font-size:20px}.rule .meta b{color:var(--warn)}.rule .ours b{color:var(--cust)}
+  .rule .ar{font-family:'Caveat';font-size:26px;text-align:center;color:var(--ink-soft)}
+
+  /* tech + erd + api */
+  .stack{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px}
+  .tech{display:flex;gap:10px;align-items:flex-start;border-bottom:2px dotted rgba(42,42,56,.25);padding-bottom:9px}
+  .tech .chip{flex:0 0 auto;font-family:'Caveat';font-weight:700;font-size:19px;color:#fff;padding:3px 11px;border-radius:14px;border:2px solid var(--ink);white-space:nowrap}
+  .tech b{font-size:18px}
+  .erd{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+  .tbl{border:2.5px solid var(--ink);border-radius:10px;background:#fff;overflow:hidden}
+  .tbl .h{font-family:'Caveat';font-weight:700;font-size:20px;color:#fff;padding:3px 11px;background:#52525f}
+  .tbl ul{list-style:none;margin:0;padding:6px 11px;font-family:'Space Mono';font-size:12px;line-height:1.8}
+  .sitemap{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+  .pagechip{border:2.5px solid var(--ink);border-radius:13px;padding:6px 12px;background:#fff;font-size:17px}
+  .pagechip b{font-size:19px}
+
+  /* phases */
+  .phase{display:flex;gap:14px;align-items:flex-start;padding:9px 0;border-bottom:2px dotted rgba(42,42,56,.22)}
+  .phase .pn{flex:0 0 auto;width:38px;height:38px;border-radius:50%;background:var(--admin);color:#fff;display:grid;place-items:center;font-family:'Caveat';font-weight:700;font-size:22px;border:2.5px solid var(--ink)}
+  .phase b{font-size:19px}
+
+  /* checklist */
+  .check{list-style:none;margin:12px 0 0;padding:0}
+  .check li{padding:6px 0 6px 30px;position:relative;font-size:17px;border-bottom:1px dotted rgba(42,42,56,.2)}
+  .check li::before{content:"☐";position:absolute;left:0;font-size:20px;color:var(--cust)}
+
+  .divider{display:block;margin:8px auto;width:60%;height:16px}
+  .closing{text-align:center;font-family:'Caveat';font-size:32px;color:var(--ink-soft);margin-top:34px;transform:rotate(-1deg)}
+  @media(max-width:700px){
+    body{font-size:18px}
+    .scope,.notes,.stack,.cost{grid-template-columns:1fr}.erd{grid-template-columns:1fr}
+    .chapter{border-radius:14px!important}.note{transform:none}
+    .rule{grid-template-columns:1fr;gap:6px}.rule .ar{display:none}
+    table.matrix{font-size:13px}table.matrix th{font-size:17px}
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"/></filter>
+</svg>
+
+<div class="wrap">
+  <div class="hero">
+    <span class="kicker">the one doc to hand over — decide once, then build ↓</span>
+    <h1>The <span class="v">master</span> spec</h1>
+    <svg class="underline-doodle rough" viewBox="0 0 300 18"><path d="M4 11 C80 4,180 16,296 6" fill="none" stroke="#1F9D55" stroke-width="4" stroke-linecap="round"/></svg>
+    <p class="sub">Everything decided. One company, service business, no payments. Submit this and the build can start without more questions.</p>
+    <div class="stamp">v1 — locked ✔</div>
+  </div>
+
+  <div class="toc">
+    <h3>What's inside</h3>
+    <div class="toc-grid">
+      <a href="#s1">1 · What we're building</a>
+      <a href="#s2">2 · Who & permissions</a>
+      <a href="#s3">3 · Every workflow</a>
+      <a href="#s4">4 · What it costs us</a>
+      <a href="#s5">5 · The hard rules</a>
+      <a href="#s6">6 · Tech & data</a>
+      <a href="#s7">7 · Build order</a>
+      <a href="#s8">8 · Done when…</a>
+    </div>
+  </div>
+
+  <!-- S1 SCOPE -->
+  <div class="chapter" id="s1">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#1F9D55" stroke="#2A2A38" stroke-width="2.5"/></svg><span>1</span></div><h2>What we're building (the settled facts)</h2></div>
+    <p>A self-hosted WhatsApp marketing + support tool for <mark>one service company and its customers</mark>, talking directly to Meta's Cloud API — no BSP, no per-seat fees, no markup. Single-tenant: one number, one contact database, one team.</p>
+    <div class="scope">
+      <div class="col in"><h3>In scope (v1)</h3><ul>
+        <li>Bulk broadcasts to tagged segments</li>
+        <li>Contacts: tags, custom fields, notes</li>
+        <li>Shared multi-agent inbox (one number)</li>
+        <li>Templates + Meta approval tracking</li>
+        <li>Rule-based automation (keyword/welcome/away)</li>
+        <li>Scheduling + quiet hours</li>
+        <li>Click tracking + saved "clicked" segments</li>
+        <li>Analytics + per-message cost tracking</li>
+        <li>Consent in/out, RBAC, audit log</li>
+        <li>Full Meta-compliance enforcement</li>
+      </ul></div>
+      <div class="col out"><h3>Out of scope (decided NO)</h3><ul>
+        <li>Catalog + in-app payments <i>(service biz)</i></li>
+        <li>AI / NLP chatbot</li>
+        <li>Visual drag-drop flow builder</li>
+        <li>AI template generator</li>
+        <li>Click-to-WhatsApp ads manager</li>
+        <li>WhatsApp Flows / native forms</li>
+        <li>Native integrations (Shopify/Zapier…)</li>
+        <li><i>(one inbound API hook is kept, though)</i></li>
+      </ul></div>
+    </div>
+  </div>
+
+  <!-- S2 PERMISSIONS -->
+  <div class="chapter" id="s2">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#6B5BD2" stroke="#2A2A38" stroke-width="2.5"/></svg><span>2</span></div><h2>Who's involved &amp; who can do what</h2></div>
+    <p class="lead">Three staff roles, plus the customer (no login) and the system (automatic).</p>
+    <table class="matrix">
+      <tr><th>Capability</th><th>Admin</th><th>Manager</th><th>Agent</th></tr>
+      <tr><td>Chat in inbox (assigned + unassigned queue)</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td></tr>
+      <tr><td>Build &amp; send campaigns</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">✗</td></tr>
+      <tr><td>Import / edit / delete contacts</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">✗</td></tr>
+      <tr><td>Manage templates &amp; automation rules</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">✗</td></tr>
+      <tr><td>View analytics &amp; cost</td><td class="yes">✔</td><td class="yes">✔</td><td>own stats</td></tr>
+      <tr><td>Add / remove agents &amp; roles</td><td class="yes">✔</td><td class="no">✗</td><td class="no">✗</td></tr>
+      <tr><td>Connect number / secrets / settings</td><td class="yes">✔</td><td class="no">✗</td><td class="no">✗</td></tr>
+      <tr><td>Export / delete customer data (DPDP)</td><td class="yes">✔</td><td class="no">✗</td><td class="no">✗</td></tr>
+    </table>
+  </div>
+
+  <!-- S3 WORKFLOWS -->
+  <div class="chapter" id="s3">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#2F7FD1" stroke="#2A2A38" stroke-width="2.5"/></svg><span>3</span></div><h2>Every workflow — who, permission, cost</h2></div>
+    <p class="lead">Each flow shows the actor, the permission it needs, the cost, and the rules that bind it.</p>
+
+    <div class="wf">
+      <h3>① Connect WhatsApp &amp; verify business</h3>
+      <div class="wf-meta"><span class="badge b-admin">Admin</span><span class="badge b-perm">admin only</span><span class="badge b-free">free</span></div>
+      <div class="flow"><span class="pill">link number + token</span><span class="ar">→</span><span class="pill">set 6-digit PIN</span><span class="ar">→</span><span class="pill">display-name approval</span><span class="ar">→</span><span class="pill">verify business</span><span class="ar">→</span><span class="pill">webhook verified</span></div>
+      <div class="wf-rule"><b>Rules:</b> verify on day 1 (else stuck at 250/day); token stored encrypted, never in git; webhook GET-verify must pass.</div>
+    </div>
+
+    <div class="wf">
+      <h3>② Import contacts &amp; record consent</h3>
+      <div class="wf-meta"><span class="badge b-admin">Admin</span><span class="badge b-mgr">Manager</span><span class="badge b-perm">manage contacts</span><span class="badge b-free">free</span></div>
+      <div class="flow"><span class="pill">upload CSV</span><span class="ar">→</span><span class="pill">map columns</span><span class="ar">→</span><span class="pill">stamp opt-in source + time</span><span class="ar">→</span><span class="pill">apply tags</span></div>
+      <div class="wf-rule"><b>Rules:</b> only <b>opted-in</b> contacts can ever enter a campaign; opt-in source/time is the consent proof for DPDP.</div>
+    </div>
+
+    <div class="wf">
+      <h3>③ Create &amp; submit a template</h3>
+      <div class="wf-meta"><span class="badge b-admin">Admin</span><span class="badge b-mgr">Manager</span><span class="badge b-perm">manage templates</span><span class="badge b-free">free to submit</span></div>
+      <div class="flow"><span class="pill">draft + variables + buttons</span><span class="ar">→</span><span class="pill">submit to Meta</span><span class="ar">→</span><span class="pill">pending badge</span><span class="ar">→</span><span class="pill">webhook flips ✅/❌</span></div>
+      <div class="wf-rule"><b>Rules:</b> correct category (no promo hidden in "utility"); every variable needs a fallback default or Meta rejects it.</div>
+    </div>
+
+    <div class="wf">
+      <h3>④ Build &amp; send a broadcast</h3>
+      <div class="wf-meta"><span class="badge b-admin">Admin</span><span class="badge b-mgr">Manager</span><span class="badge b-perm">send campaigns</span><span class="badge b-cost">costs money</span></div>
+      <div class="flow"><span class="pill">pick segment</span><span class="ar">→</span><span class="pill">approved template</span><span class="ar">→</span><span class="pill">schedule</span><span class="ar">→</span><span class="pill">confirm count</span><span class="ar">→</span><span class="pill">queue → paced worker → Meta</span></div>
+      <div class="wf-rule"><b>Rules:</b> opted-in only · under 90% of tier cap · respect quiet hours · skip +1 (US) on marketing · max 1 marketing/contact/24h · this is the <b>main cost driver</b>.</div>
+    </div>
+
+    <div class="wf">
+      <h3>⑤ Inbound message arrives</h3>
+      <div class="wf-meta"><span class="badge b-sys">System</span><span class="badge b-agent">then Agent</span><span class="badge b-free">free (service window)</span></div>
+      <div class="flow"><span class="pill">webhook</span><span class="ar">→</span><span class="pill">verify sig + log raw + dedupe</span><span class="ar">→</span><span class="pill">open 24h window</span><span class="ar">→</span><span class="pill">auto-reply or route</span></div>
+      <div class="wf-rule"><b>Rules:</b> store raw before processing · dedupe by wa_message_id · download media immediately (link expires).</div>
+    </div>
+
+    <div class="wf">
+      <h3>⑥ Agent replies live</h3>
+      <div class="wf-meta"><span class="badge b-agent">Agent</span><span class="badge b-mgr">Manager</span><span class="badge b-admin">Admin</span><span class="badge b-perm">chat in inbox</span><span class="badge b-free">free in 24h</span></div>
+      <div class="flow"><span class="pill">claim/open chat</span><span class="ar">→</span><span class="pill">reply (live)</span><span class="ar">→</span><span class="pill">tag + note</span><span class="ar">→</span><span class="pill">resolve / hand off</span></div>
+      <div class="wf-rule"><b>Rules:</b> free-form only inside the 24h window; outside it the composer locks to "template only".</div>
+    </div>
+
+    <div class="wf">
+      <h3>⑦ Automation rule fires</h3>
+      <div class="wf-meta"><span class="badge b-sys">System</span><span class="badge b-perm">configured by Admin/Mgr</span><span class="badge b-free">free if in window</span></div>
+      <div class="flow"><span class="pill">trigger (keyword / new contact / off-hours)</span><span class="ar">→</span><span class="pill">match rule</span><span class="ar">→</span><span class="pill">send reply / route</span></div>
+      <div class="wf-rule"><b>Rules:</b> v1 = single-step replies only (no branching sequences); STOP keyword always wins.</div>
+    </div>
+
+    <div class="wf">
+      <h3>⑧ Customer opts out (STOP)</h3>
+      <div class="wf-meta"><span class="badge b-sys">System</span><span class="badge b-perm">automatic</span><span class="badge b-free">free</span></div>
+      <div class="flow"><span class="pill">"STOP"</span><span class="ar">→</span><span class="pill">opted_in = false</span><span class="ar">→</span><span class="pill">confirm unsubscribe</span><span class="ar">→</span><span class="pill">excluded forever</span></div>
+      <div class="wf-rule"><b>Rules:</b> instant &amp; automatic — manual opt-out handling is how you collect blocks &amp; wreck quality.</div>
+    </div>
+
+    <div class="wf">
+      <h3>⑨ View analytics &amp; cost</h3>
+      <div class="wf-meta"><span class="badge b-admin">Admin</span><span class="badge b-mgr">Manager</span><span class="badge b-agent">Agent: own stats</span><span class="badge b-free">free</span></div>
+      <div class="flow"><span class="pill">delivered / read / failed</span><span class="ar">→</span><span class="pill">cost per campaign &amp; month</span><span class="ar">→</span><span class="pill">quality rating + tier</span></div>
+      <div class="wf-rule"><b>Rules:</b> each outbound message is stamped with category + cost so spend rolls up automatically.</div>
+    </div>
+
+    <div class="wf">
+      <h3>⑩ Manage team / export or delete data</h3>
+      <div class="wf-meta"><span class="badge b-admin">Admin</span><span class="badge b-perm">admin only</span><span class="badge b-free">free</span></div>
+      <div class="flow"><span class="pill">invite/remove agent</span><span class="ar">→</span><span class="pill">set role</span><span class="ar">→</span><span class="pill">export / delete on request</span></div>
+      <div class="wf-rule"><b>Rules:</b> every campaign send &amp; setting change is written to the audit log; DPDP delete-on-request honoured.</div>
+    </div>
+  </div>
+
+  <!-- S4 COST -->
+  <div class="chapter" id="s4">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0852F" stroke="#2A2A38" stroke-width="2.5"/></svg><span>4</span></div><h2>What can cost us money</h2></div>
+    <p class="lead">Meta bills per message (direct rates — no BSP markup). India, 2026:</p>
+    <div class="cost">
+      <div class="cc free"><b>₹0</b><small>Service<br>reply in 24h window</small></div>
+      <div class="cc util"><b>₹0.115</b><small>Utility<br>per message</small></div>
+      <div class="cc auth"><b>₹0.115</b><small>Authentication<br>per message</small></div>
+      <div class="cc mkt"><b>₹0.8631</b><small>Marketing<br>per message</small></div>
+    </div>
+    <p style="margin-top:10px"><span class="pen-warn">Note:</span> 18% GST applies on Meta's charges, so a marketing message is ~<b>₹1.02 all-in</b>. Marketing rose ~10% on 1 Jan 2026 (was ₹0.7846). Rates drift — keep them in config, not hard-coded.</p>
+
+    <div class="bill">
+      <b style="font-family:'Caveat';font-size:23px">Rough monthly bill — a service business</b>
+      <table>
+        <tr><td>7,000 service replies (within 24h)</td><td>₹0</td></tr>
+        <tr><td>4,000 utility notifications × ₹0.115</td><td>₹460</td></tr>
+        <tr><td>1,000 marketing × ₹0.8631</td><td>₹863</td></tr>
+        <tr><td>+ 18% GST</td><td>₹238</td></tr>
+        <tr><td>+ VPS hosting</td><td>~₹2,000</td></tr>
+        <tr class="tot"><td>≈ total / month</td><td>~₹3,560</td></tr>
+      </table>
+    </div>
+
+    <div class="notes">
+      <div class="note n-green"><h3>What we DON'T pay (vs a BSP)</h3><p>₹0 monthly software licence · ₹0 per-agent seat (unlimited agents) · ₹0 per-message markup (10–30% saved).</p></div>
+      <div class="note n-pink"><h3>The hidden costs to watch</h3><p>A banned number (lost revenue) · over-marketing that triggers blocks · dev/maintenance time · GST · a future AI chatbot (GPU or API).</p></div>
+    </div>
+    <p style="margin-top:10px">Because we're a <b>service</b> business, most volume is free service replies + cheap utility — marketing is the small slice. The expensive category barely touches our bill.</p>
+  </div>
+
+  <!-- S5 RULES -->
+  <div class="chapter" id="s5">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0533D" stroke="#2A2A38" stroke-width="2.5"/></svg><span>5</span></div><h2>The hard rules (concrete, not vague)</h2></div>
+    <p class="lead">Left = what Meta / law demands. Right = the exact number or mechanism we build.</p>
+    <div class="rules">
+      <div class="rule"><div class="meta"><b>Stay under daily limit</b></div><div class="ar">→</div><div class="ours"><b>Stop at 90% of tier</b> — read tier from <span class="mono">business_capability_update</span> webhook, count unique recipients/day</div></div>
+      <div class="rule"><div class="meta"><b>No bursts</b></div><div class="ar">→</div><div class="ours"><b>~80 msg/sec</b> token bucket; raise only when tier allows</div></div>
+      <div class="rule"><div class="meta"><b>Handle failures sanely</b></div><div class="ar">→</div><div class="ours"><b>3 retries, exponential backoff</b>, transient errors only; 131049/invalid → fail, no resend</div></div>
+      <div class="rule"><div class="meta"><b>Don't over-message</b></div><div class="ar">→</div><div class="ours"><b>Max 1 marketing / contact / 24h</b> (under Meta's ~2/day)</div></div>
+      <div class="rule"><div class="meta"><b>No late-night sends</b></div><div class="ar">→</div><div class="ours"><b>Quiet hours 9pm–9am IST</b> for business-initiated; service replies always allowed</div></div>
+      <div class="rule"><div class="meta"><b>Only message opt-ins</b></div><div class="ar">→</div><div class="ours"><b>Hard block</b> — non-opted-in can't enter a campaign; STOP = instant opt-out</div></div>
+      <div class="rule"><div class="meta"><b>No marketing to US</b></div><div class="ar">→</div><div class="ours"><b>+1 numbers auto-excluded</b> from marketing campaigns</div></div>
+      <div class="rule"><div class="meta"><b>24h window</b></div><div class="ar">→</div><div class="ours"><b>Per-conversation timer</b>; free-form inside, template required outside</div></div>
+      <div class="rule"><div class="meta"><b>Secure webhook</b></div><div class="ar">→</div><div class="ours"><b>Verify X-Hub-Signature-256</b> → store raw → dedupe → download media now</div></div>
+      <div class="rule"><div class="meta"><b>Data protection (DPDP)</b></div><div class="ar">→</div><div class="ours"><b>Purge after 24 months</b> (configurable); delete-on-request; consent proof kept</div></div>
+      <div class="rule"><div class="meta"><b>Guard secrets</b></div><div class="ar">→</div><div class="ours"><b>Token encrypted at rest</b>, loaded from protected env, never in git</div></div>
+    </div>
+  </div>
+
+  <!-- S6 TECH -->
+  <div class="chapter" id="s6">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#52525f" stroke="#2A2A38" stroke-width="2.5"/></svg><span>6</span></div><h2>Tech, data &amp; APIs (locked)</h2></div>
+    <p class="lead">Two core technologies — Go &amp; PostgreSQL — to keep it simple for an AI-built, lightly-supervised project.</p>
+    <div class="stack">
+      <div class="tech"><span class="chip" style="background:#2F7FD1">Go + chi</span><div><b>One binary.</b> Web, API, queue worker, websockets. Single-file deploy.</div></div>
+      <div class="tech"><span class="chip" style="background:#E0852F">templ + HTMX</span><div><b>Server-rendered UI.</b> No heavy JS framework.</div></div>
+      <div class="tech"><span class="chip" style="background:#6B5BD2">Postgres + sqlc</span><div><b>Data, type-safe.</b> Compiler catches query mistakes.</div></div>
+      <div class="tech"><span class="chip" style="background:#1F9D55">River</span><div><b>Queue in Postgres.</b> No Redis needed.</div></div>
+      <div class="tech"><span class="chip" style="background:#2F7FD1">WebSocket/SSE</span><div><b>Live inbox</b> &amp; status ticks.</div></div>
+      <div class="tech"><span class="chip" style="background:#52525f">Nginx + certbot</span><div><b>HTTPS</b> on our domain (required for webhooks).</div></div>
+    </div>
+
+    <p class="lead" style="margin-top:16px">Data model — the tables:</p>
+    <div class="erd">
+      <div class="tbl"><div class="h">contacts</div><ul><li>id · phone (E.164)</li><li>name · opted_in</li><li>opt_in_source/at</li><li>custom (JSONB)</li></ul></div>
+      <div class="tbl"><div class="h">tags / contact_tags</div><ul><li>tag id · name · color</li><li>contact_id ⇄ tag_id</li><li>(many-to-many)</li></ul></div>
+      <div class="tbl"><div class="h">agents</div><ul><li>id · name · email</li><li>role · password_hash</li><li>active</li></ul></div>
+      <div class="tbl"><div class="h">conversations</div><ul><li>id · contact_id</li><li>agent_id · status</li><li>window_expires_at</li></ul></div>
+      <div class="tbl"><div class="h">messages</div><ul><li>id · wa_message_id</li><li>direction · type</li><li>body · media_path</li><li>status · error · cost</li></ul></div>
+      <div class="tbl"><div class="h">templates</div><ul><li>id · name · category</li><li>language · status</li><li>body · buttons</li></ul></div>
+      <div class="tbl"><div class="h">campaigns</div><ul><li>id · template_id</li><li>segment · schedule_at</li><li>status · counts · cost</li></ul></div>
+      <div class="tbl"><div class="h">campaign_recipients</div><ul><li>id · campaign_id</li><li>contact_id · message_id</li><li>status</li></ul></div>
+      <div class="tbl"><div class="h">automation_rules</div><ul><li>id · trigger/keyword</li><li>action · template_id</li><li>active</li></ul></div>
+      <div class="tbl"><div class="h">webhook_log</div><ul><li>id · raw_payload</li><li>signature_ok</li><li>processed · received_at</li></ul></div>
+      <div class="tbl"><div class="h">audit_log</div><ul><li>id · agent_id</li><li>action · details</li><li>at</li></ul></div>
+      <div class="tbl"><div class="h">config + river_jobs</div><ul><li>phone_number_id</li><li>token (encrypted)</li><li>quality/tier cache</li><li>rates · quiet hours</li></ul></div>
+    </div>
+
+    <p class="lead" style="margin-top:16px">APIs:</p>
+    <div class="notes">
+      <div class="note n-green"><h3>Meta Cloud API (v23.x)</h3><p><span class="mono">POST /{phone_id}/messages</span> · <span class="mono">GET/POST /{waba_id}/message_templates</span> · <span class="mono">POST /{phone_id}/media</span> · <span class="mono">/whatsapp/webhook</span> (verify + inbound + statuses).</p></div>
+      <div class="note n-blue"><h3>Our internal API</h3><p>auth/login · contacts · tags · templates · campaigns · conversations · reply · analytics · <span class="mono">/ws</span> live · plus <b>one inbound hook</b> for external systems.</p></div>
+    </div>
+
+    <p class="lead" style="margin-top:16px">Pages:</p>
+    <div class="sitemap">
+      <div class="pagechip"><b>Login</b></div><div class="pagechip"><b>Onboarding</b></div><div class="pagechip"><b>Dashboard</b></div><div class="pagechip"><b>Inbox</b></div><div class="pagechip"><b>Contacts</b></div><div class="pagechip"><b>Campaigns</b></div><div class="pagechip"><b>Templates</b></div><div class="pagechip"><b>Automation</b></div><div class="pagechip"><b>Analytics</b></div><div class="pagechip"><b>Team</b></div><div class="pagechip"><b>Settings</b></div>
+    </div>
+  </div>
+
+  <!-- S7 BUILD ORDER -->
+  <div class="chapter" id="s7">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#6B5BD2" stroke="#2A2A38" stroke-width="2.5"/></svg><span>7</span></div><h2>Build order (one piece at a time)</h2></div>
+    <div style="margin-top:8px">
+      <div class="phase"><div class="pn">1</div><div><b>Foundation.</b> Meta setup + business verification, DB schema, webhook receiver (verify → raw log → dedupe). Tests for dedupe.</div></div>
+      <div class="phase"><div class="pn">2</div><div><b>Messaging core.</b> Send/receive, 24h-window logic, shared inbox with live websocket, agent reply.</div></div>
+      <div class="phase"><div class="pn">3</div><div><b>Contacts &amp; templates.</b> Import + tags + consent stamping + STOP, template draft/submit/status tracking.</div></div>
+      <div class="phase"><div class="pn">4</div><div><b>Broadcasts.</b> Campaign builder, River queue, paced worker, limit guard, scheduling, quiet hours, US exclusion.</div></div>
+      <div class="phase"><div class="pn">5</div><div><b>Automation &amp; insight.</b> Keyword/welcome/away rules, click tracking, analytics + cost rollups, quality watch.</div></div>
+      <div class="phase"><div class="pn">6</div><div><b>Hardening.</b> RBAC, audit log, settings, backups, /health + alerts, the runbook.</div></div>
+    </div>
+  </div>
+
+  <!-- S8 DONE -->
+  <div class="chapter" id="s8">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#1F9D55" stroke="#2A2A38" stroke-width="2.5"/></svg><span>8</span></div><h2>The tool is "ready" when…</h2></div>
+    <p class="lead">Acceptance checklist — tick all and v1 ships.</p>
+    <ul class="check">
+      <li>A verified number connects and webhook verification passes</li>
+      <li>Inbound messages appear in the shared inbox within seconds (live)</li>
+      <li>Agent can reply inside the 24h window; composer locks to template-only outside it</li>
+      <li>Contacts import with tags; STOP opts a contact out instantly</li>
+      <li>A template can be created, submitted, and flips to approved/rejected via webhook</li>
+      <li>A campaign sends to a segment, paced under the tier cap, with live delivered/read/failed</li>
+      <li>Non-opted-in contacts are blocked from campaigns; +1 blocked from marketing</li>
+      <li>Quiet hours are respected; frequency cap holds</li>
+      <li>Cost per campaign and per month is shown</li>
+      <li>RBAC matches the matrix; audit log records sends &amp; setting changes</li>
+      <li>Nightly backup runs off-VPS; /health responds; the runbook exists</li>
+      <li>Webhooks dedupe correctly and inbound media is stored before it expires</li>
+    </ul>
+  </div>
+
+  <svg class="divider rough" viewBox="0 0 200 16"><path d="M4 8 q20 -8 40 0 t40 0 t40 0 t40 0 t36 0" fill="none" stroke="#52525f" stroke-width="2.5" stroke-linecap="round"/></svg>
+  <p class="closing">decided once. now build it. ✎</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Our WhatsApp Tool — the build plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Patrick+Hand&family=Gloria+Hallelujah&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF8F0;--grid:rgba(120,120,140,0.07);--ink:#2A2A38;--ink-soft:#52525f;
+    --admin:#6B5BD2;--agent:#2F7FD1;--cust:#1F9D55;--sys:#E0852F;--warn:#E0533D;
+    --hi-yellow:#FFE680;--hi-green:#C9F2D6;--hi-pink:#FAD1DE;
+    --note:#FFF3B0;--note-pink:#FBD3DE;--note-blue:#CFE6FB;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:'Patrick Hand','Comic Sans MS',cursive;color:var(--ink);
+    background-color:var(--paper);
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:28px 28px;font-size:19px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:940px;margin:0 auto;padding:32px 22px 80px}
+  h1,h2,h3{font-family:'Caveat',cursive;font-weight:700;line-height:1.05;margin:0}
+  p{margin:.5em 0}
+  .mono{font-family:'Space Mono',monospace;font-size:.72em;letter-spacing:-.5px}
+  .rough{filter:url(#rough)}
+
+  .hero{text-align:center;margin:18px 0 10px}
+  .hero .kicker{font-family:'Gloria Hallelujah',cursive;font-size:15px;color:var(--ink-soft);transform:rotate(-2deg);display:inline-block}
+  .hero h1{font-size:clamp(38px,8.5vw,70px);color:var(--ink);margin:.1em 0}
+  .hero h1 .b{color:var(--agent)}
+  .hero .sub{font-size:21px;color:var(--ink-soft);max-width:600px;margin:6px auto 0}
+  .underline-doodle{display:block;margin:2px auto 0;width:300px;height:18px}
+
+  .chapter{background:#fff;border:2.5px solid var(--ink);
+    border-radius:255px 14px 225px 16px/16px 225px 14px 255px;
+    padding:26px 26px 28px;margin:30px 0;box-shadow:6px 7px 0 rgba(42,42,56,.13);position:relative}
+  .chapter:nth-child(even){border-radius:18px 240px 16px 230px/230px 16px 240px 16px}
+  .tape{position:absolute;top:-13px;left:50%;transform:translateX(-50%) rotate(-3deg);
+    width:120px;height:26px;background:rgba(255,230,128,.7);border:1px dashed rgba(42,42,56,.25)}
+  .ch-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+  .ch-num{flex:0 0 auto;width:52px;height:52px;display:grid;place-items:center;
+    font-family:'Caveat';font-weight:700;font-size:30px;color:#fff;position:relative}
+  .ch-num svg{position:absolute}.ch-num span{position:relative;z-index:2}
+  .ch-head h2{font-size:clamp(28px,5vw,40px)}
+  .lead{font-size:20px;color:var(--ink-soft);margin-top:2px}
+  mark{padding:0 4px;border-radius:6px;background:var(--hi-yellow);color:var(--ink)}
+  mark.g{background:var(--hi-green)}mark.p{background:var(--hi-pink)}
+  .pen-admin{color:var(--admin);font-weight:700}.pen-agent{color:var(--agent);font-weight:700}
+  .pen-cust{color:var(--cust);font-weight:700}.pen-sys{color:var(--sys);font-weight:700}.pen-warn{color:var(--warn);font-weight:700}
+
+  /* tech stack */
+  .stack{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:12px}
+  .tech{display:flex;gap:12px;align-items:flex-start;border-bottom:2px dotted rgba(42,42,56,.25);padding-bottom:10px}
+  .tech .chip{flex:0 0 auto;font-family:'Caveat';font-weight:700;font-size:20px;color:#fff;padding:3px 12px;border-radius:14px;border:2px solid var(--ink);white-space:nowrap}
+  .tech b{font-size:19px}
+
+  /* api list */
+  .apis{margin-top:12px}
+  .api-group{margin:12px 0 4px;font-family:'Caveat';font-size:26px}
+  .api-row{display:flex;gap:12px;align-items:baseline;padding:6px 0;border-bottom:2px dotted rgba(42,42,56,.2)}
+  .m{flex:0 0 auto;font-family:'Space Mono';font-weight:700;font-size:13px;color:#fff;padding:2px 8px;border-radius:6px;border:1.5px solid var(--ink)}
+  .m.get{background:#1F9D55}.m.post{background:#2F7FD1}.m.any{background:#6B5BD2}
+  .ep{font-family:'Space Mono';font-size:13.5px;color:var(--ink);word-break:break-word}
+  .api-row .d{color:var(--ink-soft);font-size:17px;margin-left:auto;text-align:right;min-width:38%}
+
+  /* sitemap chips */
+  .sitemap{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+  .pagechip{border:2.5px solid var(--ink);border-radius:14px;padding:8px 14px;background:#fff;font-size:18px}
+  .pagechip b{font-size:21px;display:block}.pagechip small{color:var(--ink-soft)}
+
+  /* wireframe */
+  .wires{display:flex;flex-direction:column;gap:22px;margin-top:14px}
+  .screen{border:2.5px solid var(--ink);border-radius:12px;background:#fff;overflow:hidden;box-shadow:4px 5px 0 rgba(42,42,56,.12)}
+  .screen .bar{background:#f0eee4;border-bottom:2px solid var(--ink);padding:7px 12px;display:flex;align-items:center;gap:7px}
+  .screen .bar .d{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--ink)}
+  .screen .bar .t{margin-left:8px;font-family:'Caveat';font-size:22px}
+  .screen .canvas{display:flex;min-height:150px}
+  .side{flex:0 0 130px;border-right:2px dashed var(--ink);padding:10px 8px;background:#FBFAF4}
+  .side .navitem{font-size:15px;padding:3px 0;color:var(--ink-soft)}
+  .side .navitem.on{color:var(--agent);font-weight:700}
+  .reg{border:2px dashed rgba(42,42,56,.4);border-radius:10px;margin:8px;padding:10px;flex:1;background:#FDFCF7}
+  .reg .lbl{font-family:'Caveat';font-size:19px;color:var(--sys)}
+  .reg small{display:block;color:var(--ink-soft);font-size:14.5px}
+  .three{display:flex;flex:1}
+  .three .reg{flex:1}
+  .cards3{display:flex;gap:8px;margin:8px}
+  .cards3 .mini{flex:1;border:2px dashed rgba(42,42,56,.4);border-radius:10px;padding:8px;text-align:center;background:#FDFCF7}
+  .cards3 .mini b{font-family:'Caveat';font-size:24px;color:var(--cust)}
+  .cards3 .mini small{display:block;color:var(--ink-soft);font-size:13px}
+
+  /* click list */
+  .click{border-left:5px solid var(--agent);border-radius:0;background:#F6FAFF;padding:9px 14px;margin:10px 0;font-size:18px}
+  .click .trig{font-family:'Caveat';font-weight:700;font-size:22px;color:var(--agent)}
+  .click.adm{border-color:var(--admin);background:#F6F4FF}.click.adm .trig{color:var(--admin)}
+  .click.sys{border-color:var(--sys);background:#FFF8EF}.click.sys .trig{color:var(--sys)}
+
+  .notes{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:14px}
+  .note{padding:15px 17px;border-radius:4px;box-shadow:3px 4px 0 rgba(42,42,56,.16);transform:rotate(-1.2deg)}
+  .note:nth-child(even){transform:rotate(1.4deg)}
+  .note h3{font-size:24px}.note p{font-size:17px;margin:.3em 0 0}
+  .n-yellow{background:var(--note)}.n-blue{background:var(--note-blue)}.n-pink{background:var(--note-pink)}.n-green{background:var(--hi-green)}
+
+  .divider{display:block;margin:8px auto;width:60%;height:16px}
+  .closing{text-align:center;font-family:'Caveat';font-size:32px;color:var(--ink-soft);margin-top:34px;transform:rotate(-1deg)}
+
+  @media(max-width:680px){
+    body{font-size:18px}
+    .stack,.notes{grid-template-columns:1fr}
+    .chapter{border-radius:14px!important}
+    .note{transform:none}
+    .api-row{flex-wrap:wrap}.api-row .d{min-width:100%;text-align:left;margin-left:0}
+    .canvas .side{flex-basis:96px}
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"/></filter>
+  <marker id="ah" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L8 5 L1 9" fill="none" stroke="#2A2A38" stroke-width="2"/></marker>
+</svg>
+
+<div class="wrap">
+
+  <div class="hero">
+    <span class="kicker">part 2 — for whoever's actually building it ↓</span>
+    <h1>The <span class="b">build</span> plan</h1>
+    <svg class="underline-doodle rough" viewBox="0 0 300 18"><path d="M4 11 C80 4,180 16,296 6" fill="none" stroke="#2F7FD1" stroke-width="4" stroke-linecap="round"/></svg>
+    <p class="sub">Tech, APIs, every screen, what each button does, and how the pages link together.</p>
+  </div>
+
+  <!-- CH1 architecture -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0852F" stroke="#2A2A38" stroke-width="2.5"/></svg><span>1</span></div><h2>The shape of it</h2></div>
+    <p>One Go program does almost everything: it serves the web pages, runs the background sender, and holds the live chat connections. It only talks to two outside things — <span class="pen-cust">Meta</span> and (optionally) the browser.</p>
+    <svg viewBox="0 0 880 200" class="rough" style="width:100%;height:auto;margin-top:8px">
+      <rect x="30" y="80" width="150" height="48" rx="10" fill="#E1EEFB" stroke="#2A2A38" stroke-width="2.5"/><text x="105" y="100" text-anchor="middle" font-family="Caveat" font-size="22" font-weight="700" fill="#2F7FD1">Browser</text><text x="105" y="118" text-anchor="middle" font-family="Patrick Hand" font-size="13" fill="#52525f">admin + agents</text>
+      <rect x="300" y="30" width="280" height="150" rx="14" fill="#FFF8EF" stroke="#2A2A38" stroke-width="2.5"/><text x="440" y="56" text-anchor="middle" font-family="Caveat" font-size="24" font-weight="700" fill="#E0852F">Our Go app (one binary)</text>
+      <rect x="320" y="70" width="115" height="34" rx="7" fill="#fff" stroke="#2A2A38" stroke-width="2"/><text x="377" y="92" text-anchor="middle" font-family="Patrick Hand" font-size="14">web + API</text>
+      <rect x="445" y="70" width="115" height="34" rx="7" fill="#fff" stroke="#2A2A38" stroke-width="2"/><text x="502" y="92" text-anchor="middle" font-family="Patrick Hand" font-size="14">queue worker</text>
+      <rect x="320" y="116" width="115" height="34" rx="7" fill="#fff" stroke="#2A2A38" stroke-width="2"/><text x="377" y="138" text-anchor="middle" font-family="Patrick Hand" font-size="14">webhook</text>
+      <rect x="445" y="116" width="115" height="34" rx="7" fill="#fff" stroke="#2A2A38" stroke-width="2"/><text x="502" y="138" text-anchor="middle" font-family="Patrick Hand" font-size="14">websocket hub</text>
+      <rect x="690" y="36" width="150" height="46" rx="10" fill="#E6F6EC" stroke="#2A2A38" stroke-width="2.5"/><text x="765" y="64" text-anchor="middle" font-family="Caveat" font-size="22" font-weight="700" fill="#1F9D55">Meta API</text>
+      <rect x="690" y="120" width="150" height="46" rx="10" fill="#EDE9FB" stroke="#2A2A38" stroke-width="2.5"/><text x="765" y="142" text-anchor="middle" font-family="Caveat" font-size="20" font-weight="700" fill="#6B5BD2">PostgreSQL</text><text x="765" y="159" text-anchor="middle" font-family="Patrick Hand" font-size="12" fill="#52525f">+ queue lives here</text>
+      <path d="M180 104 H298" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/><path d="M298 90 H182" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <path d="M582 80 L688 60" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <path d="M582 130 L688 140" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+    </svg>
+  </div>
+
+  <!-- CH2 tech -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#2F7FD1" stroke="#2A2A38" stroke-width="2.5"/></svg><span>2</span></div><h2>Technology used</h2></div>
+    <div class="stack">
+      <div class="tech"><span class="chip" style="background:#2F7FD1">Go + chi</span><div><b>Server & router.</b> Handles web pages, the JSON API, and the sender. <span class="mono">net/http + chi</span> for clean routes.</div></div>
+      <div class="tech"><span class="chip" style="background:#E0852F">templ + HTMX</span><div><b>The pages.</b> Server renders HTML; HTMX swaps bits of the page on click — no heavy JS framework.</div></div>
+      <div class="tech"><span class="chip" style="background:#6B5BD2">PostgreSQL + sqlc</span><div><b>Data.</b> All records; <span class="mono">sqlc</span> turns SQL into type-safe Go so the compiler catches mistakes.</div></div>
+      <div class="tech"><span class="chip" style="background:#1F9D55">River</span><div><b>Queue.</b> Outbound jobs, retries, scheduling — stored inside Postgres, no Redis needed.</div></div>
+      <div class="tech"><span class="chip" style="background:#2F7FD1">WebSocket / SSE</span><div><b>Live inbox.</b> Pushes new messages & status ticks to the dashboard instantly.</div></div>
+      <div class="tech"><span class="chip" style="background:#52525f">Nginx + certbot</span><div><b>Front door & HTTPS.</b> Free auto-renewing TLS on our own domain. Required for Meta webhooks.</div></div>
+      <div class="tech"><span class="chip" style="background:#6B5BD2">Alpine.js</span><div><b>Tiny sprinkles.</b> Dropdowns, modals, toggles — only where HTMX isn't enough.</div></div>
+      <div class="tech"><span class="chip" style="background:#E0533D">.env + JWT</span><div><b>Secrets & login.</b> Tokens in env files; our own session/JWT auth (no Auth0).</div></div>
+    </div>
+  </div>
+
+  <!-- CH3 apis -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#1F9D55" stroke="#2A2A38" stroke-width="2.5"/></svg><span>3</span></div><h2>APIs used</h2></div>
+    <div class="apis">
+      <div class="api-group pen-cust">A) Meta Cloud API — the only outside one <span class="mono" style="color:#52525f">(use current version, v23.x)</span></div>
+      <div class="api-row"><span class="m post">POST</span><span class="ep">/{phone_number_id}/messages</span><span class="d">send text / template / media</span></div>
+      <div class="api-row"><span class="m any">GET/POST</span><span class="ep">/{waba_id}/message_templates</span><span class="d">list & submit templates <i>(note: not "whats_app_templates")</i></span></div>
+      <div class="api-row"><span class="m post">POST</span><span class="ep">/{phone_number_id}/media</span><span class="d">upload images / docs → get a media id</span></div>
+      <div class="api-row"><span class="m any">GET/POST</span><span class="ep">/whatsapp/webhook</span><span class="d"><b>our</b> endpoint Meta calls: GET = verify, POST = inbound + statuses</span></div>
+      <p style="font-size:16px;color:var(--ink-soft);margin-top:6px"><span class="pen-warn">Always</span> verify the webhook signature (<span class="mono">X-Hub-Signature-256</span>) and store the raw payload before processing.</p>
+
+      <div class="api-group pen-admin" style="margin-top:18px">B) Our own internal API (what the dashboard calls)</div>
+      <div class="api-row"><span class="m post">POST</span><span class="ep">/api/auth/login · /logout · /invite</span><span class="d">sessions & agent invites</span></div>
+      <div class="api-row"><span class="m any">CRUD</span><span class="ep">/api/contacts · /tags</span><span class="d">list, import, tag, segment</span></div>
+      <div class="api-row"><span class="m any">CRUD</span><span class="ep">/api/templates</span><span class="d">draft → submit → track status</span></div>
+      <div class="api-row"><span class="m any">CRUD</span><span class="ep">/api/campaigns</span><span class="d">build, schedule, launch, report</span></div>
+      <div class="api-row"><span class="m get">GET</span><span class="ep">/api/conversations · /:id/messages</span><span class="d">inbox threads</span></div>
+      <div class="api-row"><span class="m post">POST</span><span class="ep">/api/conversations/:id/reply</span><span class="d">agent sends a message</span></div>
+      <div class="api-row"><span class="m get">GET</span><span class="ep">/api/analytics/overview</span><span class="d">delivered / read / failed numbers</span></div>
+      <div class="api-row"><span class="m get">GET</span><span class="ep">/ws (or /events)</span><span class="d">live updates to the open dashboard</span></div>
+    </div>
+  </div>
+
+  <!-- CH4 sitemap -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#6B5BD2" stroke="#2A2A38" stroke-width="2.5"/></svg><span>4</span></div><h2>All the pages (screens)</h2></div>
+    <div class="sitemap">
+      <div class="pagechip"><b>Login</b><small>email + password</small></div>
+      <div class="pagechip"><b>Onboarding</b><small>connect WhatsApp (first run)</small></div>
+      <div class="pagechip"><b>Dashboard</b><small>home — the numbers at a glance</small></div>
+      <div class="pagechip"><b>Inbox</b><small>live shared chat</small></div>
+      <div class="pagechip"><b>Contacts</b><small>list, import, tags</small></div>
+      <div class="pagechip"><b>Campaigns</b><small>build & send broadcasts</small></div>
+      <div class="pagechip"><b>Templates</b><small>write & approve</small></div>
+      <div class="pagechip"><b>Automation</b><small>keyword auto-replies</small></div>
+      <div class="pagechip"><b>Analytics</b><small>delivery & click reports</small></div>
+      <div class="pagechip"><b>Team</b><small>agents & roles</small></div>
+      <div class="pagechip"><b>Settings</b><small>number, profile, secrets</small></div>
+    </div>
+    <p class="lead" style="margin-top:14px">Every page (except login/onboarding) shares the same shell: <mark>left sidebar nav + top bar + main area + toast pop-ups</mark>.</p>
+  </div>
+
+  <!-- CH5 wireframes -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0852F" stroke="#2A2A38" stroke-width="2.5"/></svg><span>5</span></div><h2>What the key screens look like</h2></div>
+    <p class="lead">Rough sketches — boxes show where things sit, not final design.</p>
+    <div class="wires">
+
+      <div class="screen">
+        <div class="bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="t">📊 Dashboard (home)</span></div>
+        <div class="side"><div class="navitem on">Dashboard</div><div class="navitem">Inbox</div><div class="navitem">Contacts</div><div class="navitem">Campaigns</div><div class="navitem">Templates</div><div class="navitem">Analytics</div><div class="navitem">Team</div></div>
+        <div style="flex:1">
+          <div class="cards3">
+            <div class="mini"><b>2,418</b><small>sent today</small></div>
+            <div class="mini"><b>94%</b><small>delivered</small></div>
+            <div class="mini"><b>12</b><small>chats waiting</small></div>
+          </div>
+          <div class="reg"><span class="lbl">Recent campaigns</span><small>table: name · sent · read% · status</small></div>
+          <div class="reg"><span class="lbl">Quick actions</span><small>buttons: New campaign · Open inbox · Import contacts</small></div>
+        </div>
+      </div>
+
+      <div class="screen">
+        <div class="bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="t">💬 Inbox (3 panes)</span></div>
+        <div class="side"><div class="navitem">Dashboard</div><div class="navitem on">Inbox</div><div class="navitem">Contacts</div><div class="navitem">Campaigns</div></div>
+        <div class="three">
+          <div class="reg"><span class="lbl">Conversations</span><small>search · filter by tag/agent · unread first</small></div>
+          <div class="reg"><span class="lbl">Chat thread</span><small>bubbles + status ticks + composer at bottom (locked if &gt;24h)</small></div>
+          <div class="reg"><span class="lbl">Contact panel</span><small>name · tags · notes · history</small></div>
+        </div>
+      </div>
+
+      <div class="screen">
+        <div class="bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="t">📣 Campaign builder (wizard)</span></div>
+        <div class="side"><div class="navitem">Dashboard</div><div class="navitem">Inbox</div><div class="navitem on">Campaigns</div></div>
+        <div style="flex:1">
+          <div class="reg"><span class="lbl">Step 1 — Audience</span><small>pick tags / segment → shows recipient count</small></div>
+          <div class="reg"><span class="lbl">Step 2 — Message</span><small>choose an approved template + fill variables</small></div>
+          <div class="reg"><span class="lbl">Step 3 — Schedule</span><small>send now / pick date-time</small></div>
+          <div class="reg"><span class="lbl">Step 4 — Review &amp; Send</span><small>summary + the big Send button</small></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CH6 ui inventory -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#2F7FD1" stroke="#2A2A38" stroke-width="2.5"/></svg><span>6</span></div><h2>The reusable UI pieces</h2></div>
+    <div class="notes">
+      <div class="note n-blue"><h3>The shell</h3><p>Left sidebar nav · top bar (search, number status, profile menu) · toast notifications · loading spinners.</p></div>
+      <div class="note n-yellow"><h3>Data table</h3><p>Used for contacts, campaigns, templates. Search, sort, filter, bulk-select, pagination.</p></div>
+      <div class="note n-green"><h3>Chat composer</h3><p>Text box · emoji · attach file · "send template" button · the 24h-window lock state.</p></div>
+      <div class="note n-pink"><h3>Status badges &amp; chips</h3><p>queued · sent · delivered · read · failed. Tag chips (colored). Approval badges: pending/approved/rejected.</p></div>
+      <div class="note n-blue"><h3>Modals</h3><p>Confirm send · import CSV · invite agent · new template. Always a clear primary button + cancel.</p></div>
+      <div class="note n-yellow"><h3>Forms &amp; wizards</h3><p>Stepper for the campaign builder; inline validation; disabled buttons until valid.</p></div>
+    </div>
+  </div>
+
+  <!-- CH7 clicks -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0533D" stroke="#2A2A38" stroke-width="2.5"/></svg><span>7</span></div><h2>What happens when you click</h2></div>
+    <p class="lead">The important button-by-button behaviour.</p>
+
+    <div class="click adm"><span class="trig">Click "Connect WhatsApp"</span> → opens Meta login → on success we store the number + token → onboarding marks "done" → redirect to Dashboard.</div>
+    <div class="click"><span class="trig">Click a sidebar item</span> → HTMX loads that page's main area (no full reload) → the clicked nav item highlights.</div>
+    <div class="click"><span class="trig">Click a conversation</span> → loads the full thread, marks it read → composer is <b>enabled</b> if inside the 24h window, otherwise shows "send a template instead".</div>
+    <div class="click"><span class="trig">Type + hit Send (reply)</span> → message appears instantly (greyed) → POST to our API → we call Meta → ticks update live (sent→delivered→read) via the socket.</div>
+    <div class="click sys"><span class="trig">New inbound message arrives</span> → webhook fires → we save it → push to the open inbox → unread badge bumps → auto-reply runs if a keyword matches.</div>
+    <div class="click adm"><span class="trig">Click "New campaign" → Send</span> → wizard (audience→message→schedule→review) → a <b>confirm modal</b> with the recipient count → on confirm, jobs get queued → a live progress bar fills as the worker sends.</div>
+    <div class="click sys"><span class="trig">Click "Import contacts"</span> → upload CSV → map columns → preview first rows → confirm → contacts saved + tagged → toast "imported 1,204".</div>
+    <div class="click adm"><span class="trig">Click "Submit template"</span> → form validates → sent to Meta → row shows a <b>pending</b> badge → later a webhook flips it to approved ✅ or rejected ❌.</div>
+    <div class="click"><span class="trig">Click a tag / status filter</span> → table or inbox re-queries and re-renders just the list — instant, no reload.</div>
+  </div>
+
+  <!-- CH8 page flow -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#6B5BD2" stroke="#2A2A38" stroke-width="2.5"/></svg><span>8</span></div><h2>How the pages connect</h2></div>
+    <p class="lead">Login is the gate. First-timers set up WhatsApp; everyone else lands on the Dashboard hub, which reaches every page.</p>
+    <svg viewBox="0 0 900 470" class="rough" style="width:100%;height:auto;margin-top:8px">
+      <!-- login -->
+      <rect x="380" y="22" width="140" height="44" rx="10" fill="#fff" stroke="#2A2A38" stroke-width="2.5"/><text x="450" y="50" text-anchor="middle" font-family="Caveat" font-size="24" font-weight="700">Login</text>
+      <!-- onboarding -->
+      <rect x="150" y="118" width="200" height="52" rx="10" fill="#EDE9FB" stroke="#2A2A38" stroke-width="2.5"/><text x="250" y="140" text-anchor="middle" font-family="Caveat" font-size="22" font-weight="700" fill="#6B5BD2">Onboarding</text><text x="250" y="159" text-anchor="middle" font-family="Patrick Hand" font-size="13" fill="#52525f">connect WhatsApp · first run</text>
+      <!-- dashboard -->
+      <rect x="380" y="118" width="140" height="52" rx="10" fill="#FFF8EF" stroke="#2A2A38" stroke-width="2.5"/><text x="450" y="151" text-anchor="middle" font-family="Caveat" font-size="24" font-weight="700" fill="#E0852F">Dashboard</text>
+      <!-- arrows login -> onboarding / dashboard -->
+      <path d="M390 60 Q300 90 270 116" fill="none" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <text x="300" y="92" font-family="Patrick Hand" font-size="13" fill="#52525f">first time</text>
+      <path d="M450 66 V116" fill="none" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <text x="458" y="96" font-family="Patrick Hand" font-size="13" fill="#52525f">returning</text>
+      <path d="M350 150 H378" fill="none" stroke="#2A2A38" stroke-width="2.5" marker-end="url(#ah)"/>
+      <text x="356" y="142" font-family="Patrick Hand" font-size="12" fill="#52525f">then</text>
+      <!-- bus -->
+      <path d="M450 170 V232" fill="none" stroke="#2A2A38" stroke-width="2.5"/>
+      <path d="M82 232 H818" fill="none" stroke="#2A2A38" stroke-width="2.5"/>
+      <!-- drops + nodes -->
+      <g font-family="Caveat" font-weight="700" font-size="19">
+        <path d="M82 232 V270" stroke="#2A2A38" stroke-width="2.2" marker-end="url(#ah)"/><rect x="30" y="272" width="104" height="48" rx="9" fill="#E1EEFB" stroke="#2A2A38" stroke-width="2.2"/><text x="82" y="301" text-anchor="middle" fill="#2F7FD1">Inbox</text>
+        <path d="M200 232 V270" stroke="#2A2A38" stroke-width="2.2" marker-end="url(#ah)"/><rect x="148" y="272" width="104" height="48" rx="9" fill="#fff" stroke="#2A2A38" stroke-width="2.2"/><text x="200" y="301" text-anchor="middle">Contacts</text>
+        <path d="M318 232 V270" stroke="#2A2A38" stroke-width="2.2" marker-end="url(#ah)"/><rect x="266" y="272" width="104" height="48" rx="9" fill="#fff" stroke="#2A2A38" stroke-width="2.2"/><text x="318" y="301" text-anchor="middle">Campaigns</text>
+        <path d="M436 232 V270" stroke="#2A2A38" stroke-width="2.2" marker-end="url(#ah)"/><rect x="384" y="272" width="104" height="48" rx="9" fill="#fff" stroke="#2A2A38" stroke-width="2.2"/><text x="436" y="301" text-anchor="middle">Templates</text>
+        <path d="M554 232 V270" stroke="#2A2A38" stroke-width="2.2" marker-end="url(#ah)"/><rect x="502" y="272" width="104" height="48" rx="9" fill="#fff" stroke="#2A2A38" stroke-width="2.2"/><text x="554" y="301" text-anchor="middle">Analytics</text>
+        <path d="M672 232 V270" stroke="#2A2A38" stroke-width="2.2" marker-end="url(#ah)"/><rect x="620" y="272" width="104" height="48" rx="9" fill="#fff" stroke="#2A2A38" stroke-width="2.2"/><text x="672" y="301" text-anchor="middle">Team</text>
+        <path d="M790 232 V270" stroke="#2A2A38" stroke-width="2.2" marker-end="url(#ah)"/><rect x="738" y="272" width="104" height="48" rx="9" fill="#fff" stroke="#2A2A38" stroke-width="2.2"/><text x="790" y="301" text-anchor="middle">Settings</text>
+      </g>
+      <!-- inbox -> conversation detail note -->
+      <path d="M82 320 V362" stroke="#2A2A38" stroke-width="2.2" marker-end="url(#ah)"/>
+      <rect x="20" y="364" width="180" height="44" rx="9" fill="#E6F6EC" stroke="#2A2A38" stroke-width="2.2"/><text x="110" y="386" text-anchor="middle" font-family="Caveat" font-size="18" font-weight="700" fill="#1F9D55">open a chat → reply</text><text x="110" y="402" text-anchor="middle" font-family="Patrick Hand" font-size="12" fill="#52525f">live, websocket</text>
+      <!-- campaigns -> builder note -->
+      <path d="M318 320 V362" stroke="#2A2A38" stroke-width="2.2" marker-end="url(#ah)"/>
+      <rect x="240" y="364" width="180" height="44" rx="9" fill="#FFF3B0" stroke="#2A2A38" stroke-width="2.2"/><text x="330" y="386" text-anchor="middle" font-family="Caveat" font-size="18" font-weight="700">builder wizard</text><text x="330" y="402" text-anchor="middle" font-family="Patrick Hand" font-size="12" fill="#52525f">4 steps → Send</text>
+      <!-- sidebar note -->
+      <text x="450" y="200" text-anchor="middle" font-family="Gloria Hallelujah" font-size="12" fill="#52525f">(sidebar jumps between any of these anytime)</text>
+    </svg>
+  </div>
+
+  <svg class="divider rough" viewBox="0 0 200 16"><path d="M4 8 q20 -8 40 0 t40 0 t40 0 t40 0 t36 0" fill="none" stroke="#52525f" stroke-width="2.5" stroke-linecap="round"/></svg>
+  <p class="closing">build order ≈ chapters 2 → 3 → 5 → 7. one piece at a time. ✎</p>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Tool — screen mockups</title>
+<style>
+  :root{
+    --green:#1FA855;--green-d:#157a3d;--green-l:#E7F6EE;
+    --bg:#F4F6F8;--panel:#fff;--border:#E5E7EB;--border2:#EEF0F2;
+    --text:#121826;--muted:#6B7280;--faint:#9CA3AF;
+    --blue:#2F7FD1;--amber:#E0A21F;--red:#E0533D;--purple:#6B5BD2;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+  h1,h2,h3,h4{margin:0;font-weight:600}
+  button{font-family:inherit;cursor:pointer}
+  .muted{color:var(--muted)}.faint{color:var(--faint)}
+
+  /* prototype bar */
+  .proto{background:#1b2230;color:#fff;display:flex;align-items:center;gap:10px;padding:7px 16px;font-size:12.5px}
+  .proto b{font-weight:600;letter-spacing:.3px}
+  .proto .jump{margin-left:auto;display:flex;gap:6px}
+  .proto button{background:#2b3447;color:#cdd3df;border:1px solid #3a445a;border-radius:7px;padding:4px 11px;font-size:12px}
+  .proto button.on{background:var(--green);color:#fff;border-color:var(--green)}
+
+  .view{display:none}.view.show{display:block}
+
+  /* ===== APP SHELL ===== */
+  .shell{display:flex;min-height:calc(100vh - 35px)}
+  .side{width:232px;flex:0 0 232px;background:var(--panel);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;padding:14px 12px}
+  .brand{display:flex;align-items:center;gap:9px;padding:6px 8px 14px;font-weight:700;font-size:15px}
+  .brand .logo{width:28px;height:28px;border-radius:8px;background:var(--green);display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px}
+  .nav{display:flex;flex-direction:column;gap:2px}
+  .nav a{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;color:#374151;
+    text-decoration:none;font-weight:500;font-size:13.5px}
+  .nav a:hover{background:#F3F4F6}
+  .nav a.on{background:var(--green-l);color:var(--green-d);font-weight:600}
+  .nav a svg{width:17px;height:17px;flex:0 0 17px}
+  .nav .sep{height:1px;background:var(--border2);margin:8px 6px}
+  .side .ver{margin-top:auto;padding:10px 8px;font-size:11px;color:var(--faint)}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .top{height:56px;background:var(--panel);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:14px;padding:0 20px;position:sticky;top:0;z-index:5}
+  .top .search{flex:1;max-width:380px;background:var(--bg);border:1px solid var(--border);border-radius:9px;
+    padding:7px 12px;color:var(--muted);font-size:13px}
+  .top .right{margin-left:auto;display:flex;align-items:center;gap:14px}
+  .qstat{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);background:var(--green-l);
+    border:1px solid #BCE6CC;padding:5px 10px;border-radius:20px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--green)}
+  .dot.y{background:var(--amber)}.dot.r{background:var(--red)}
+  .av{width:30px;height:30px;border-radius:50%;background:#DDE3EA;display:grid;place-items:center;font-size:12px;font-weight:600;color:#4B5563}
+  .bell{color:var(--muted)}
+
+  .content{padding:22px 24px;overflow:auto}
+  .ph{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .ph h1{font-size:20px}
+  .ph .sub{color:var(--muted);font-size:13px}
+  .ph .act{margin-left:auto;display:flex;gap:9px}
+
+  .btn{border:1px solid var(--border);background:#fff;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:600;color:#374151}
+  .btn:hover{background:#F9FAFB}
+  .btn.pri{background:var(--green);color:#fff;border-color:var(--green)}
+  .btn.pri:hover{background:var(--green-d)}
+  .btn.sm{padding:6px 11px;font-size:12.5px}
+
+  .screen{display:none}.screen.on{display:block}
+
+  /* cards / tables */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:15px 16px}
+  .card .lab{font-size:12px;color:var(--muted);font-weight:500}
+  .card .big{font-size:26px;font-weight:700;margin-top:6px}
+  .card .big.g{color:var(--green)}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:18px;overflow:hidden}
+  .panel .hd{padding:13px 16px;border-bottom:1px solid var(--border2);font-weight:600;font-size:14px;display:flex;align-items:center}
+  .panel .hd .act{margin-left:auto;display:flex;gap:8px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;padding:10px 16px;border-bottom:1px solid var(--border2)}
+  td{padding:11px 16px;border-bottom:1px solid var(--border2)}
+  tr:last-child td{border-bottom:0}
+  tr:hover td{background:#FAFBFC}
+
+  .badge{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:20px}
+  .b-green{background:var(--green-l);color:var(--green-d)}
+  .b-blue{background:#E7F0FB;color:#1d5fa5}
+  .b-amber{background:#FDF3E0;color:#9a6a0d}
+  .b-red{background:#FBEAE7;color:#a3382a}
+  .b-gray{background:#F1F2F4;color:#5b6472}
+  .chip{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:6px;background:#EEF1F4;color:#4B5563;margin-right:4px}
+  .chip.g{background:var(--green-l);color:var(--green-d)}.chip.b{background:#E7F0FB;color:#1d5fa5}.chip.p{background:#EFECFB;color:#5448a8}
+
+  .qa{display:flex;gap:10px;flex-wrap:wrap}
+
+  /* inbox */
+  .inbox{display:grid;grid-template-columns:300px 1fr 270px;height:calc(100vh - 35px - 56px);background:var(--panel)}
+  .ibx-list{border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+  .ibx-search{padding:12px;border-bottom:1px solid var(--border2)}
+  .ibx-search input{width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px}
+  .ibx-filters{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border2);flex-wrap:wrap}
+  .fchip{font-size:11.5px;padding:3px 9px;border-radius:20px;border:1px solid var(--border);color:var(--muted);background:#fff}
+  .fchip.on{background:var(--green-l);border-color:#BCE6CC;color:var(--green-d);font-weight:600}
+  .convs{overflow:auto;flex:1}
+  .conv{display:flex;gap:11px;padding:12px;border-bottom:1px solid var(--border2);cursor:pointer}
+  .conv.sel{background:var(--green-l)}
+  .conv:hover{background:#F7F8FA}
+  .conv .av{flex:0 0 38px;width:38px;height:38px}
+  .conv .cmid{flex:1;min-width:0}
+  .conv .nm{font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px}
+  .conv .pv{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .conv .cr{text-align:right;font-size:11px;color:var(--faint)}
+  .unread{background:var(--green);color:#fff;border-radius:20px;font-size:10.5px;padding:1px 7px;font-weight:700;margin-top:4px;display:inline-block}
+  .ibx-thread{display:flex;flex-direction:column;min-height:0}
+  .th-hd{padding:12px 16px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:11px}
+  .th-hd .win{margin-left:auto;font-size:11.5px;color:var(--green-d);background:var(--green-l);padding:3px 10px;border-radius:20px}
+  .th-body{flex:1;overflow:auto;padding:18px 16px;background:#F5F6F8;display:flex;flex-direction:column;gap:10px}
+  .bub{max-width:66%;padding:8px 12px;border-radius:12px;font-size:13px;position:relative}
+  .bub.in{background:#fff;border:1px solid var(--border2);align-self:flex-start;border-bottom-left-radius:3px}
+  .bub.out{background:#DCF8C6;align-self:flex-end;border-bottom-right-radius:3px}
+  .bub .t{font-size:10px;color:var(--faint);margin-top:3px;text-align:right}
+  .tick{color:var(--blue)}
+  .composer{border-top:1px solid var(--border2);padding:11px 14px;display:flex;gap:9px;align-items:center}
+  .composer input{flex:1;border:1px solid var(--border);border-radius:20px;padding:9px 14px;font-size:13px}
+  .ibx-contact{border-left:1px solid var(--border);padding:16px;overflow:auto}
+  .ibx-contact .av{width:54px;height:54px;font-size:18px;margin-bottom:10px}
+  .field{margin:12px 0}
+  .field .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+  .note{background:#FFFBEB;border:1px solid #FDE8A8;border-radius:8px;padding:8px 10px;font-size:12.5px;color:#7a5d12}
+
+  /* wizard */
+  .steps{display:flex;gap:0;margin-bottom:20px}
+  .stp{flex:1;text-align:center;padding:10px;border-bottom:3px solid var(--border);color:var(--muted);font-weight:600;font-size:13px}
+  .stp.on{border-color:var(--green);color:var(--green-d)}
+  .stp .n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--border);color:#fff;font-size:12px;margin-right:6px}
+  .stp.on .n{background:var(--green)}
+  .formrow{display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+  .inp{flex:1;min-width:200px}
+  .inp label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px}
+  .inp input,.inp select,.inp textarea{width:100%;border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:13px;font-family:inherit}
+  .summary{background:var(--green-l);border:1px solid #BCE6CC;border-radius:10px;padding:14px 16px}
+  .summary .row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+  .summary .row.tot{border-top:1px solid #BCE6CC;margin-top:6px;padding-top:8px;font-weight:700}
+
+  /* preview msg */
+  .tpl-prev{background:#F5F6F8;border:1px solid var(--border2);border-radius:10px;padding:12px;max-width:300px}
+  .tpl-bub{background:#fff;border-radius:10px;padding:10px 12px;font-size:13px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .tpl-btn{border-top:1px solid var(--border2);margin-top:8px;padding-top:7px;text-align:center;color:var(--blue);font-size:12.5px;font-weight:600}
+
+  /* chart */
+  .bars{display:flex;align-items:flex-end;gap:10px;height:150px;padding:10px 4px}
+  .bars .bar{flex:1;background:var(--green);border-radius:5px 5px 0 0;opacity:.85}
+  .split{display:flex;height:14px;border-radius:7px;overflow:hidden;margin-top:6px}
+
+  /* login / onboarding */
+  .auth{min-height:100vh;display:grid;place-items:center;background:linear-gradient(160deg,#E7F6EE,#F4F6F8)}
+  .auth .box{background:#fff;border:1px solid var(--border);border-radius:16px;padding:32px;width:380px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
+  .auth .logo{width:46px;height:46px;border-radius:12px;background:var(--green);display:grid;place-items:center;color:#fff;font-weight:700;font-size:22px;margin:0 auto 14px}
+  .auth h2{text-align:center;font-size:20px}
+  .auth .sub{text-align:center;color:var(--muted);margin:4px 0 22px;font-size:13px}
+  .auth .inp{margin-bottom:14px;min-width:0}
+  .auth .btn{width:100%;justify-content:center;text-align:center}
+  .onb{width:560px}
+  .onb-steps{display:flex;gap:8px;margin-bottom:22px}
+  .onb-steps .s{flex:1;height:5px;border-radius:3px;background:var(--border)}
+  .onb-steps .s.on{background:var(--green)}
+  .check-list{list-style:none;padding:0;margin:18px 0 0}
+  .check-list li{padding:8px 0;border-bottom:1px solid var(--border2);font-size:13px;display:flex;align-items:center;gap:9px}
+  .ci{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;color:#fff;flex:0 0 18px}
+  .ci.ok{background:var(--green)}.ci.no{background:var(--border)}
+
+  @media(max-width:860px){
+    .side{display:none}.inbox{grid-template-columns:1fr}
+    .ibx-contact,.ibx-list{display:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- prototype switcher -->
+<div class="proto">
+  <b>PROTOTYPE</b> <span style="color:#8a93a6">basic screens — click to navigate</span>
+  <div class="jump">
+    <button onclick="view('login',this)">Login</button>
+    <button onclick="view('onboarding',this)">Onboarding</button>
+    <button class="on" onclick="view('app',this)">The app</button>
+  </div>
+</div>
+
+<!-- ===================== LOGIN ===================== -->
+<div class="view" id="login">
+  <div class="auth">
+    <div class="box">
+      <div class="logo">W</div>
+      <h2>Sign in</h2>
+      <div class="sub">WhatsApp Tool · staff access</div>
+      <div class="inp"><label>Email</label><input value="priya@company.in"></div>
+      <div class="inp"><label>Password</label><input type="password" value="••••••••"></div>
+      <button class="btn pri" onclick="view('app')">Sign in</button>
+      <div style="text-align:center;margin-top:14px"><a href="#" style="color:var(--muted);font-size:12.5px">Forgot password?</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== ONBOARDING ===================== -->
+<div class="view" id="onboarding">
+  <div class="auth">
+    <div class="box onb">
+      <div class="logo">W</div>
+      <h2 style="text-align:center">Connect WhatsApp</h2>
+      <div class="sub">One-time setup · step 1 of 4</div>
+      <div class="onb-steps"><div class="s on"></div><div class="s"></div><div class="s"></div><div class="s"></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px">
+        <div>
+          <div class="inp" style="margin-bottom:13px"><label>Phone number ID</label><input placeholder="106540352242922"></div>
+          <div class="inp" style="margin-bottom:13px"><label>WhatsApp Business Account ID</label><input placeholder="WABA id"></div>
+          <div class="inp" style="margin-bottom:13px"><label>Permanent access token</label><input type="password" placeholder="••••••••••••"></div>
+          <button class="btn pri" style="width:100%;justify-content:center" onclick="view('app')">Connect &amp; continue</button>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Setup checklist</div>
+          <ul class="check-list">
+            <li><span class="ci ok">✓</span> Connect number &amp; token</li>
+            <li><span class="ci no"></span> Set 6-digit PIN</li>
+            <li><span class="ci no"></span> Display-name approval</li>
+            <li><span class="ci no"></span> Business profile</li>
+            <li><span class="ci no"></span> Business verification</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div class="view show" id="app">
+<div class="shell">
+  <!-- sidebar -->
+  <aside class="side">
+    <div class="brand"><div class="logo">W</div> WhatsApp Tool</div>
+    <nav class="nav" id="nav">
+      <a class="on" data-s="dashboard" onclick="nav('dashboard',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Dashboard</a>
+      <a data-s="inbox" onclick="nav('inbox',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v12H7l-3 3z"/></svg> Inbox</a>
+      <a data-s="contacts" onclick="nav('contacts',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 6a3 3 0 0 1 0 6"/></svg> Contacts</a>
+      <a data-s="campaigns" onclick="nav('campaigns',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l16-6v14L3 13z"/><path d="M7 12v5"/></svg> Campaigns</a>
+      <a data-s="templates" onclick="nav('templates',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg> Templates</a>
+      <a data-s="automation" onclick="nav('automation',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 3L4 14h6l-1 7 9-11h-6z"/></svg> Automation</a>
+      <a data-s="analytics" onclick="nav('analytics',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
+      <div class="sep"></div>
+      <a data-s="team" onclick="nav('team',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="9" r="2.5"/><circle cx="16" cy="9" r="2.5"/><path d="M3 19a5 5 0 0 1 10 0M13 19a5 5 0 0 1 8-3.5"/></svg> Team</a>
+      <a data-s="settings" onclick="nav('settings',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg> Settings</a>
+    </nav>
+    <div class="ver">v1 · single company</div>
+  </aside>
+
+  <!-- main -->
+  <div class="main">
+    <div class="top">
+      <div class="search">Search contacts, chats, campaigns…</div>
+      <div class="right">
+        <div class="qstat"><span class="dot"></span> Quality: Green · Tier 10k</div>
+        <svg class="bell" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 21h4"/></svg>
+        <div class="av">PR</div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- DASHBOARD -->
+      <section class="screen on" id="s-dashboard">
+        <div class="ph"><div><h1>Dashboard</h1><div class="sub">Tuesday, 9 June · everything at a glance</div></div>
+          <div class="act"><button class="btn">Import contacts</button><button class="btn pri">New campaign</button></div></div>
+        <div class="cards">
+          <div class="card"><div class="lab">Sent today</div><div class="big">2,418</div></div>
+          <div class="card"><div class="lab">Delivered</div><div class="big g">94%</div></div>
+          <div class="card"><div class="lab">Chats waiting</div><div class="big">12</div></div>
+          <div class="card"><div class="lab">Cost this month</div><div class="big">₹3,560</div></div>
+          <div class="card"><div class="lab">Quality rating</div><div class="big g" style="font-size:20px;margin-top:10px"><span class="dot" style="display:inline-block;margin-right:6px"></span>Green</div></div>
+        </div>
+        <div class="panel">
+          <div class="hd">Recent campaigns <div class="act"><button class="btn sm">View all</button></div></div>
+          <table>
+            <tr><th>Name</th><th>Template</th><th>Sent</th><th>Read</th><th>Cost</th><th>Status</th></tr>
+            <tr><td>June Service Reminder</td><td>service_due_v2</td><td>1,204</td><td>71%</td><td>₹139</td><td><span class="badge b-green">Completed</span></td></tr>
+            <tr><td>Monsoon Offer</td><td>monsoon_promo</td><td>980</td><td>64%</td><td>₹846</td><td><span class="badge b-green">Completed</span></td></tr>
+            <tr><td>Feedback Follow-up</td><td>feedback_req</td><td>—</td><td>—</td><td>—</td><td><span class="badge b-amber">Scheduled</span></td></tr>
+            <tr><td>Renewal Notice</td><td>renewal_v1</td><td>234</td><td>—</td><td>₹27</td><td><span class="badge b-blue">Sending</span></td></tr>
+          </table>
+        </div>
+        <div class="panel"><div class="hd">Quick actions</div>
+          <div style="padding:16px"><div class="qa"><button class="btn pri" onclick="nav('campaigns')">New campaign</button><button class="btn" onclick="nav('inbox')">Open inbox</button><button class="btn" onclick="nav('contacts')">Import contacts</button><button class="btn" onclick="nav('templates')">New template</button></div></div>
+        </div>
+      </section>
+
+      <!-- INBOX -->
+      <section class="screen" id="s-inbox" style="margin:-22px -24px">
+        <div class="inbox">
+          <div class="ibx-list">
+            <div class="ibx-search"><input placeholder="Search conversations…"></div>
+            <div class="ibx-filters"><span class="fchip on">All</span><span class="fchip">Unread</span><span class="fchip">Mine</span><span class="fchip">Unassigned</span></div>
+            <div class="convs">
+              <div class="conv sel"><div class="av">RS</div><div class="cmid"><div class="nm">Rahul Sharma</div><div class="pv">Thanks, what time will the…</div></div><div class="cr">2m<div class="unread">2</div></div></div>
+              <div class="conv"><div class="av">AK</div><div class="cmid"><div class="nm">Anita Kumar</div><div class="pv">Is the service covered under…</div></div><div class="cr">14m</div></div>
+              <div class="conv"><div class="av">MV</div><div class="cmid"><div class="nm">Manish Verma</div><div class="pv">👍</div></div><div class="cr">1h</div></div>
+              <div class="conv"><div class="av">SP</div><div class="cmid"><div class="nm">Sneha Patel</div><div class="pv">Can you reschedule to Friday?</div></div><div class="cr">3h</div></div>
+              <div class="conv"><div class="av">+9</div><div class="cmid"><div class="nm">Unknown · 98xxxx</div><div class="pv">Hi, I saw your ad…</div></div><div class="cr">5h</div></div>
+            </div>
+          </div>
+          <div class="ibx-thread">
+            <div class="th-hd"><div class="av">RS</div><div><div style="font-weight:600">Rahul Sharma</div><div class="faint" style="font-size:12px">+91 98765 43210</div></div><div class="win">⏱ replies free for 21h 40m</div></div>
+            <div class="th-body">
+              <div class="bub in">Hi, I booked a service for tomorrow. What time will the technician come?<div class="t">10:02</div></div>
+              <div class="bub out">Hi Rahul! Your slot is 11 AM–1 PM. Our technician will call 30 mins before arriving. <span class="tick">✓✓</span><div class="t">10:05</div></div>
+              <div class="bub in">Thanks, what time will the call come?<div class="t">10:06</div></div>
+            </div>
+            <div class="composer"><span class="faint">😊</span><input placeholder="Type a message…"><button class="btn sm">Template</button><button class="btn pri sm">Send</button></div>
+          </div>
+          <div class="ibx-contact">
+            <div class="av">RS</div>
+            <div style="font-weight:600;font-size:15px">Rahul Sharma</div>
+            <div class="faint" style="font-size:12.5px">+91 98765 43210</div>
+            <div class="field"><div class="l">Tags</div><span class="chip g">vip</span><span class="chip b">service-booked</span><span class="chip">+ add</span></div>
+            <div class="field"><div class="l">Custom fields</div><div style="font-size:13px">City: Pune · Plan: Annual</div></div>
+            <div class="field"><div class="l">Private note</div><div class="note">Prefers calls over texts. Renewal due in Aug.</div></div>
+            <div style="display:flex;gap:8px;margin-top:14px"><button class="btn sm">Reassign</button><button class="btn pri sm">Resolve</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CONTACTS -->
+      <section class="screen" id="s-contacts">
+        <div class="ph"><div><h1>Contacts</h1><div class="sub">4,812 contacts · 4,390 opted in</div></div>
+          <div class="act"><button class="btn">Import CSV</button><button class="btn pri">Add contact</button></div></div>
+        <div class="panel">
+          <div class="hd"><span class="fchip on" style="margin-right:6px">All</span><span class="fchip">vip</span><span class="fchip">new-lead</span><span class="fchip">clicked: Monsoon Offer</span><div class="act"><button class="btn sm">Bulk tag</button><button class="btn sm">Export</button></div></div>
+          <table>
+            <tr><th><input type="checkbox"></th><th>Name</th><th>Phone</th><th>Tags</th><th>Opt-in</th><th>Last contacted</th></tr>
+            <tr><td><input type="checkbox"></td><td>Rahul Sharma</td><td>+91 98765 43210</td><td><span class="chip g">vip</span></td><td><span class="badge b-green">Yes</span></td><td>2m ago</td></tr>
+            <tr><td><input type="checkbox"></td><td>Anita Kumar</td><td>+91 99887 65432</td><td><span class="chip b">new-lead</span></td><td><span class="badge b-green">Yes</span></td><td>14m ago</td></tr>
+            <tr><td><input type="checkbox"></td><td>Manish Verma</td><td>+91 90123 45678</td><td><span class="chip">pune</span></td><td><span class="badge b-green">Yes</span></td><td>1h ago</td></tr>
+            <tr><td><input type="checkbox"></td><td>Sneha Patel</td><td>+91 97654 32109</td><td><span class="chip g">vip</span><span class="chip">renewal</span></td><td><span class="badge b-red">Opted out</span></td><td>3h ago</td></tr>
+            <tr><td><input type="checkbox"></td><td>Vikram Joshi</td><td>+91 96543 21098</td><td><span class="chip b">new-lead</span></td><td><span class="badge b-green">Yes</span></td><td>Yesterday</td></tr>
+          </table>
+        </div>
+        <div class="faint" style="font-size:12.5px;text-align:right">Showing 1–5 of 4,812 · ‹ 1 2 3 … ›</div>
+      </section>
+
+      <!-- CAMPAIGNS -->
+      <section class="screen" id="s-campaigns">
+        <div class="ph"><div><h1>Campaigns</h1><div class="sub">Broadcasts to your opted-in segments</div></div>
+          <div class="act"><button class="btn pri" onclick="document.getElementById('builder').scrollIntoView()">New campaign</button></div></div>
+        <div class="panel">
+          <div class="hd">All campaigns</div>
+          <table>
+            <tr><th>Name</th><th>Template</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Cost</th><th>Status</th></tr>
+            <tr><td>June Service Reminder</td><td>service_due_v2 <span class="badge b-blue">Utility</span></td><td>1,204</td><td>96%</td><td>71%</td><td>₹139</td><td><span class="badge b-green">Completed</span></td></tr>
+            <tr><td>Monsoon Offer</td><td>monsoon_promo <span class="badge b-amber">Marketing</span></td><td>980</td><td>93%</td><td>64%</td><td>₹846</td><td><span class="badge b-green">Completed</span></td></tr>
+            <tr><td>Feedback Follow-up</td><td>feedback_req <span class="badge b-blue">Utility</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="badge b-amber">Scheduled · Fri 10:00</span></td></tr>
+          </table>
+        </div>
+
+        <div class="panel" id="builder">
+          <div class="hd">New campaign — builder</div>
+          <div style="padding:18px">
+            <div class="steps"><div class="stp on"><span class="n">1</span>Audience</div><div class="stp"><span class="n">2</span>Message</div><div class="stp"><span class="n">3</span>Schedule</div><div class="stp"><span class="n">4</span>Review</div></div>
+            <div style="display:grid;grid-template-columns:1fr 300px;gap:22px">
+              <div>
+                <div class="formrow"><div class="inp"><label>Choose segment</label><select><option>Tag: vip (412)</option><option>Tag: new-lead (1,260)</option><option>All opted-in (4,390)</option></select></div></div>
+                <div class="formrow"><div class="inp"><label>Exclude tags</label><input placeholder="e.g. opted-out (auto), recently-messaged"></div></div>
+                <div style="font-size:13px;color:var(--muted);background:#FFFBEB;border:1px solid #FDE8A8;border-radius:8px;padding:10px 12px">
+                  ⚠ 18 US (+1) numbers will be skipped for marketing · 23 already messaged in last 24h skipped (frequency cap)
+                </div>
+              </div>
+              <div class="summary">
+                <div style="font-weight:600;margin-bottom:8px">Estimate</div>
+                <div class="row"><span>Eligible recipients</span><span>412</span></div>
+                <div class="row"><span>Category</span><span>Marketing</span></div>
+                <div class="row"><span>Rate / msg</span><span>₹0.8631</span></div>
+                <div class="row"><span>+ 18% GST</span><span>₹64</span></div>
+                <div class="row tot"><span>Est. cost</span><span>₹420</span></div>
+                <button class="btn pri" style="width:100%;justify-content:center;margin-top:12px">Next: Message →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TEMPLATES -->
+      <section class="screen" id="s-templates">
+        <div class="ph"><div><h1>Templates</h1><div class="sub">Pre-approved by Meta before use</div></div>
+          <div class="act"><button class="btn pri" onclick="document.getElementById('tpl-builder').scrollIntoView({behavior:'smooth'})">New template</button></div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="panel" style="margin:0">
+            <div class="hd">monsoon_promo <span style="margin-left:auto"><span class="badge b-amber">Marketing</span> <span class="badge b-green">Approved</span></span></div>
+            <div style="padding:14px"><div class="tpl-prev"><div class="tpl-bub">Monsoon's here! 🌧 Get 20% off your annual service plan this week. Reply or tap below.<div class="tpl-btn">View offer</div></div></div></div>
+          </div>
+          <div class="panel" style="margin:0">
+            <div class="hd">service_due_v2 <span style="margin-left:auto"><span class="badge b-blue">Utility</span> <span class="badge b-green">Approved</span></span></div>
+            <div style="padding:14px"><div class="tpl-prev"><div class="tpl-bub">Hi {{1}}, your service is due on {{2}}. Tap to confirm your slot.<div class="tpl-btn">Confirm slot</div></div></div></div>
+          </div>
+          <div class="panel" style="margin:0">
+            <div class="hd">renewal_v1 <span style="margin-left:auto"><span class="badge b-blue">Utility</span> <span class="badge b-amber">Pending</span></span></div>
+            <div style="padding:14px"><div class="tpl-prev"><div class="tpl-bub">Hi {{1}}, your plan renews on {{2}}. Reply RENEW to continue.</div></div></div>
+          </div>
+          <div class="panel" style="margin:0">
+            <div class="hd">flash_sale <span style="margin-left:auto"><span class="badge b-amber">Marketing</span> <span class="badge b-red">Rejected</span></span></div>
+            <div style="padding:14px"><div style="font-size:12.5px;color:var(--red);background:#FBEAE7;border:1px solid #f3c7bf;border-radius:8px;padding:9px 11px">Rejected: promotional content in a utility category. Resubmit as Marketing.</div></div>
+          </div>
+        </div>
+
+        <div class="panel" id="tpl-builder">
+          <div class="hd">New template — editor</div>
+          <div style="padding:18px;display:grid;grid-template-columns:1fr 320px;gap:22px">
+            <div>
+              <div class="formrow"><div class="inp"><label>Template name</label><input placeholder="e.g. service_due_v3"></div></div>
+              <div class="formrow">
+                <div class="inp"><label>Category</label><select><option>Utility</option><option>Marketing</option><option>Authentication</option></select></div>
+                <div class="inp"><label>Language</label><select><option>English</option><option>Hindi</option><option>Marathi</option></select></div>
+              </div>
+              <div class="formrow"><div class="inp"><label>Body</label><textarea rows="4">Hi {{1}}, your service is due on {{2}}. Tap to confirm your slot.</textarea></div></div>
+              <div class="formrow">
+                <div class="inp"><label>{{1}} sample</label><input value="Rahul"></div>
+                <div class="inp"><label>{{2}} sample</label><input value="10 June"></div>
+              </div>
+              <div class="formrow"><div class="inp"><label>Buttons</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px;align-items:center">
+                  <span class="chip b">Quick reply: "Confirm slot" ✕</span>
+                  <span class="chip p">CTA link: "View details" ✕</span>
+                  <button class="btn sm">+ Add button</button>
+                </div></div></div>
+              <div style="display:flex;gap:9px;margin-top:6px"><button class="btn pri">Submit to Meta</button><button class="btn">Save draft</button></div>
+              <div class="faint" style="font-size:12px;margin-top:8px">Meta reviews wording in minutes–hours. Variables without a fallback get rejected. Category mismatch (promo in "utility") gets rejected too.</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Live preview</div>
+              <div class="tpl-prev"><div class="tpl-bub">Hi Rahul, your service is due on 10 June. Tap to confirm your slot.<div class="tpl-btn">Confirm slot</div></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- AUTOMATION -->
+      <section class="screen" id="s-automation">
+        <div class="ph"><div><h1>Automation</h1><div class="sub">Keyword replies &amp; auto-rules (single-step in v1)</div></div>
+          <div class="act"><button class="btn pri" onclick="document.getElementById('rule-builder').scrollIntoView({behavior:'smooth'})">New rule</button></div></div>
+        <div class="panel">
+          <table>
+            <tr><th>Trigger</th><th>Action</th><th>Active</th></tr>
+            <tr><td>Keyword: <b>"hi", "hello"</b></td><td>Send welcome reply + menu</td><td><span class="badge b-green">On</span></td></tr>
+            <tr><td>New contact messages first</td><td>Auto-reply: "Thanks for reaching out…"</td><td><span class="badge b-green">On</span></td></tr>
+            <tr><td>Outside business hours</td><td>Away message: "We're closed, back at 9 AM"</td><td><span class="badge b-green">On</span></td></tr>
+            <tr><td>Keyword: <b>"STOP"</b></td><td>Opt out + confirm (system)</td><td><span class="badge b-gray">Locked</span></td></tr>
+          </table>
+        </div>
+
+        <div class="panel" id="rule-builder">
+          <div class="hd">New rule</div>
+          <div style="padding:18px;max-width:580px">
+            <div class="formrow"><div class="inp"><label>Rule name</label><input placeholder="e.g. Welcome reply"></div></div>
+            <div class="formrow">
+              <div class="inp"><label>Trigger</label><select><option>Keyword match</option><option>New contact messages first</option><option>Outside business hours</option></select></div>
+              <div class="inp"><label>Keyword(s)</label><input value="hi, hello"></div>
+            </div>
+            <div class="formrow">
+              <div class="inp"><label>Action</label><select><option>Auto-reply (text)</option><option>Send template</option><option>Route to agent group</option></select></div>
+              <div class="inp"><label>Reply / template</label><input value="Hi! Type 1 for service, 2 for billing."></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin:12px 0">
+              <span style="font-size:13px;font-weight:600">Active</span>
+              <span style="width:38px;height:22px;background:var(--green);border-radius:20px;position:relative;display:inline-block"><span style="position:absolute;right:3px;top:3px;width:16px;height:16px;background:#fff;border-radius:50%"></span></span>
+            </div>
+            <div style="font-size:12.5px;color:var(--muted);background:#FFFBEB;border:1px solid #FDE8A8;border-radius:8px;padding:9px 11px">v1 = single-step rules only. Multi-step branching flows are a later phase. STOP/opt-out is built-in and can't be edited.</div>
+            <div style="display:flex;gap:9px;margin-top:12px"><button class="btn pri">Save rule</button><button class="btn">Cancel</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ANALYTICS -->
+      <section class="screen" id="s-analytics">
+        <div class="ph"><div><h1>Analytics</h1><div class="sub">Last 30 days</div></div><div class="act"><button class="btn sm">Last 30 days ▾</button><button class="btn sm">Export</button></div></div>
+        <div class="cards">
+          <div class="card"><div class="lab">Messages sent</div><div class="big">28,940</div></div>
+          <div class="card"><div class="lab">Delivered</div><div class="big g">95%</div></div>
+          <div class="card"><div class="lab">Read</div><div class="big">68%</div></div>
+          <div class="card"><div class="lab">Failed</div><div class="big" style="color:var(--red)">1.2%</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px">
+          <div class="panel" style="margin:0"><div class="hd">Messages per day</div>
+            <div style="padding:12px"><div class="bars"><div class="bar" style="height:55%"></div><div class="bar" style="height:72%"></div><div class="bar" style="height:48%"></div><div class="bar" style="height:88%"></div><div class="bar" style="height:65%"></div><div class="bar" style="height:95%"></div><div class="bar" style="height:60%"></div></div></div>
+          </div>
+          <div class="panel" style="margin:0"><div class="hd">Cost split</div>
+            <div style="padding:16px">
+              <div style="font-size:24px;font-weight:700">₹3,560<span class="faint" style="font-size:13px;font-weight:400"> this month</span></div>
+              <div class="split"><div style="background:var(--green);flex:0;width:0"></div><div style="background:var(--blue);flex:4"></div><div style="background:var(--amber);flex:6"></div></div>
+              <div style="font-size:12.5px;color:var(--muted);margin-top:8px">🟦 Utility ₹460 · 🟧 Marketing ₹863 · service free</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:16px"><div class="hd">Agent performance</div>
+          <table>
+            <tr><th>Agent</th><th>Handled</th><th>Resolved</th><th>Avg first response</th></tr>
+            <tr><td>Priya R.</td><td>412</td><td>388</td><td>2m 10s</td></tr>
+            <tr><td>Amit S.</td><td>356</td><td>340</td><td>3m 02s</td></tr>
+            <tr><td>Neha G.</td><td>298</td><td>281</td><td>1m 48s</td></tr>
+          </table>
+        </div>
+      </section>
+
+      <!-- TEAM -->
+      <section class="screen" id="s-team">
+        <div class="ph"><div><h1>Team</h1><div class="sub">Unlimited agents — no per-seat cost</div></div><div class="act"><button class="btn pri">Invite agent</button></div></div>
+        <div class="panel">
+          <table>
+            <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr>
+            <tr><td>Priya Rao</td><td>priya@company.in</td><td><span class="badge b-purple" style="background:#EFECFB;color:#5448a8">Admin</span></td><td><span class="badge b-green">Active</span></td><td><button class="btn sm">Edit</button></td></tr>
+            <tr><td>Amit Singh</td><td>amit@company.in</td><td><span class="badge b-blue">Manager</span></td><td><span class="badge b-green">Active</span></td><td><button class="btn sm">Edit</button></td></tr>
+            <tr><td>Neha Gupta</td><td>neha@company.in</td><td><span class="badge b-gray">Agent</span></td><td><span class="badge b-green">Active</span></td><td><button class="btn sm">Edit</button></td></tr>
+            <tr><td>Karan Mehta</td><td>karan@company.in</td><td><span class="badge b-gray">Agent</span></td><td><span class="badge b-amber">Invited</span></td><td><button class="btn sm">Resend</button></td></tr>
+          </table>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="screen" id="s-settings">
+        <div class="ph"><div><h1>Settings</h1><div class="sub">Admin only</div></div></div>
+        <div class="panel"><div class="hd">WhatsApp connection</div><div style="padding:16px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span class="dot"></span> <b>Connected</b> · +91 98765 00000 · "Company Support"</div>
+          <div class="faint" style="font-size:12.5px">Quality: Green · Tier: 10,000/day · Business: Verified</div>
+          <div style="margin-top:12px"><button class="btn sm">Re-register</button> <button class="btn sm">Update PIN</button></div>
+        </div></div>
+        <div class="panel"><div class="hd">Sending rules</div><div style="padding:16px">
+          <div class="formrow"><div class="inp"><label>Timezone</label><input value="Asia/Kolkata (IST)"></div><div class="inp"><label>Quiet hours</label><input value="9:00 PM – 9:00 AM"></div></div>
+          <div class="formrow"><div class="inp"><label>Marketing freq cap</label><input value="1 per contact / 24h"></div><div class="inp"><label>Opt-out keyword</label><input value="STOP, UNSUBSCRIBE"></div></div>
+        </div></div>
+        <div class="panel"><div class="hd">Cost rates (config — rates drift)</div><div style="padding:16px">
+          <div class="formrow"><div class="inp"><label>Marketing ₹/msg</label><input value="0.8631"></div><div class="inp"><label>Utility / Auth ₹/msg</label><input value="0.115"></div><div class="inp"><label>Data retention</label><input value="24 months"></div></div>
+        </div></div>
+      </section>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+  function view(id, btn){
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('show'));
+    document.getElementById(id).classList.add('show');
+    document.querySelectorAll('.proto .jump button').forEach(b=>b.classList.remove('on'));
+    if(btn) btn.classList.add('on');
+    else { // map id back to its proto button
+      const m={login:0,onboarding:1,app:2};
+      document.querySelectorAll('.proto .jump button')[m[id]].classList.add('on');
+    }
+    window.scrollTo(0,0);
+  }
+  function nav(s, el){
+    document.querySelectorAll('.screen').forEach(x=>x.classList.remove('on'));
+    document.getElementById('s-'+s).classList.add('on');
+    document.querySelectorAll('#nav a').forEach(a=>a.classList.remove('on'));
+    if(el) el.classList.add('on');
+    else document.querySelector('#nav a[data-s="'+s+'"]').classList.add('on');
+    document.querySelector('.content').scrollTo(0,0);
+  }
+</script>
+</body>
+</html>

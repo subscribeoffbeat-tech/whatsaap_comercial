@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Our WhatsApp Tool — the bits we almost forgot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Patrick+Hand&family=Gloria+Hallelujah&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF8F0;--grid:rgba(120,120,140,0.07);--ink:#2A2A38;--ink-soft:#52525f;
+    --admin:#6B5BD2;--agent:#2F7FD1;--cust:#1F9D55;--sys:#E0852F;--warn:#E0533D;
+    --hi-yellow:#FFE680;--hi-green:#C9F2D6;--hi-pink:#FAD1DE;
+    --note:#FFF3B0;--note-pink:#FBD3DE;--note-blue:#CFE6FB;
+  }
+  *{box-sizing:border-box}html{scroll-behavior:smooth}
+  body{margin:0;font-family:'Patrick Hand','Comic Sans MS',cursive;color:var(--ink);
+    background-color:var(--paper);
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:28px 28px;font-size:19px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:940px;margin:0 auto;padding:32px 22px 80px}
+  h1,h2,h3{font-family:'Caveat',cursive;font-weight:700;line-height:1.05;margin:0}
+  p{margin:.5em 0}.mono{font-family:'Space Mono',monospace;font-size:.72em;letter-spacing:-.5px}
+  .rough{filter:url(#rough)}
+  .hero{text-align:center;margin:18px 0 10px}
+  .hero .kicker{font-family:'Gloria Hallelujah',cursive;font-size:15px;color:var(--ink-soft);transform:rotate(-2deg);display:inline-block}
+  .hero h1{font-size:clamp(36px,8vw,64px);color:var(--ink);margin:.1em 0}
+  .hero h1 .v{color:var(--admin)}
+  .hero .sub{font-size:21px;color:var(--ink-soft);max-width:620px;margin:6px auto 0}
+  .underline-doodle{display:block;margin:2px auto 0;width:300px;height:18px}
+  .chapter{background:#fff;border:2.5px solid var(--ink);
+    border-radius:255px 14px 225px 16px/16px 225px 14px 255px;
+    padding:26px 26px 28px;margin:30px 0;box-shadow:6px 7px 0 rgba(42,42,56,.13);position:relative}
+  .chapter:nth-child(even){border-radius:18px 240px 16px 230px/230px 16px 240px 16px}
+  .tape{position:absolute;top:-13px;left:50%;transform:translateX(-50%) rotate(-3deg);
+    width:120px;height:26px;background:rgba(255,230,128,.7);border:1px dashed rgba(42,42,56,.25)}
+  .ch-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+  .ch-num{flex:0 0 auto;width:52px;height:52px;display:grid;place-items:center;
+    font-family:'Caveat';font-weight:700;font-size:30px;color:#fff;position:relative}
+  .ch-num svg{position:absolute}.ch-num span{position:relative;z-index:2}
+  .ch-head h2{font-size:clamp(26px,4.6vw,38px)}
+  .lead{font-size:20px;color:var(--ink-soft);margin-top:2px}
+  mark{padding:0 4px;border-radius:6px;background:var(--hi-yellow);color:var(--ink)}
+  mark.g{background:var(--hi-green)}mark.p{background:var(--hi-pink)}
+  .pen-admin{color:var(--admin);font-weight:700}.pen-agent{color:var(--agent);font-weight:700}
+  .pen-cust{color:var(--cust);font-weight:700}.pen-sys{color:var(--sys);font-weight:700}.pen-warn{color:var(--warn);font-weight:700}
+  b{font-weight:700}
+
+  .callout{border:2.5px dashed var(--cust);background:#EFFBF3;border-radius:14px;padding:14px 18px;margin-top:12px}
+  .callout h3{font-size:26px;color:var(--cust)}
+
+  /* ERD tables */
+  .erd{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}
+  .tbl{border:2.5px solid var(--ink);border-radius:10px;background:#fff;overflow:hidden}
+  .tbl .h{font-family:'Caveat';font-weight:700;font-size:22px;color:#fff;padding:4px 12px}
+  .tbl ul{list-style:none;margin:0;padding:8px 12px;font-family:'Space Mono';font-size:12.5px;line-height:1.9}
+  .tbl li{display:flex;gap:6px;align-items:center}
+  .chip{font-size:10px;font-weight:700;color:#fff;padding:0 5px;border-radius:4px;border:1px solid var(--ink)}
+  .pk{background:#6B5BD2}.fk{background:#2F7FD1}
+  .g-core .h{background:#1F9D55}.g-msg .h{background:#2F7FD1}.g-camp .h{background:#E0852F}.g-sys .h{background:#52525f}
+  .rels{margin-top:12px;font-size:17px;line-height:1.9}
+  .rels code{font-family:'Space Mono';font-size:.78em;background:#f0eee4;padding:1px 6px;border-radius:5px}
+
+  .notes{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:14px}
+  .note{padding:15px 17px;border-radius:4px;box-shadow:3px 4px 0 rgba(42,42,56,.16);transform:rotate(-1.2deg)}
+  .note:nth-child(even){transform:rotate(1.4deg)}
+  .note h3{font-size:24px}.note p{font-size:17px;margin:.3em 0 0}
+  .n-yellow{background:var(--note)}.n-blue{background:var(--note-blue)}.n-pink{background:var(--note-pink)}.n-green{background:var(--hi-green)}
+
+  /* flow line */
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0;font-size:18px}
+  .pill{border:2px solid var(--ink);border-radius:20px;padding:4px 12px;background:#fff;font-family:'Caveat';font-weight:700;font-size:20px}
+  .flow .ar{font-size:22px;color:var(--ink-soft)}
+
+  /* matrix */
+  table.matrix{width:100%;border-collapse:collapse;margin-top:12px;font-size:17px}
+  table.matrix th,table.matrix td{border:2px solid var(--ink);padding:7px 10px;text-align:center}
+  table.matrix th{font-family:'Caveat';font-size:22px;background:#f0eee4}
+  table.matrix td:first-child,table.matrix th:first-child{text-align:left;font-size:17px}
+  .yes{color:var(--cust);font-weight:700}.no{color:var(--warn)}
+
+  /* cost */
+  .cost{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px}
+  .cc{border:2.5px solid var(--ink);border-radius:12px;padding:10px;text-align:center;background:#fff}
+  .cc b{font-family:'Caveat';font-size:26px;display:block}
+  .cc small{color:var(--ink-soft);font-size:14px}
+  .cc.free b{color:var(--cust)}.cc.util b{color:var(--agent)}.cc.auth b{color:var(--sys)}.cc.mkt b{color:var(--warn)}
+
+  .divider{display:block;margin:8px auto;width:60%;height:16px}
+  .closing{text-align:center;font-family:'Caveat';font-size:32px;color:var(--ink-soft);margin-top:34px;transform:rotate(-1deg)}
+  @media(max-width:680px){
+    body{font-size:18px}.notes{grid-template-columns:1fr}.erd{grid-template-columns:1fr}.cost{grid-template-columns:1fr 1fr}
+    .chapter{border-radius:14px!important}.note{transform:none}
+    table.matrix{font-size:14px}table.matrix th{font-size:18px}
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"/></filter>
+</svg>
+
+<div class="wrap">
+  <div class="hero">
+    <span class="kicker">part 4 — the stuff that bites if you forget it ↓</span>
+    <h1>The bits we <span class="v">almost forgot</span></h1>
+    <svg class="underline-doodle rough" viewBox="0 0 300 18"><path d="M4 11 C80 4,180 16,296 6" fill="none" stroke="#6B5BD2" stroke-width="4" stroke-linecap="round"/></svg>
+    <p class="sub">The plan was solid — these are the gaps that turn "works in a demo" into "works for real."</p>
+  </div>
+
+  <!-- CH1 single tenant -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#6B5BD2" stroke="#2A2A38" stroke-width="2.5"/></svg><span>1</span></div><h2>Settled: it's for ONE company</h2></div>
+    <p>This is the big decision that shapes everything, and it's made: the tool serves <mark>one business and that business's customers</mark> — not lots of separate companies. That's a gift. It makes the whole thing <b>simpler</b>:</p>
+    <div class="notes">
+      <div class="note n-green"><h3>�only one of everything</h3><p>One WhatsApp number/account, one contact database, one team. No "switch between company A and B."</p></div>
+      <div class="note n-blue"><h3>No data walls</h3><p>We skip all the tenant-isolation plumbing (the hardest part of SaaS). Every query is just "our data."</p></div>
+      <div class="note n-yellow"><h3>Simpler login</h3><p>Just our staff log in (admin / manager / agent). No sign-up flow for outside businesses.</p></div>
+      <div class="note n-pink"><h3>Single VPS is fine</h3><p>One company's volume fits comfortably on one server. Just add backups + monitoring (chapter 9).</p></div>
+    </div>
+    <p style="margin-top:10px">"Their clients" = the <span class="pen-cust">customers we message</span> (rows in the contacts table), <i>not</i> separate logins. Good — that's exactly the simple case.</p>
+  </div>
+
+  <!-- CH2 data model -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#1F9D55" stroke="#2A2A38" stroke-width="2.5"/></svg><span>2</span></div><h2>The data model (the filing cabinet's drawers)</h2></div>
+    <p class="lead">The tables we store. <span class="chip pk">PK</span> = the row's own id, <span class="chip fk">FK</span> = points at another table.</p>
+    <div class="erd">
+      <div class="tbl g-core"><div class="h">contacts</div><ul>
+        <li><span class="chip pk">PK</span> id</li><li>phone (E.164)</li><li>name</li><li>opted_in (bool)</li><li>opt_in_source</li><li>custom (JSONB)</li></ul></div>
+      <div class="tbl g-core"><div class="h">tags</div><ul><li><span class="chip pk">PK</span> id</li><li>name</li><li>color</li></ul></div>
+      <div class="tbl g-core"><div class="h">contact_tags</div><ul><li><span class="chip fk">FK</span> contact_id</li><li><span class="chip fk">FK</span> tag_id</li></ul></div>
+
+      <div class="tbl g-msg"><div class="h">conversations</div><ul>
+        <li><span class="chip pk">PK</span> id</li><li><span class="chip fk">FK</span> contact_id</li><li><span class="chip fk">FK</span> agent_id</li><li>status</li><li>window_expires_at</li></ul></div>
+      <div class="tbl g-msg"><div class="h">messages</div><ul>
+        <li><span class="chip pk">PK</span> id</li><li>wa_message_id (uniq)</li><li><span class="chip fk">FK</span> conversation_id</li><li>direction · type</li><li>body · media_path</li><li>status · error_code</li></ul></div>
+      <div class="tbl g-msg"><div class="h">agents</div><ul>
+        <li><span class="chip pk">PK</span> id</li><li>name · email</li><li>role</li><li>password_hash</li><li>active</li></ul></div>
+
+      <div class="tbl g-camp"><div class="h">templates</div><ul>
+        <li><span class="chip pk">PK</span> id</li><li>name · language</li><li>category</li><li>status (✅/❌)</li><li>body · buttons</li></ul></div>
+      <div class="tbl g-camp"><div class="h">campaigns</div><ul>
+        <li><span class="chip pk">PK</span> id</li><li><span class="chip fk">FK</span> template_id</li><li>segment (tags)</li><li>schedule_at</li><li>status · counts</li></ul></div>
+      <div class="tbl g-camp"><div class="h">campaign_recipients</div><ul>
+        <li><span class="chip pk">PK</span> id</li><li><span class="chip fk">FK</span> campaign_id</li><li><span class="chip fk">FK</span> contact_id</li><li><span class="chip fk">FK</span> message_id</li><li>status</li></ul></div>
+
+      <div class="tbl g-sys"><div class="h">automation_rules</div><ul>
+        <li><span class="chip pk">PK</span> id</li><li>trigger / keyword</li><li>action</li><li><span class="chip fk">FK</span> template_id</li><li>active</li></ul></div>
+      <div class="tbl g-sys"><div class="h">webhook_log</div><ul>
+        <li><span class="chip pk">PK</span> id</li><li>raw_payload</li><li>signature_ok</li><li>processed</li><li>received_at</li></ul></div>
+      <div class="tbl g-sys"><div class="h">config + river_jobs</div><ul>
+        <li>business profile</li><li>phone_number_id</li><li>token (encrypted)</li><li>cached quality/tier</li><li>(queue = River)</li></ul></div>
+    </div>
+    <div class="rels">
+      <b>How they connect:</b><br>
+      • one <code>contact</code> has many <code>messages</code> &amp; many <code>conversations</code><br>
+      • <code>contacts</code> ↔ <code>tags</code> is many-to-many (via <code>contact_tags</code>)<br>
+      • one <code>campaign</code> uses one <code>template</code> &amp; fans out to many <code>campaign_recipients</code><br>
+      • one <code>conversation</code> is assigned to one <code>agent</code> and holds many <code>messages</code>
+    </div>
+  </div>
+
+  <!-- CH3 webhook safety -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0852F" stroke="#2A2A38" stroke-width="2.5"/></svg><span>3</span></div><h2>The webhook safety net (3 silent killers)</h2></div>
+    <p class="lead">The webhook is where most home-built tools quietly break. Three things to get right:</p>
+    <div class="notes">
+      <div class="note n-blue"><h3>1 · Save the raw payload first</h3><p>Before doing anything, write Meta's raw message to <span class="mono">webhook_log</span>. If processing crashes, nothing is lost and you can replay it.</p></div>
+      <div class="note n-pink"><h3>2 · Dedupe (idempotency)</h3><p>Meta <b>re-sends</b> webhooks on its own retries. Same message can arrive twice. Key on <span class="mono">wa_message_id</span> so you never double-save or double-auto-reply.</p></div>
+      <div class="note n-yellow"><h3>3 · Media expires — grab it fast</h3><p>When a customer sends a photo/doc, Meta gives a <b>temporary</b> link. Download &amp; store it <i>immediately</i> (to <span class="mono">media_path</span>), or the chat history loses its attachments.</p></div>
+      <div class="note n-green"><h3>+ verify the signature</h3><p>Check <span class="mono">X-Hub-Signature-256</span> on every call so nobody can fake inbound messages to your endpoint.</p></div>
+    </div>
+  </div>
+
+  <!-- CH4 consent -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#1F9D55" stroke="#2A2A38" stroke-width="2.5"/></svg><span>4</span></div><h2>Consent — getting it IN and OUT</h2></div>
+    <p>Part 3 said "only message opt-ins." But we never said <i>how</i> people opt in, or how they leave. Both halves are needed:</p>
+    <div class="callout"><h3>Opt-IN (collect + record)</h3><p>Ways a contact becomes <span class="mono">opted_in = true</span>: a checkbox at checkout, a website form, replying to a "click-to-WhatsApp" link, or texting a keyword first. Whatever the source, we <b>stamp where &amp; when</b> (<span class="mono">opt_in_source</span>, <span class="mono">opt_in_at</span>) as proof.</p></div>
+    <div class="flow">
+      <span class="pill">customer texts "STOP"</span><span class="ar">→</span>
+      <span class="pill">we flip opted_in = false</span><span class="ar">→</span>
+      <span class="pill">auto-confirm "you're unsubscribed"</span><span class="ar">→</span>
+      <span class="pill">excluded from all future campaigns</span>
+    </div>
+    <p style="margin-top:6px"><span class="pen-warn">Opt-OUT must be automatic.</span> A keyword like STOP / UNSUBSCRIBE instantly removes them — honoring it by hand is how you collect blocks and reports, which wrecks your quality rating.</p>
+  </div>
+
+  <!-- CH5 number onboarding -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#2F7FD1" stroke="#2A2A38" stroke-width="2.5"/></svg><span>5</span></div><h2>Connecting the number — the fiddly bits</h2></div>
+    <p class="lead">"Connect WhatsApp" hides a few one-time steps the onboarding screen must handle:</p>
+    <div class="notes">
+      <div class="note n-blue"><h3>Display name approval</h3><p>The name customers see (e.g. "Acme Support") has to be <b>approved by Meta</b> and follow naming rules. Can take a little while.</p></div>
+      <div class="note n-yellow"><h3>2-step PIN</h3><p>Registering the number on the Cloud API needs a <b>6-digit PIN</b> set. Store it safely — you need it to re-register.</p></div>
+      <div class="note n-pink"><h3>Business profile</h3><p>About text, address, logo, category — fill these so the chat looks legit to customers.</p></div>
+      <div class="note n-green"><h3>Verify the business</h3><p>From part 3: do this on day one. Without it you're stuck at 250/day forever.</p></div>
+    </div>
+  </div>
+
+  <!-- CH6 interactive -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0533D" stroke="#2A2A38" stroke-width="2.5"/></svg><span>6</span></div><h2>Messages with buttons</h2></div>
+    <p>Plain text is fine, but the messages that actually convert have <mark>buttons</mark>. WhatsApp supports a few and our templates &amp; composer should handle them:</p>
+    <div class="notes">
+      <div class="note n-green"><h3>Quick-reply buttons</h3><p>"Yes / No", "Track order / Talk to agent". Customer taps → comes back as a normal inbound message our automation can route on.</p></div>
+      <div class="note n-blue"><h3>Call-to-action buttons</h3><p>"Visit website" (a link) or "Call us" (a number). These drive the click rates AiSensy brags about.</p></div>
+    </div>
+    <p style="margin-top:10px"><span class="pen-sys">Why it matters for us:</span> these are stored in the template's <span class="mono">buttons</span> field and tracked — a tap is a click we can count and (later) retarget on.</p>
+  </div>
+
+  <!-- CH7 cost -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0852F" stroke="#2A2A38" stroke-width="2.5"/></svg><span>7</span></div><h2>Watching the money</h2></div>
+    <p class="lead">Meta bills <b>per message</b> now. The whole point of building our own is cost — so the tool must <i>show</i> the cost. Current India rates, roughly:</p>
+    <div class="cost">
+      <div class="cc free"><b>₹0</b><small>Service<br>(reply in 24h)</small></div>
+      <div class="cc util"><b>₹0.145</b><small>Utility<br>per msg</small></div>
+      <div class="cc auth"><b>₹0.145</b><small>Authentication<br>per msg</small></div>
+      <div class="cc mkt"><b>₹1.09</b><small>Marketing<br>per msg</small></div>
+    </div>
+    <p style="margin-top:10px">So we stamp each outbound message with its <b>category + cost</b>, then roll it up: <mark>cost per campaign</mark>, cost this month, marketing vs utility split. That's the dashboard number we care about most — and rates drift, so keep them in a config, not hard-coded.</p>
+  </div>
+
+  <!-- CH8 security + roles -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#6B5BD2" stroke="#2A2A38" stroke-width="2.5"/></svg><span>8</span></div><h2>Locks &amp; keys (who can do what)</h2></div>
+    <p class="lead">Three roles, and not everyone should touch everything:</p>
+    <table class="matrix">
+      <tr><th>Can they…</th><th>Admin</th><th>Manager</th><th>Agent</th></tr>
+      <tr><td>Chat in the inbox</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td></tr>
+      <tr><td>Build &amp; send campaigns</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">�’✗</td></tr>
+      <tr><td>Import / edit contacts</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">✗</td></tr>
+      <tr><td>Manage templates</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">✗</td></tr>
+      <tr><td>Add / remove agents</td><td class="yes">✔</td><td class="no">✗</td><td class="no">✗</td></tr>
+      <tr><td>Connect number &amp; secrets</td><td class="yes">✔</td><td class="no">✗</td><td class="no">✗</td></tr>
+    </table>
+    <div class="notes">
+      <div class="note n-pink"><h3>Guard the token</h3><p>The Meta access token is the master key. Store it <b>encrypted at rest</b>, never in the code or the git repo, loaded from a protected env file.</p></div>
+      <div class="note n-blue"><h3>Audit log</h3><p>Record who sent which campaign, who changed settings. With several staff sharing one number, you'll want the trail.</p></div>
+    </div>
+  </div>
+
+  <!-- CH9 ops -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#52525f" stroke="#2A2A38" stroke-width="2.5"/></svg><span>9</span></div><h2>Keeping it alive</h2></div>
+    <p class="lead">It's one server doing real work for a real business. A little ops discipline saves a lot of pain:</p>
+    <div class="notes">
+      <div class="note n-green"><h3>Backups</h3><p>Nightly <span class="mono">pg_dump</span> copied <b>off the VPS</b> (cheap object storage). A database with no backup is a time bomb.</p></div>
+      <div class="note n-yellow"><h3>Health + alerts</h3><p>A <span class="mono">/health</span> check, plus alerts when: queue backs up, sends start failing, or quality drops to Yellow.</p></div>
+      <div class="note n-blue"><h3>The runbook</h3><p>A one-pager for the supervisor: how to restart, where logs are, how to restore a backup, how to rotate the token.</p></div>
+      <div class="note n-pink"><h3>Single-VPS risk</h3><p>If the box dies, everything stops. Fine for v1 — just keep backups current and know how fast you can spin up a fresh server.</p></div>
+    </div>
+  </div>
+
+  <!-- CH10 legal -->
+  <div class="chapter">
+    <div class="tape"></div>
+    <div class="ch-head"><div class="ch-num"><svg width="52" height="52" class="rough"><circle cx="26" cy="26" r="23" fill="#E0533D" stroke="#2A2A38" stroke-width="2.5"/></svg><span>10</span></div><h2>The legal bits (worth a real check)</h2></div>
+    <p class="lead">Not legal advice — but these are real, and cheaper to handle now than after a complaint:</p>
+    <div class="notes">
+      <div class="note n-blue"><h3>India's DPDP Act</h3><p>You're storing people's personal data (phone, chats). The data-protection law expects consent, a purpose, and a way to delete on request.</p></div>
+      <div class="note n-pink"><h3>WhatsApp Commerce Policy</h3><p>Meta bans certain goods/claims on WhatsApp. Worth a read before promoting anything sensitive.</p></div>
+      <div class="note n-yellow"><h3>Privacy policy + retention</h3><p>A simple privacy note, and a rule for how long we keep old chats/contacts before purging.</p></div>
+      <div class="note n-green"><h3>Keep consent proof</h3><p>The <span class="mono">opt_in_source / opt_in_at</span> from chapter 4 <i>is</i> your evidence if anyone asks how you got a number.</p></div>
+    </div>
+  </div>
+
+  <svg class="divider rough" viewBox="0 0 200 16"><path d="M4 8 q20 -8 40 0 t40 0 t40 0 t40 0 t36 0" fill="none" stroke="#52525f" stroke-width="2.5" stroke-linecap="round"/></svg>
+  <p class="closing">now the plan's actually complete. ✎</p>
+</div>
+</body>
+</html>

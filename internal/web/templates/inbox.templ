@@ -1,0 +1,223 @@
+package templates
+
+import (
+	mw "whatsapptool/internal/web/middleware"
+	"whatsapptool/internal/db"
+	"whatsapptool/internal/whatsapp"
+)
+
+// InboxPage renders the full inbox application shell.
+templ InboxPage(agent *mw.AgentClaims) {
+	@templ.Raw(ShellOpen(agent, "/inbox", "Inbox", ""))
+	<div class="ibx-wrap" x-data="inboxApp()" x-init="init()">
+		<aside class="ibx-list">
+			<div class="ibx-search">
+				<input type="search" placeholder="Search…" class="search-input"/>
+			</div>
+			<div class="ibx-filters">
+				<button class="chip sel"
+					hx-get="/inbox/convs"
+					hx-target="#conv-list"
+					hx-swap="innerHTML">All</button>
+				<button class="chip"
+					hx-get="/inbox/convs?assigned=unassigned"
+					hx-target="#conv-list"
+					hx-swap="innerHTML">Unassigned</button>
+				<button class="chip"
+					hx-get="/inbox/convs?assigned=me"
+					hx-target="#conv-list"
+					hx-swap="innerHTML">Mine</button>
+			</div>
+			<div id="conv-list" class="convs"
+				hx-get="/inbox/convs"
+				hx-trigger="load"
+				hx-swap="innerHTML"></div>
+		</aside>
+		<main class="ibx-thread" id="thread">
+			<div class="th-empty"><p>Select a conversation to start messaging</p></div>
+		</main>
+		<aside class="ibx-contact" id="contact-panel"></aside>
+	</div>
+	<script>
+	function inboxApp() {
+	  return {
+	    ws: null, activeConvID: null,
+	    init() { this.connectWS(); },
+	    connectWS() {
+	      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+	      this.ws = new WebSocket(proto + '://' + location.host + '/ws');
+	      this.ws.onmessage = (e) => this.onWSMessage(JSON.parse(e.data));
+	      this.ws.onclose   = () => setTimeout(() => this.connectWS(), 3000);
+	    },
+	    onWSMessage(event) {
+	      if (event.type === 'new_message') {
+	        if (event.conversation_id === this.activeConvID) {
+	          htmx.ajax('GET', '/inbox/convs/' + this.activeConvID + '/messages',
+	            {target: '#thread', swap: 'outerHTML'});
+	        }
+	        htmx.ajax('GET', '/inbox/convs', {target: '#conv-list', swap: 'innerHTML'});
+	      }
+	      if (event.type === 'message_status') {
+	        const el = document.querySelector('[data-wa-id="' + event.data.wa_message_id + '"]');
+	        if (el) {
+	          el.dataset.status = event.data.status;
+	          const ticks = el.querySelector('.stat');
+	          if (ticks) ticks.outerHTML = msgStatusSVG(event.data.status);
+	        }
+	      }
+	    },
+	    selectConv(id) {
+	      this.activeConvID = id;
+	      htmx.ajax('GET', '/inbox/convs/' + id + '/messages', {target: '#thread', swap: 'outerHTML'});
+	    }
+	  };
+	}
+	function submitReply(convID, body) {
+	  if (!body.trim()) return;
+	  fetch('/inbox/convs/' + convID + '/messages', {
+	    method: 'POST',
+	    headers: {'Content-Type': 'application/json'},
+	    body: JSON.stringify({body: body, type: 'text'})
+	  })
+	  .then(function(r) {
+	    if (r.status === 422) {
+	      return r.text().then(function(t) { alert('Cannot send: ' + t); throw new Error(t); });
+	    }
+	    if (!r.ok) { throw new Error('send failed: ' + r.status); }
+	    return r.text();
+	  })
+	  .then(function(html) {
+	    var target = document.getElementById('thread-messages');
+	    if (target) target.insertAdjacentHTML('beforeend', html);
+	  })
+	  .catch(function(err) { console.error('submitReply:', err); });
+	}
+	function msgStatusSVG(s) {
+	  const SVG1 = '<svg width="18" height="16" viewBox="0 0 18 16"><path class="tick" d="M3 8.5l3.5 3.5L14 4"/></svg>';
+	  const SVG2 = '<svg width="22" height="16" viewBox="0 0 22 16"><path class="tick" d="M2 8.5l3.5 3.5L13 4"/><path class="tick" d="M8 8.5l3.5 3.5L19 4"/></svg>';
+	  const SVG_Q = '<svg width="16" height="16" viewBox="0 0 16 16"><circle class="ico" cx="8" cy="8" r="6"/><path class="ico" d="M8 4.6V8l2.4 1.6"/></svg>';
+	  const SVG_F = '<svg width="16" height="16" viewBox="0 0 16 16"><circle class="ico" cx="8" cy="8" r="6"/><path class="ico" d="M8 5v3.5M8 10.6v.2"/></svg>';
+	  if (s === 'sent')      return '<span class="stat stat--sent"      role="img" aria-label="Sent">'           + SVG1 + '</span>';
+	  if (s === 'delivered') return '<span class="stat stat--delivered" role="img" aria-label="Delivered">'      + SVG2 + '</span>';
+	  if (s === 'read')      return '<span class="stat stat--read"      role="img" aria-label="Read">'           + SVG2 + '</span>';
+	  if (s === 'failed')    return '<span class="stat stat--failed"    role="img" aria-label="Failed to send">' + SVG_F + '</span>';
+	  return                        '<span class="stat stat--queued"    role="img" aria-label="Queued">'         + SVG_Q + '</span>';
+	}
+	</script>
+	@templ.Raw(ShellClose())
+}
+
+// ConversationList renders the scrollable left-pane conversation list.
+templ ConversationList(convs []db.ConvListRow) {
+	if len(convs) == 0 {
+		@templ.Raw(EmptyStateHTML(
+			EmptyIconInbox,
+			"No conversations yet",
+			"When someone messages your WhatsApp number, the chat opens here.",
+			[]EmptyAction{{Label: "Check connection", HREF: "/settings"}},
+		))
+	}
+	for _, c := range convs {
+		@ConversationItem(c)
+	}
+}
+
+// ConversationItem renders one row in the conversation list.
+templ ConversationItem(c db.ConvListRow) {
+	<div class="conv"
+		onclick={ templ.JSFuncCall("inboxApp().selectConv", c.ID) }
+		data-conv-id={ c.ID }>
+		<div class="conv-av">{ initial(c.ContactName) }</div>
+		<div class="conv-info">
+			<div class="conv-name">{ c.ContactName }</div>
+			<div class="conv-preview">{ truncate(c.LastBody, 42) }</div>
+		</div>
+		<div class="conv-meta">
+			<div class="conv-time">{ shortTime(c.LastMessageAt) }</div>
+			if c.Status == "open" && c.AssignedTo == nil {
+				<div class="conv-badge">!</div>
+			}
+		</div>
+	</div>
+}
+
+// MessageThread renders the center pane: header + messages + composer.
+templ MessageThread(conv *db.Conversation, msgs []db.Message) {
+	<div class="th-wrap" id="thread" data-conv-id={ conv.ID }>
+		<div class="th-hd">
+			<div class="th-av">💬</div>
+			<div class="th-info">
+				<div class="th-name">{ conv.ContactID }</div>
+				<div class="th-status">
+					if whatsapp.IsWindowOpen(conv.LastInboundAt) {
+						<span class="win-badge">⏱ replies free for { whatsapp.FormatExpiry(conv.LastInboundAt) }</span>
+					} else {
+						<span class="win-badge win-closed">⏱ window closed — template only</span>
+					}
+				</div>
+			</div>
+			<div class="th-actions">
+				<button class="btn sm"
+					hx-post={ "/inbox/convs/" + conv.ID + "/resolve" }
+					hx-confirm="Resolve this conversation?">Resolve</button>
+			</div>
+		</div>
+		<div class="th-body" id="thread-messages">
+			for i := range msgs {
+				@MessageBubble(&msgs[i])
+			}
+		</div>
+		@Composer(conv)
+	</div>
+}
+
+// msgStatus renders the appropriate SVG tick span for a message status.
+templ msgStatus(status string) {
+	switch status {
+	case "sent":
+		<span class="stat stat--sent" role="img" aria-label="Sent">@templ.Raw(svgSent)</span>
+	case "delivered":
+		<span class="stat stat--delivered" role="img" aria-label="Delivered">@templ.Raw(svgDouble)</span>
+	case "read":
+		<span class="stat stat--read" role="img" aria-label="Read">@templ.Raw(svgDouble)</span>
+	case "failed":
+		<span class="stat stat--failed" role="img" aria-label="Failed to send">@templ.Raw(svgFailed)</span>
+	default:
+		<span class="stat stat--queued" role="img" aria-label="Queued">@templ.Raw(svgQueued)</span>
+	}
+}
+
+// MessageBubble renders a single message bubble.
+templ MessageBubble(msg *db.Message) {
+	<div class={ bubbleClass(msg.Direction) }
+		data-msg-id={ msg.ID }
+		data-wa-id={ derefStr(msg.WAMessageID) }
+		data-status={ msg.Status }>
+		<div class="bub-body">{ messageBody(msg) }</div>
+		<div class="bub-meta t">
+			<span>{ shortTimestamp(msg.CreatedAt) }</span>
+			if msg.Direction == "outbound" {
+				@msgStatus(msg.Status)
+			}
+		</div>
+	</div>
+}
+
+// Composer renders the reply input bar.
+templ Composer(conv *db.Conversation) {
+	<div class="composer" x-data="{ body: '' }">
+		<button class="btn sm emoji-btn" type="button">😊</button>
+		<input class="composer-input"
+			type="text"
+			placeholder={ composerPlaceholder(conv) }
+			x-model="body"
+			@keydown.enter={ "submitReply('" + conv.ID + "', body); body = ''" }/>
+		if !whatsapp.IsWindowOpen(conv.LastInboundAt) {
+			<button class="btn sm" type="button"
+				hx-get={ "/inbox/convs/" + conv.ID + "/template-picker" }
+				hx-target="#template-modal">Template</button>
+		}
+		<button class="btn pri sm" type="button"
+			@click={ "submitReply('" + conv.ID + "', body); body = ''" }>Send</button>
+	</div>
+}

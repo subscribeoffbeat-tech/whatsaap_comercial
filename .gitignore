@@ -1,0 +1,13 @@
+﻿/bin/
+whatsapptool
+whatsapptool.exe
+*.exe
+*.exe~
+.env
+.env.*
+!.env.example
+/tmp/
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

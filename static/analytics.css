@@ -1,0 +1,215 @@
+/* ── Analytics / Dashboard shared styles ─────────────────────────────────── */
+.an-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+  font-family: system-ui, sans-serif;
+}
+
+.an-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.an-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.an-date-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+}
+
+.an-date-form label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.an-date-form input[type="date"] {
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+}
+
+/* ── Stat cards ── */
+.an-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.an-card {
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  text-align: center;
+}
+
+.an-card-val {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-strong);
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.an-card-lbl {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+/* ── Quality dot ── */
+.quality-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.quality-green  { background: var(--accent-online); }
+.quality-yellow { background: var(--warning); }
+.quality-red    { background: var(--danger); }
+
+.an-quality {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text);
+  margin-bottom: 1.5rem;
+}
+
+/* ── Sections ── */
+.an-section {
+  margin-bottom: 2rem;
+}
+
+.an-section h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--text-strong);
+}
+
+/* ── CSS bar chart ── */
+.an-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 140px;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.an-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 32px;
+  flex: 1;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.an-bar {
+  width: 100%;
+  min-height: 4px;
+  background: #3b82f6;
+  border-radius: 2px 2px 0 0;
+}
+
+.an-bar-lbl {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.an-bar-val {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* ── Table ── */
+.an-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.an-table th,
+.an-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--divider);
+  text-align: left;
+}
+
+.an-table th {
+  background: var(--surface);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ── Buttons (reuse from automation.css) ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.btn.pri {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+/* ── Dashboard quick actions ── */
+.dash-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.empty-state {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+/* ── Badge (shared) ── */
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--divider);
+  color: var(--text);
+}
