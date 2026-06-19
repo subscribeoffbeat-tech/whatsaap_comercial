@@ -94,7 +94,7 @@ type EmptyAction struct {
 	Primary  bool
 	HREF     string // renders as <a> when set
 	HXGet    string // HTMX GET when no HREF
-	HXTarget string // hx-target for HXGet (defaults to "closest .page-content")
+	HXTarget string // hx-target for HXGet (defaults to "closest .screen")
 	AtClick  string // Alpine @click handler (e.g. "openImport()")
 }
 
@@ -115,7 +115,7 @@ func EmptyStateHTML(iconSVG, title, body string, actions []EmptyAction) string {
 		case a.HXGet != "":
 			tgt := a.HXTarget
 			if tgt == "" {
-				tgt = "closest .page-content"
+				tgt = "closest .screen"
 			}
 			actHTML += fmt.Sprintf(`<button class="%s" hx-get="%s" hx-target="%s">%s</button>`,
 				cls, html.EscapeString(a.HXGet), html.EscapeString(tgt), label)

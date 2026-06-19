@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -20,6 +21,7 @@ import (
 	mw "whatsapptool/internal/web/middleware"
 	"whatsapptool/internal/web/ws"
 	"whatsapptool/internal/whatsapp"
+	"whatsapptool/static"
 )
 
 func main() {
@@ -86,7 +88,11 @@ func main() {
 	r.Use(middleware.Recoverer)
 
 	// ── Static assets & public infrastructure ────────────────────────────────
-	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	staticFS, err := fs.Sub(static.FS, ".")
+	if err != nil {
+		log.Fatalf("static fs: %v", err)
+	}
+	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	r.Get("/health", handlers.Health(pool))
 	r.Get("/webhook",  handlers.WebhookVerify(cfg.WA.WebhookVerifyToken))
 	r.Post("/webhook", handlers.WebhookReceive(proc, inboxH, pool, []byte(cfg.WA.AppSecret)))

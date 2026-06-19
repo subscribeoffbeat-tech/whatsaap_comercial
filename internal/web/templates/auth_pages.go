@@ -18,7 +18,7 @@ func LoginPage(flash string) templ.Component {
 		_, err := fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sign in — WhatsApp Tool</title>
+<title>Sign in — Offbeat ChatFlow</title>
 <link rel="stylesheet" href="/static/tokens.css">
 <link rel="stylesheet" href="/static/app.css">
 </head>
@@ -48,7 +48,7 @@ func InvitePage(name, token, errMsg string) templ.Component {
 		_, err := fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Accept invite — WhatsApp Tool</title>
+<title>Accept invite — Offbeat ChatFlow</title>
 <link rel="stylesheet" href="/static/tokens.css">
 <link rel="stylesheet" href="/static/app.css">
 </head>
@@ -88,7 +88,7 @@ func OnboardingPage(flash string) templ.Component {
 		_, err := fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Setup — WhatsApp Tool</title>
+<title>Setup — Offbeat ChatFlow</title>
 <link rel="stylesheet" href="/static/tokens.css">
 <link rel="stylesheet" href="/static/app.css">
 </head>
@@ -125,7 +125,7 @@ func OnboardingSetupPage(status OnboardingStatus) templ.Component {
 		_, err := fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Setup — WhatsApp Tool</title>
+<title>Setup — Offbeat ChatFlow</title>
 <link rel="stylesheet" href="/static/tokens.css">
 <link rel="stylesheet" href="/static/app.css">
 </head>
