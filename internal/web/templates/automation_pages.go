@@ -19,12 +19,8 @@ func AutomationPage(agent *mw.AgentClaims, rules []*db.AutomationRule, tmpls []d
 		}
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
-<div class="page-hd">
-<div>
-<h1 class="screen-title">Automation rules</h1>
-<p class="screen-subtitle">Keyword replies, welcome messages, away messages, and opt-out handling.</p>
-</div>
-<a class="btn btn-primary btn-sm" href="/automation/new">+ New rule</a>
+<div class="page-hd"><h1>Automation rules</h1>
+<a class="btn pri" href="/automation/new">New rule</a>
 </div>
 <table class="tbl" id="rules-table">
 <thead><tr><th>Name</th><th>Trigger</th><th>Keyword</th><th>Active</th><th>Actions</th></tr></thead>
@@ -84,7 +80,7 @@ func AutomationForm(agent *mw.AgentClaims, rule *db.AutomationRule, tmpls []db.T
 
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
-<div class="page-hd"><div class="screen-title">%s</div></div>
+<h1>%s</h1>
 <form method="%s" action="%s" class="form-card">
 <label class="field"><span>Name</span>
 <input type="text" name="name" value="%s" required></label>
@@ -147,8 +143,8 @@ func AutomationForm(agent *mw.AgentClaims, rule *db.AutomationRule, tmpls []db.T
 <span>Active</span></label>
 
 <div class="form-btns">
-<button class="btn btn-primary btn-sm" type="submit">Save rule</button>
-<a class="btn btn-secondary btn-sm" href="/automation">Cancel</a>
+<button class="btn pri" type="submit">Save rule</button>
+<a class="btn" href="/automation">Cancel</a>
 </div>
 </form>
 </div>`, priority, activeAttr)
@@ -172,8 +168,8 @@ func AutomationRuleRow(rule *db.AutomationRule, tmpls []db.Template) templ.Compo
 		}
 		editBtn := ""
 		if !rule.IsSystem() {
-			editBtn = fmt.Sprintf(`<a class="btn btn-sm btn-secondary" href="/automation/%d/edit">Edit</a>
-<button class="btn btn-sm btn-danger"
+			editBtn = fmt.Sprintf(`<a class="btn sm" href="/automation/%d/edit">Edit</a>
+<button class="btn sm danger"
   hx-delete="/automation/%d"
   hx-confirm="Delete this rule?"
   hx-target="closest tr"

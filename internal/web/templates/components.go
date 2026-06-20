@@ -103,9 +103,9 @@ type EmptyAction struct {
 func EmptyStateHTML(iconSVG, title, body string, actions []EmptyAction) string {
 	actHTML := ""
 	for _, a := range actions {
-		cls := "btn btn-secondary"
+		cls := "btn btn--secondary"
 		if a.Primary {
-			cls = "btn btn-primary"
+			cls = "btn btn--primary"
 		}
 		label := html.EscapeString(a.Label)
 		switch {

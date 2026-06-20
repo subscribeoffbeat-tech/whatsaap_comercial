@@ -36,21 +36,16 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag) templ.Component {
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap contacts-wrap">
 <div class="page-hd">
-<div>
-<div class="screen-title">Contacts</div>
-<div class="screen-subtitle">Manage your opted-in contacts</div>
-</div>
-<div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-<button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-modal').showModal()">Import CSV</button>
-<button class="btn btn-primary btn-sm" onclick="document.getElementById('new-contact-modal').showModal()">+ Add contact</button>
-</div>
+<h1>Contacts</h1>
+<button class="btn pri" onclick="document.getElementById('import-modal').showModal()">Import CSV</button>
+<button class="btn" onclick="document.getElementById('new-contact-modal').showModal()">Add contact</button>
 </div>
 
 <div class="contacts-filters">
 <input type="search" placeholder="Search name or phone…"
   hx-get="/contacts/table" hx-trigger="input changed delay:300ms" hx-target="#contacts-table"
   hx-include="[name='tag_filter'],[name='opted_in_filter']"
-  name="search" class="form-input search-input">
+  name="search" class="search-input">
 <select name="tag_filter"
   hx-get="/contacts/table" hx-trigger="change" hx-target="#contacts-table"
   hx-include="[name='search'],[name='opted_in_filter']">
@@ -79,8 +74,8 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag) templ.Component {
 <form hx-post="/contacts/import/upload" hx-target="#import-steps" hx-swap="innerHTML" enctype="multipart/form-data">
 <label class="field"><span>CSV file</span><input type="file" name="csv_file" accept=".csv" required></label>
 <div class="modal-btns">
-<button class="btn btn-primary btn-sm" type="submit">Upload &amp; map columns</button>
-<button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('import-modal').close()">Cancel</button>
+<button class="btn pri" type="submit">Upload &amp; map columns</button>
+<button class="btn" type="button" onclick="document.getElementById('import-modal').close()">Cancel</button>
 </div>
 </form>
 <div id="import-steps"></div>
@@ -97,8 +92,8 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag) templ.Component {
 <input type="checkbox" name="opt_in" value="true">
 <span>Mark as opted-in</span></label>
 <div class="modal-btns">
-<button class="btn btn-primary btn-sm" type="submit">Add</button>
-<button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('new-contact-modal').close()">Cancel</button>
+<button class="btn pri" type="submit">Add</button>
+<button class="btn" type="button" onclick="document.getElementById('new-contact-modal').close()">Cancel</button>
 </div>
 </form>
 </dialog>
@@ -154,12 +149,12 @@ func ContactTable(contacts []db.Contact, total int, offset, limit int, searchAct
 			if prev < 0 {
 				prev = 0
 			}
-			if _, err := fmt.Fprintf(w, `<button class="btn btn-secondary btn-sm" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table">Previous</button>`, prev); err != nil {
+			if _, err := fmt.Fprintf(w, `<button class="btn" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table">Previous</button>`, prev); err != nil {
 				return err
 			}
 		}
 		if offset+len(contacts) < total {
-			if _, err := fmt.Fprintf(w, `<button class="btn btn-secondary btn-sm" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table">Next</button>`, offset+limit); err != nil {
+			if _, err := fmt.Fprintf(w, `<button class="btn" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table">Next</button>`, offset+limit); err != nil {
 				return err
 			}
 		}
@@ -181,7 +176,7 @@ func ContactDetail(c *db.Contact, tags []db.Tag, notes []db.ContactNote, allTags
 <div class="contact-detail" id="contact-%s">
 <div class="detail-hd">
 <h2>%s</h2>
-<button class="btn btn-sm btn-danger"
+<button class="btn sm danger"
   hx-delete="/contacts/%s"
   hx-confirm="Permanently delete this contact?"
   hx-target="#contact-detail"
@@ -224,7 +219,7 @@ func ContactDetail(c *db.Contact, tags []db.Tag, notes []db.ContactNote, allTags
 <form hx-post="/contacts/%s/notes" hx-target="#contact-notes-%s" hx-swap="innerHTML">
 <label class="field"><span>Add note</span>
 <textarea name="body" rows="2" required></textarea></label>
-<button class="btn btn-sm btn-secondary" type="submit">Add note</button>
+<button class="btn sm" type="submit">Add note</button>
 </form>
 </div>`, c.ID, c.ID)
 		return err
@@ -260,7 +255,7 @@ func ContactTagList(tags []db.Tag, allTags []db.Tag, contactID string) templ.Com
 				}
 			}
 		}
-		_, err := io.WriteString(w, `</select><button class="btn btn-sm btn-secondary" type="submit">Add tag</button></form>`)
+		_, err := io.WriteString(w, `</select><button class="btn sm" type="submit">Add tag</button></form>`)
 		return err
 	})
 }
@@ -291,7 +286,7 @@ func TagManagerList(tags []db.Tag) templ.Component {
 		for _, t := range tags {
 			if _, err := fmt.Fprintf(w,
 				`<li><span class="chip" style="background:%s">%s</span>
-<button class="btn btn-sm btn-danger"
+<button class="btn sm danger"
   hx-delete="/contacts/tags/%d"
   hx-target="closest li"
   hx-swap="outerHTML"
@@ -305,7 +300,7 @@ func TagManagerList(tags []db.Tag) templ.Component {
 <form hx-post="/contacts/tags" hx-target="#tag-manager-list" hx-swap="innerHTML">
 <label class="field"><span>Tag name</span><input type="text" name="name" required></label>
 <label class="field"><span>Colour</span><input type="color" name="color" value="#0E7A40"></label>
-<button class="btn btn-sm btn-primary" type="submit">Create tag</button>
+<button class="btn sm pri" type="submit">Create tag</button>
 </form>`)
 		return err
 	})
@@ -324,7 +319,7 @@ func SegmentList(segs []db.Segment) templ.Component {
 		for _, s := range segs {
 			if _, err := fmt.Fprintf(w,
 				`<li><strong>%s</strong>
-<button class="btn btn-sm btn-danger"
+<button class="btn sm danger"
   hx-delete="/contacts/segments/%d"
   hx-target="closest li"
   hx-swap="outerHTML"
@@ -363,7 +358,7 @@ func ImportMapColumns(headers []string, csvData string, rowCount int) templ.Comp
 <input type="checkbox" name="mark_opted_in">
 <span>Mark all as opted-in</span></label>
 <div class="form-btns">
-<button class="btn btn-primary btn-sm" type="submit">Preview import</button>
+<button class="btn pri" type="submit">Preview import</button>
 </div>
 </form>
 </div>`, rowCount, html.EscapeString(csvData), opts, opts, opts)
@@ -407,7 +402,7 @@ func ImportPreview(rows []ImportPreviewRow, total int, csvData string, phoneCol,
 <input type="hidden" name="tags" value="%s">
 <input type="hidden" name="mark_opted_in" value="%s">
 <div class="form-btns">
-<button class="btn btn-primary btn-sm" type="submit">Confirm import (%d total rows)</button>
+<button class="btn pri" type="submit">Confirm import (%d total rows)</button>
 </div>
 </form>
 </div>`,
@@ -429,7 +424,7 @@ func ImportResult(inserted, skipped, invalidCount int) templ.Component {
 <dt>Skipped (duplicate phone)</dt><dd>%d</dd>
 <dt>Invalid</dt><dd>%d</dd>
 </dl>
-<a class="btn btn-primary btn-sm" href="/contacts">View contacts</a>
+<a class="btn pri" href="/contacts">View contacts</a>
 </div>`, inserted, skipped, invalidCount)
 		return err
 	})

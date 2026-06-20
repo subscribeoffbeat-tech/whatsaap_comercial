@@ -45,13 +45,10 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 		if _, err := io.WriteString(w, `
 <div class="page-wrap">
 <div class="page-hd">
-<div>
-<div class="screen-title">Dashboard</div>
-<div class="screen-subtitle">Overview of your WhatsApp channel</div>
-</div>
-<div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-<a class="btn btn-secondary btn-sm" href="/contacts/import">Import contacts</a>
-<a class="btn btn-primary btn-sm" href="/campaigns/new">+ New campaign</a>
+<h1>Dashboard</h1>
+<div style="display:flex;gap:0.5rem;">
+<a class="btn btn--secondary" href="/contacts/import">Import contacts</a>
+<a class="btn btn--primary" href="/campaigns/new">New campaign</a>
 </div>
 </div>`); err != nil {
 			return err
@@ -117,10 +114,10 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 		// ── Quick-actions panel ───────────────────────────────────────────────────
 		if _, err := io.WriteString(w, `
 <div class="dash-actions">
-<a class="btn btn-primary" href="/campaigns/new">New campaign</a>
-<a class="btn btn-secondary" href="/inbox">Open inbox</a>
-<a class="btn btn-secondary" href="/contacts/import">Import contacts</a>
-<a class="btn btn-secondary" href="/templates/new">New template</a>
+<a class="btn btn--primary" href="/campaigns/new">New campaign</a>
+<a class="btn btn--secondary" href="/inbox">Open inbox</a>
+<a class="btn btn--secondary" href="/contacts/import">Import contacts</a>
+<a class="btn btn--secondary" href="/templates/new">New template</a>
 </div>`); err != nil {
 			return err
 		}
@@ -130,7 +127,7 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 <section class="an-section">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
 <h2 style="margin:0;font-size:1rem;font-weight:600;color:var(--text-strong)">Recent campaigns</h2>
-<a class="btn btn-secondary btn-sm" href="/campaigns">View all</a>
+<a class="btn btn--secondary" href="/campaigns">View all</a>
 </div>`); err != nil {
 			return err
 		}
