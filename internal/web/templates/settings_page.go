@@ -38,7 +38,12 @@ func SettingsPage(d SettingsViewData, actor *mw.AgentClaims, saved bool) templ.C
 
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
-<h1>Settings</h1>
+<div class="page-hd">
+<div>
+<h1 class="screen-title">Settings</h1>
+<p class="screen-subtitle">Sending rules, cost rates, and account configuration.</p>
+</div>
+</div>
 %s
 <section class="card">
 <h2>Sending rules</h2>
@@ -49,7 +54,7 @@ func SettingsPage(d SettingsViewData, actor *mw.AgentClaims, saved bool) templ.C
 <input type="time" name="quiet_end" value="%s"></label>
 <label class="field"><span>Frequency cap (hours)</span>
 <input type="number" name="freq_cap_hours" value="%d" min="1" max="168"></label>
-<button class="btn pri" type="submit">Save sending rules</button>
+<button class="btn btn-primary btn-sm" type="submit">Save sending rules</button>
 </form>
 </section>
 
@@ -64,7 +69,7 @@ func SettingsPage(d SettingsViewData, actor *mw.AgentClaims, saved bool) templ.C
 <input type="number" step="0.0001" name="auth" value="%.4f"></label>
 <label class="field"><span>GST rate</span>
 <input type="number" step="0.01" name="gst_rate" value="%.4f"></label>
-<button class="btn pri" type="submit">Save costs</button>
+<button class="btn btn-primary btn-sm" type="submit">Save costs</button>
 </form>
 </section>
 
@@ -73,7 +78,7 @@ func SettingsPage(d SettingsViewData, actor *mw.AgentClaims, saved bool) templ.C
 <form method="post" action="/settings/retention">
 <label class="field"><span>Retention (months)</span>
 <input type="number" name="retention_months" value="%d" min="1" max="84"></label>
-<button class="btn pri" type="submit">Save retention</button>
+<button class="btn btn-primary btn-sm" type="submit">Save retention</button>
 </form>
 </section>
 

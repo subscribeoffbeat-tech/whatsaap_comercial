@@ -20,12 +20,12 @@ func TemplatesPage(agent *mw.AgentClaims) templ.Component {
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
 <div class="page-hd">
-<h1>WhatsApp Templates</h1>
-<button class="btn pri"
-  hx-get="/templates/gallery"
-  hx-target="#tmpl-gallery"
-  hx-trigger="load"
-  onclick="document.getElementById('new-tmpl-modal').showModal()">New template</button>
+<div>
+<h1 class="screen-title">WhatsApp Templates</h1>
+<p class="screen-subtitle">Browse approved templates and the sample library.</p>
+</div>
+<button class="btn btn-primary btn-sm"
+  onclick="document.getElementById('new-tmpl-modal').showModal()">+ New template</button>
 </div>
 <div id="tmpl-gallery"
   hx-get="/templates/gallery"
@@ -52,8 +52,8 @@ func TemplatesPage(agent *mw.AgentClaims) templ.Component {
 <label class="field"><span>Body text (use {{1}}, {{2}} for variables)</span>
 <textarea name="body" rows="4" required></textarea></label>
 <div class="modal-btns">
-<button class="btn pri" type="submit">Create &amp; save</button>
-<button class="btn" type="button" onclick="document.getElementById('new-tmpl-modal').close()">Cancel</button>
+<button class="btn btn-primary btn-sm" type="submit">Create &amp; save</button>
+<button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('new-tmpl-modal').close()">Cancel</button>
 </div>
 </form>
 </dialog>
@@ -79,7 +79,7 @@ func TemplateGallery(tmpls []db.Template) templ.Component {
 			statusClass := "badge-" + t.Status
 			if _, err := fmt.Fprintf(w,
 				`<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="badge %s">%s</span></td><td>
-<button class="btn sm"
+<button class="btn btn-sm btn-secondary"
   hx-get="/templates/%s"
   hx-target="#tmpl-editor"
   hx-swap="innerHTML">Edit</button>`,
@@ -91,14 +91,14 @@ func TemplateGallery(tmpls []db.Template) templ.Component {
 			if t.Status == "pending" || t.Status == "rejected" {
 				if _, err := fmt.Fprintf(w,
 					`<form method="post" action="/templates/%s/submit" style="display:inline">
-<button class="btn sm pri" type="submit">Submit to Meta</button></form>`, t.ID,
+<button class="btn btn-sm btn-primary" type="submit">Submit to Meta</button></form>`, t.ID,
 				); err != nil {
 					return err
 				}
 			}
 			if _, err := fmt.Fprintf(w,
 				`<form method="post" action="/templates/%s" hx-delete="/templates/%s" hx-confirm="Delete template?" style="display:inline">
-<button class="btn sm danger" type="submit">Delete</button></form>
+<button class="btn btn-sm btn-danger" type="submit">Delete</button></form>
 </td></tr>`, t.ID, t.ID,
 			); err != nil {
 				return err
@@ -156,7 +156,7 @@ func TemplateEditorForm(t *db.Template) templ.Component {
 <label class="field"><span>Body text</span>
 <textarea name="body" rows="5">%s</textarea></label>
 <div class="form-btns">
-<button class="btn pri" type="submit">Save changes</button>
+<button class="btn btn-primary btn-sm" type="submit">Save changes</button>
 </div>
 </form>
 </div>`,

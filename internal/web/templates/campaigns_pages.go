@@ -64,8 +64,11 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
 <div class="page-hd">
-<h1>Campaigns</h1>
-<a class="btn btn--primary" href="/campaigns/new">New campaign</a>
+<div>
+<div class="screen-title">Campaigns</div>
+<div class="screen-subtitle">Broadcast to opted-in contacts with approved templates</div>
+</div>
+<a class="btn btn-primary btn-sm" href="/campaigns/new">+ New campaign</a>
 </div>`)
 		if err != nil {
 			return err
@@ -95,7 +98,7 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 				if c.Status == "running" || c.Status == "scheduled" {
 					cancelBtn = fmt.Sprintf(
 						`<form method="post" action="/campaigns/%s/cancel" style="display:inline">`+
-							`<button class="btn btn--danger" type="submit">Cancel</button></form>`,
+							`<button class="btn btn-danger" type="submit">Cancel</button></form>`,
 						c.ID)
 				}
 				if _, err := fmt.Fprintf(w,
@@ -240,8 +243,8 @@ func WizardStep1(state WizardState, tags []db.Tag) templ.Component {
 <select name="exclude_tags" multiple size="4">%s</select></label>
 
 <div class="wizard-btns">
-<button class="btn btn--primary" type="submit">Next: choose message →</button>
-<a class="btn btn--secondary" href="/campaigns">Cancel</a>
+<button class="btn btn-primary" type="submit">Next: choose message →</button>
+<a class="btn btn-secondary" href="/campaigns">Cancel</a>
 </div>
 </form>
 </div>`, html.EscapeString(state.Name), tagOpts, tagOpts)
@@ -312,8 +315,8 @@ func WizardStep2(state WizardState, tmpls []db.Template) templ.Component {
 
 		_, err = fmt.Fprintf(w, `</fieldset>
 <div class="wizard-btns">
-<button class="btn btn--primary" type="submit">Next: schedule →</button>
-<a class="btn btn--secondary" href="/campaigns">Cancel</a>
+<button class="btn btn-primary" type="submit">Next: schedule →</button>
+<a class="btn btn-secondary" href="/campaigns">Cancel</a>
 </div>
 </form>
 </div>`)
@@ -370,10 +373,10 @@ func wizardStep3Inner(state WizardState, errMsg string) templ.Component {
 Quiet hours: 9&nbsp;pm–9&nbsp;am IST. Choose a time between 9&nbsp;am and 9&nbsp;pm.
 </div>
 <div class="wizard-btns">
-<button class="btn btn--primary" type="submit"
+<button class="btn btn-primary" type="submit"
   :disabled="inQuietHours"
   :aria-disabled="String(inQuietHours)">Next: review →</button>
-<a class="btn btn--secondary" href="/campaigns">Cancel</a>
+<a class="btn btn-secondary" href="/campaigns">Cancel</a>
 </div>
 </form>
 </div>
@@ -468,9 +471,9 @@ func WizardStep4(state WizardState, tmpl *db.Template) templ.Component {
 <dt>Estimated cost</dt><dd>₹%.2f</dd>
 </dl>
 <div class="wizard-btns">
-<button type="button" class="btn btn--primary"
+<button type="button" class="btn btn-primary"
   onclick="document.getElementById('confirm-launch').showModal()">Review &amp; launch →</button>
-<a class="btn btn--secondary" href="/campaigns">Cancel</a>
+<a class="btn btn-secondary" href="/campaigns">Cancel</a>
 </div>
 </form>
 </div>
@@ -486,9 +489,9 @@ func WizardStep4(state WizardState, tmpl *db.Template) templ.Component {
 </div>
 <p class="confirm-note">This action cannot be undone. %d messages will be queued for delivery.</p>
 <div class="confirm-btns">
-<button type="button" class="btn btn--secondary"
+<button type="button" class="btn btn-secondary"
   onclick="document.getElementById('confirm-launch').close()">Cancel</button>
-<button type="submit" form="launch-form" class="btn btn--primary">Confirm &amp; send to %d contacts</button>
+<button type="submit" form="launch-form" class="btn btn-primary">Confirm &amp; send to %d contacts</button>
 </div>
 </dialog>`,
 			html.EscapeString(encodeState(state)),
@@ -522,7 +525,7 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport) templ.C
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
 <div class="page-hd">
-<h1>%s</h1>
+<div class="screen-title">%s</div>
 <span class="badge badge-%s">%s</span>
 </div>
 <div class="stat-row">

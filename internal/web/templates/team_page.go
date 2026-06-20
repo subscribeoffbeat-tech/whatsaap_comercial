@@ -25,8 +25,12 @@ func TeamPage(agents []*db.Agent, auditLog []*db.AuditEntry, actor *mw.AgentClai
 
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
-<div class="page-hd"><h1>Team</h1>
-<button class="btn pri" onclick="document.getElementById('invite-modal').showModal()">Invite agent</button>
+<div class="page-hd">
+<div>
+<h1 class="screen-title">Team</h1>
+<p class="screen-subtitle">Manage your team, roles and monthly limits.</p>
+</div>
+<button class="btn btn-primary btn-sm" onclick="document.getElementById('invite-modal').showModal()">+ Invite member</button>
 </div>
 %s
 
@@ -60,9 +64,9 @@ func TeamPage(agents []*db.Agent, auditLog []*db.AuditEntry, actor *mw.AgentClai
 			}
 			if actor != nil && a.ID != actor.ID {
 				if a.Active {
-					_, err = fmt.Fprintf(w, `<form method="post" action="/team/%s/activate" style="display:inline"><input type="hidden" name="active" value="false"><button class="btn sm">Deactivate</button></form>`, a.ID)
+					_, err = fmt.Fprintf(w, `<form method="post" action="/team/%s/activate" style="display:inline"><input type="hidden" name="active" value="false"><button class="btn btn-sm btn-secondary">Deactivate</button></form>`, a.ID)
 				} else {
-					_, err = fmt.Fprintf(w, `<form method="post" action="/team/%s/activate" style="display:inline"><input type="hidden" name="active" value="true"><button class="btn sm pri">Activate</button></form>`, a.ID)
+					_, err = fmt.Fprintf(w, `<form method="post" action="/team/%s/activate" style="display:inline"><input type="hidden" name="active" value="true"><button class="btn btn-sm btn-primary">Activate</button></form>`, a.ID)
 				}
 				if err != nil {
 					return err
@@ -110,8 +114,8 @@ func TeamPage(agents []*db.Agent, auditLog []*db.AuditEntry, actor *mw.AgentClai
 <option value="admin">Admin</option>
 </select></label>
 <div class="modal-btns">
-<button class="btn pri" type="submit">Send invite</button>
-<button class="btn" type="button" onclick="document.getElementById('invite-modal').close()">Cancel</button>
+<button class="btn btn-primary btn-sm" type="submit">Send invite</button>
+<button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('invite-modal').close()">Cancel</button>
 </div>
 </form>
 </dialog>
