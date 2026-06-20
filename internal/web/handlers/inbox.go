@@ -109,8 +109,34 @@ func (h *InboxHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	contactName := ""
+	contactSub := ""
+	var cName, cPhone, cRole, cCompany string
+	err = h.pool.QueryRow(r.Context(),
+		`SELECT COALESCE(name,''), COALESCE(wa_phone,''),
+		        COALESCE(custom_fields->>'role',''),
+		        COALESCE(custom_fields->>'company','')
+		 FROM contacts WHERE id = $1::uuid`,
+		conv.ContactID,
+	).Scan(&cName, &cPhone, &cRole, &cCompany)
+	if err != nil {
+		log.Printf("contact lookup for %s: %v", conv.ContactID, err)
+	}
+	contactName = cName
+	if contactName == "" {
+		contactName = cPhone
+	}
+	var parts []string
+	if cRole != "" {
+		parts = append(parts, cRole)
+	}
+	if cCompany != "" {
+		parts = append(parts, "at "+cCompany)
+	}
+	contactSub = strings.Join(parts, " ")
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.MessageThread(conv, msgs).Render(r.Context(), w); err != nil {
+	if err := templates.MessageThread(conv, msgs, contactName, contactSub).Render(r.Context(), w); err != nil {
 		log.Printf("message thread render: %v", err)
 	}
 }

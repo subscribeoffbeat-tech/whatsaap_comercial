@@ -13,18 +13,16 @@ import (
 )
 
 func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.Campaign) templ.Component {
-	// Quality dot: map rating string to the CSS class that EXISTS in app.css
 	qualityDotClass := "quality-green"
-	qualityLabel := "High quality"
+	qualityLabel := "High"
 	if stats.QualityRating == "yellow" {
 		qualityDotClass = "quality-yellow"
-		qualityLabel = "Medium quality"
+		qualityLabel = "Medium"
 	} else if stats.QualityRating == "red" {
 		qualityDotClass = "quality-red"
-		qualityLabel = "Low quality — action required"
+		qualityLabel = "Low"
 	}
 
-	// Tier-cap progress bar: same DailyCap source as WizardAudience + LimitGuardCheck
 	var capPct int
 	if stats.DailyCap > 0 {
 		capPct = int(stats.SentToday * 100 / stats.DailyCap)
@@ -33,8 +31,12 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 		}
 	}
 
-	// Agents must not see cost data (defense-in-depth; handler already zeros CostThisMonth)
 	isAgent := agent != nil && agent.Role == "agent"
+
+	fillClass := "tier-bar-fill"
+	if capPct >= 90 {
+		fillClass = "tier-bar-fill tier-bar-fill--warn"
+	}
 
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/", "Dashboard", "")); err != nil {
@@ -46,10 +48,10 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 <div class="page-wrap">
 <div class="page-hd">
 <div>
-<div class="screen-title">Dashboard</div>
-<div class="screen-subtitle">Overview of your WhatsApp channel</div>
+<h1 class="screen-title">Dashboard</h1>
+<p class="screen-subtitle">Overview of your WhatsApp channel</p>
 </div>
-<div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+<div style="display:flex;gap:0.5rem;flex-wrap:wrap">
 <a class="btn btn-secondary btn-sm" href="/contacts/import">Import contacts</a>
 <a class="btn btn-primary btn-sm" href="/campaigns/new">+ New campaign</a>
 </div>
@@ -57,39 +59,38 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 			return err
 		}
 
-		// ── Stat cards (use .an-card / .an-card-val / .an-card-lbl from analytics.css) ──
-		if _, err := io.WriteString(w, `<div class="an-cards">`); err != nil {
+		// ── Stat cards ────────────────────────────────────────────────────────────
+		if _, err := io.WriteString(w, `<div class="stat-grid">`); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w,
-			`<div class="an-card"><div class="an-card-val">%d</div><div class="an-card-lbl">Sent today</div></div>`,
+			`<div class="stat-card"><div class="stat-label">Sent today</div><div class="stat-value">%d</div><div class="stat-sub">messages dispatched</div></div>`,
 			stats.SentToday,
 		); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w,
-			`<div class="an-card"><div class="an-card-val">%d</div><div class="an-card-lbl">Delivered today</div></div>`,
+			`<div class="stat-card"><div class="stat-label">Delivered</div><div class="stat-value">%d</div><div class="stat-sub">confirmed by Meta</div></div>`,
 			stats.DeliveredToday,
 		); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w,
-			`<div class="an-card"><div class="an-card-val">%d</div><div class="an-card-lbl">Chats waiting</div></div>`,
+			`<div class="stat-card"><div class="stat-label">Chats waiting</div><div class="stat-value">%d</div><div class="stat-sub">open conversations</div></div>`,
 			stats.ChatsWaiting,
 		); err != nil {
 			return err
 		}
 		if !isAgent {
 			if _, err := fmt.Fprintf(w,
-				`<div class="an-card"><div class="an-card-val">₹%.2f</div><div class="an-card-lbl">Cost this month</div></div>`,
+				`<div class="stat-card"><div class="stat-label">Cost this month</div><div class="stat-value">₹%.2f</div><div class="stat-sub">incl. 18%% GST</div></div>`,
 				stats.CostThisMonth,
 			); err != nil {
 				return err
 			}
 		}
-		// Quality card: colored dot + label — uses .quality-dot + .quality-green/yellow/red from app.css
 		if _, err := fmt.Fprintf(w,
-			`<div class="an-card"><div class="an-card-val" style="font-size:1rem;gap:0.4rem;"><span class="quality-dot %s"></span>%s</div><div class="an-card-lbl">Quality</div></div>`,
+			`<div class="stat-card"><div class="stat-label">Quality</div><div class="stat-value" style="font-size:1.5rem;display:flex;align-items:center;gap:0.4rem"><span class="quality-dot %s"></span>%s</div><div class="stat-sub">Meta phone quality</div></div>`,
 			qualityDotClass, html.EscapeString(qualityLabel),
 		); err != nil {
 			return err
@@ -98,53 +99,52 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 			return err
 		}
 
-		// ── Tier-cap progress bar ─────────────────────────────────────────────────
-		if stats.DailyCap > 0 {
-			fillClass := "tier-bar-fill"
-			if capPct >= 90 {
-				fillClass = "tier-bar-fill tier-bar-fill--warn"
-			}
-			if _, err := fmt.Fprintf(w, `
-<div class="tier-bar-row">
-<span class="tier-bar-lbl">Daily cap</span>
+		// ── Daily send capacity card ──────────────────────────────────────────────
+		if _, err := fmt.Fprintf(w, `
+<div class="card-static" style="margin-bottom:24px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+  <div style="font-size:15px;font-weight:600;color:var(--text-strong)">Daily send capacity</div>
+  <div style="font-size:13px;color:var(--text-secondary)">%d / %d messages</div>
+</div>
 <div class="tier-bar-wrap"><div class="%s" style="width:%d%%"></div></div>
-<span class="tier-bar-lbl">%d / %d</span>
-</div>`, fillClass, capPct, stats.SentToday, stats.DailyCap); err != nil {
-				return err
-			}
-		}
-
-		// ── Quick-actions panel ───────────────────────────────────────────────────
-		if _, err := io.WriteString(w, `
-<div class="dash-actions">
-<a class="btn btn-primary" href="/campaigns/new">New campaign</a>
-<a class="btn btn-secondary" href="/inbox">Open inbox</a>
-<a class="btn btn-secondary" href="/contacts/import">Import contacts</a>
-<a class="btn btn-secondary" href="/templates/new">New template</a>
-</div>`); err != nil {
+<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-top:6px">
+  <span>%d</span><span>%d%% used</span><span>%d</span>
+</div>
+</div>`,
+			stats.SentToday, stats.DailyCap,
+			fillClass, capPct,
+			stats.SentToday, capPct, stats.DailyCap,
+		); err != nil {
 			return err
 		}
 
-		// ── Recent campaigns ──────────────────────────────────────────────────────
+		// ── Two-column layout ─────────────────────────────────────────────────────
 		if _, err := io.WriteString(w, `
-<section class="an-section">
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
-<h2 style="margin:0;font-size:1rem;font-weight:600;color:var(--text-strong)">Recent campaigns</h2>
-<a class="btn btn-secondary btn-sm" href="/campaigns">View all</a>
+<div style="display:grid;grid-template-columns:1fr 300px;gap:24px;align-items:start">`); err != nil {
+			return err
+		}
+
+		// ── Left: Recent campaigns ────────────────────────────────────────────────
+		if _, err := io.WriteString(w, `
+<div class="card-static">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+  <h2 style="margin:0;font-size:15px;font-weight:600;color:var(--text-strong)">Recent campaigns</h2>
+  <a class="btn btn-secondary btn-sm" href="/campaigns">View all</a>
 </div>`); err != nil {
 			return err
 		}
 
 		if len(recent) == 0 {
-			if _, err := io.WriteString(w, `<p class="empty-state">No campaigns yet. <a href="/campaigns/new">Create one →</a></p>`); err != nil {
+			if _, err := io.WriteString(w, `<p class="empty-state" style="margin:16px 0">No campaigns yet. <a href="/campaigns/new">Create one →</a></p>`); err != nil {
 				return err
 			}
 		} else {
-			if _, err := io.WriteString(w, `<table class="an-table"><thead><tr><th>Name</th><th>Status</th><th>Sent</th><th>Delivered</th><th>Failed</th>`); err != nil {
+			if _, err := io.WriteString(w, `<table class="an-table"><thead><tr>
+<th>CAMPAIGN</th><th>STATUS</th><th>SENT</th><th>DELIVERED</th><th>FAILED</th>`); err != nil {
 				return err
 			}
 			if !isAgent {
-				if _, err := io.WriteString(w, `<th>Cost</th>`); err != nil {
+				if _, err := io.WriteString(w, `<th>COST</th>`); err != nil {
 					return err
 				}
 			}
@@ -152,10 +152,12 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 				return err
 			}
 			for _, c := range recent {
+				statusBadge := fmt.Sprintf(`<span class="badge badge-%s">%s</span>`,
+					html.EscapeString(c.Status), html.EscapeString(c.Status))
 				if _, err := fmt.Fprintf(w,
-					`<tr><td><a href="/campaigns/%s/report">%s</a></td><td>%s</td><td>%d</td><td>%d</td><td>%d</td>`,
-					html.EscapeString(c.ID), html.EscapeString(c.Name), html.EscapeString(c.Status),
-					c.SentCount, c.DeliveredCount, c.FailedCount,
+					`<tr><td><a href="/campaigns/%s/report" style="font-weight:500">%s</a></td><td>%s</td><td>%d</td><td>%d</td><td>%d</td>`,
+					html.EscapeString(c.ID), html.EscapeString(c.Name),
+					statusBadge, c.SentCount, c.DeliveredCount, c.FailedCount,
 				); err != nil {
 					return err
 				}
@@ -173,9 +175,61 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 			}
 		}
 
-		if _, err := io.WriteString(w, `</section></div>`); err != nil {
+		if _, err := io.WriteString(w, `</div>`); err != nil { // close left card-static
 			return err
 		}
+
+		// ── Right: Quick actions + Account health ─────────────────────────────────
+		if _, err := io.WriteString(w, `<div style="display:flex;flex-direction:column;gap:16px">`); err != nil {
+			return err
+		}
+
+		// Quick actions card
+		if _, err := io.WriteString(w, `
+<div class="card-static">
+<h2 style="margin:0 0 14px;font-size:15px;font-weight:600;color:var(--text-strong)">Quick actions</h2>
+<div style="display:flex;flex-direction:column;gap:8px">
+<a class="btn btn-primary" href="/campaigns/new" style="text-align:center">+ New campaign</a>
+<a class="btn btn-secondary btn-sm" href="/inbox" style="text-align:center">Open inbox</a>
+<a class="btn btn-secondary btn-sm" href="/contacts/import" style="text-align:center">Import contacts</a>
+<a class="btn btn-secondary btn-sm" href="/templates" style="text-align:center">New template</a>
+</div>
+</div>`); err != nil {
+			return err
+		}
+
+		// Account health card
+		if _, err := fmt.Fprintf(w, `
+<div class="card-static">
+<h2 style="margin:0 0 14px;font-size:15px;font-weight:600;color:var(--text-strong)">Account health</h2>
+<dl style="margin:0;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;font-size:13px">
+  <dt style="color:var(--text-secondary)">Quality</dt>
+  <dd style="margin:0;display:flex;align-items:center;gap:4px;font-weight:500">
+    <span class="quality-dot %s"></span>%s
+  </dd>
+</div>
+<div style="display:flex;justify-content:space-between;font-size:13px">
+  <dt style="color:var(--text-secondary)">Daily cap</dt>
+  <dd style="margin:0;font-weight:500">%d messages</dd>
+</div>
+<div style="display:flex;justify-content:space-between;font-size:13px">
+  <dt style="color:var(--text-secondary)">Sent today</dt>
+  <dd style="margin:0;font-weight:500">%d</dd>
+</div>
+</dl>
+</div>`,
+			qualityDotClass, html.EscapeString(qualityLabel),
+			stats.DailyCap, stats.SentToday,
+		); err != nil {
+			return err
+		}
+
+		// close right column + two-column grid + page-wrap
+		if _, err := io.WriteString(w, `</div></div></div>`); err != nil {
+			return err
+		}
+
 		_, err := io.WriteString(w, ShellClose())
 		return err
 	})

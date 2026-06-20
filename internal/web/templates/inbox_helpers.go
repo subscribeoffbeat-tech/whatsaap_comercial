@@ -49,6 +49,13 @@ func initial(name string) string {
 	if name == "" {
 		return "?"
 	}
+	if strings.HasPrefix(name, "+") {
+		r := []rune(name)
+		if len(r) >= 3 {
+			return string(r[len(r)-2:])
+		}
+		return "#"
+	}
 	r := []rune(name)
 	return strings.ToUpper(string(r[0]))
 }

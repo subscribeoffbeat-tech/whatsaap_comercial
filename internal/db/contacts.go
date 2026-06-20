@@ -20,6 +20,7 @@ type Contact struct {
 	WAPhone      string
 	Name         string
 	Email        *string
+	Industry     string
 	CustomFields map[string]any
 	OptedIn      bool
 	OptInSource  *string
@@ -105,7 +106,7 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 
 	rows, err := pool.Query(ctx, `
 		SELECT
-		  id::text, wa_phone, name, email,
+		  id::text, wa_phone, name, email, industry,
 		  custom_fields::text, opted_in, opt_in_source,
 		  opt_in_at, opt_out_at, is_blocked,
 		  created_at, updated_at
@@ -138,7 +139,7 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 func GetContact(ctx context.Context, pool *pgxpool.Pool, id string) (*Contact, error) {
 	row := pool.QueryRow(ctx, `
 		SELECT
-		  id::text, wa_phone, name, email,
+		  id::text, wa_phone, name, email, industry,
 		  custom_fields::text, opted_in, opt_in_source,
 		  opt_in_at, opt_out_at, is_blocked,
 		  created_at, updated_at
@@ -156,21 +157,21 @@ func GetContact(ctx context.Context, pool *pgxpool.Pool, id string) (*Contact, e
 func CreateContact(ctx context.Context, pool *pgxpool.Pool, c *Contact) error {
 	custom, _ := json.Marshal(c.CustomFields)
 	return pool.QueryRow(ctx, `
-		INSERT INTO contacts (wa_phone, name, email, custom_fields, opted_in, opt_in_source, opt_in_at)
-		VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)
+		INSERT INTO contacts (wa_phone, name, email, industry, custom_fields, opted_in, opt_in_source, opt_in_at)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
 		RETURNING id::text, created_at
-	`, c.WAPhone, c.Name, c.Email, string(custom), c.OptedIn, c.OptInSource, c.OptInAt).
+	`, c.WAPhone, c.Name, c.Email, c.Industry, string(custom), c.OptedIn, c.OptInSource, c.OptInAt).
 		Scan(&c.ID, &c.CreatedAt)
 }
 
-// UpdateContact writes name, email, custom_fields, and opted_in back to the DB.
+// UpdateContact writes name, email, industry, custom_fields, and opted_in back to the DB.
 func UpdateContact(ctx context.Context, pool *pgxpool.Pool, c *Contact) error {
 	custom, _ := json.Marshal(c.CustomFields)
 	_, err := pool.Exec(ctx, `
 		UPDATE contacts
-		SET name = $2, email = $3, custom_fields = $4::jsonb, opted_in = $5, updated_at = NOW()
+		SET name = $2, email = $3, industry = $4, custom_fields = $5::jsonb, opted_in = $6, updated_at = NOW()
 		WHERE id = $1::uuid
-	`, c.ID, c.Name, c.Email, string(custom), c.OptedIn)
+	`, c.ID, c.Name, c.Email, c.Industry, string(custom), c.OptedIn)
 	return err
 }
 
@@ -203,11 +204,11 @@ func BulkInsertContacts(ctx context.Context, pool *pgxpool.Pool, contacts []Cont
 		custom, _ := json.Marshal(c.CustomFields)
 		var id string
 		scanErr := tx.QueryRow(ctx, `
-			INSERT INTO contacts (wa_phone, name, email, custom_fields, opted_in, opt_in_source, opt_in_at)
-			VALUES ($1, $2, $3, $4::jsonb, $5, $6, NOW())
+			INSERT INTO contacts (wa_phone, name, email, industry, custom_fields, opted_in, opt_in_source, opt_in_at)
+			VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, NOW())
 			ON CONFLICT (wa_phone) DO NOTHING
 			RETURNING id::text
-		`, c.WAPhone, c.Name, c.Email, string(custom), c.OptedIn, c.OptInSource).Scan(&id)
+		`, c.WAPhone, c.Name, c.Email, c.Industry, string(custom), c.OptedIn, c.OptInSource).Scan(&id)
 
 		if scanErr == nil {
 			inserted++
@@ -250,7 +251,7 @@ func GetContactsByIDs(ctx context.Context, pool *pgxpool.Pool, ids []string) (ma
 		return nil, nil
 	}
 	rows, err := pool.Query(ctx, `
-		SELECT c.id::text, c.wa_phone, c.name, c.email, c.custom_fields::text,
+		SELECT c.id::text, c.wa_phone, c.name, c.email, c.industry, c.custom_fields::text,
 		       c.opted_in, c.opt_in_source, c.opt_in_at, c.opt_out_at, c.is_blocked,
 		       c.created_at, c.updated_at
 		FROM contacts c
@@ -380,7 +381,7 @@ func scanContact(row interface{ Scan(dest ...any) error }) (*Contact, error) {
 		customRaw              string
 	)
 	if err := row.Scan(
-		&c.ID, &c.WAPhone, &c.Name, &email,
+		&c.ID, &c.WAPhone, &c.Name, &email, &c.Industry,
 		&customRaw, &c.OptedIn, &optInSource,
 		&optInAt, &optOutAt, &c.IsBlocked,
 		&c.CreatedAt, &c.UpdatedAt,

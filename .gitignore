@@ -1,6 +1,9 @@
 ﻿/bin/
 whatsapptool
 whatsapptool.exe
+whatsaap-server
+whatsaap-server-linux
+whatsaap-server-new
 *.exe
 *.exe~
 .env

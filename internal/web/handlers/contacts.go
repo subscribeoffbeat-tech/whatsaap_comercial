@@ -34,7 +34,8 @@ func (h *ContactsHandler) Mount(r chi.Router) {
 	r.Get("/export.csv", h.ExportCSV)
 	r.Post("/", h.Create)
 
-	// CSV import wizard
+	// CSV import wizard — GET redirects to contacts page (modal lives there)
+	r.Get("/import", h.ImportRedirect)
 	r.Post("/import/upload", h.ImportUpload)
 	r.Post("/import/preview", h.ImportPreview)
 	r.Post("/import/confirm", h.ImportConfirm)
@@ -61,11 +62,18 @@ func (h *ContactsHandler) Mount(r chi.Router) {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
+var contactIndustries = []string{
+	"Real Estate", "Manufacturing", "Chemicals", "Construction",
+	"Building Materials", "Healthcare & Pharma", "Food & FMCG",
+	"Beauty & Personal Care", "Technology", "Renewable Energy",
+	"Retail & Branding", "Consumer Brands",
+}
+
 func (h *ContactsHandler) Page(w http.ResponseWriter, r *http.Request) {
 	tags, _ := db.ListTags(r.Context(), h.pool)
 	agent := mw.AgentFromCtx(r.Context())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.ContactsPage(agent, tags).Render(r.Context(), w); err != nil {
+	if err := templates.ContactsPage(agent, tags, contactIndustries).Render(r.Context(), w); err != nil {
 		log.Printf("contacts page render: %v", err)
 	}
 }
@@ -104,38 +112,55 @@ func (h *ContactsHandler) Table(w http.ResponseWriter, r *http.Request) {
 // ── Create ────────────────────────────────────────────────────────────────────
 
 func (h *ContactsHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Phone  string `json:"phone"`
-		Name   string `json:"name"`
-		Email  string `json:"email"`
-		OptIn  bool   `json:"opt_in"`
-		Source string `json:"source"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
-	phone, err := db.NormalizePhone(body.Phone)
+
+	countryCode := strings.TrimSpace(r.FormValue("country_code"))
+	phoneNumber := strings.TrimSpace(r.FormValue("phone_number"))
+	// Support both new split format and legacy single "phone" field
+	rawPhone := r.FormValue("phone")
+	if rawPhone == "" {
+		rawPhone = countryCode + phoneNumber
+	}
+
+	phone, err := db.NormalizePhone(rawPhone)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	src := body.Source
-	if src == "" {
-		src = "manual"
+
+	src := "manual"
+	customFields := map[string]any{}
+	if company := strings.TrimSpace(r.FormValue("company")); company != "" {
+		customFields["company"] = company
 	}
-	c := &db.Contact{WAPhone: phone, Name: body.Name, OptedIn: body.OptIn, OptInSource: &src, CustomFields: map[string]any{}}
-	if body.Email != "" {
-		c.Email = &body.Email
+	if role := strings.TrimSpace(r.FormValue("role")); role != "" {
+		customFields["role"] = role
 	}
+
+	optIn := r.FormValue("opt_in") == "true" || r.FormValue("opt_in") == "on"
+
+	c := &db.Contact{
+		WAPhone:      phone,
+		Name:         strings.TrimSpace(r.FormValue("name")),
+		Industry:     strings.TrimSpace(r.FormValue("industry")),
+		OptedIn:      optIn,
+		OptInSource:  &src,
+		CustomFields: customFields,
+	}
+	if email := strings.TrimSpace(r.FormValue("email")); email != "" {
+		c.Email = &email
+	}
+
 	if err := db.CreateContact(r.Context(), h.pool, c); err != nil {
 		log.Printf("create contact: %v", err)
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("HX-Trigger", "contactsUpdated")
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"id": c.ID})
+	w.WriteHeader(http.StatusOK)
 }
 
 // ── Detail panel ─────────────────────────────────────────────────────────────
@@ -355,6 +380,12 @@ func (h *ContactsHandler) DeleteSegment(w http.ResponseWriter, r *http.Request) 
 }
 
 // ── CSV import wizard ─────────────────────────────────────────────────────────
+
+// ImportRedirect sends users who land on /contacts/import to the contacts page,
+// where the import modal lives.
+func (h *ContactsHandler) ImportRedirect(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/contacts", http.StatusSeeOther)
+}
 
 const maxUploadBytes = 5 << 20 // 5 MB
 

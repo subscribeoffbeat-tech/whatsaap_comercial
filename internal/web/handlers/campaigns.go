@@ -40,6 +40,8 @@ func (h *CampaignHandler) Mount(r chi.Router) {
 	r.Get("/{id}/report", h.Report)
 	r.Get("/{id}/progress", h.ProgressPartial)
 	r.Post("/{id}/cancel", h.Cancel)
+	r.Post("/{id}/pause", h.Pause)
+	r.Get("/{id}/recipients", h.RecipientsList)
 }
 
 func (h *CampaignHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -306,6 +308,26 @@ func (h *CampaignHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/campaigns", http.StatusSeeOther)
+}
+
+func (h *CampaignHandler) Pause(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := db.UpdateCampaignStatus(r.Context(), h.pool, id, "paused"); err != nil {
+		http.Error(w, "pause: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/campaigns", http.StatusSeeOther)
+}
+
+func (h *CampaignHandler) RecipientsList(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	recipients, err := db.GetCampaignRecipients(r.Context(), h.pool, id, 50)
+	if err != nil {
+		http.Error(w, "load recipients: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	templates.CampaignRecipientRows(recipients).Render(r.Context(), w)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

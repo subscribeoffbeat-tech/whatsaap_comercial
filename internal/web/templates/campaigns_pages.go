@@ -61,14 +61,38 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "Campaigns", "")); err != nil {
 			return err
 		}
+
+		// Count by status
+		counts := map[string]int{
+			"all":       len(cs),
+			"running":   0,
+			"draft":     0,
+			"paused":    0,
+			"failed":    0,
+			"completed": 0,
+			"cancelled": 0,
+			"scheduled": 0,
+		}
+		for _, c := range cs {
+			counts[c.Status]++
+		}
+		// "failed" tab = campaigns where FailedCount > 0 and SentCount == 0
+		failedTabCount := 0
+		for _, c := range cs {
+			if c.FailedCount > 0 && c.SentCount == 0 {
+				failedTabCount++
+			}
+		}
+		counts["failed"] = failedTabCount
+
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
-<div class="page-hd">
-<div>
-<div class="screen-title">Campaigns</div>
-<div class="screen-subtitle">Broadcast to opted-in contacts with approved templates</div>
-</div>
-<a class="btn btn-primary btn-sm" href="/campaigns/new">+ New campaign</a>
+<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1 style="font-size:28px;font-weight:800;color:var(--text-primary,#111);margin:0 0 4px">Campaigns</h1>
+    <div style="color:var(--text-secondary);font-size:14px">Broadcast to opted-in contacts with approved templates</div>
+  </div>
+  <a class="btn btn-primary" href="/campaigns/new" style="font-size:15px;padding:10px 20px">+ New campaign</a>
 </div>`)
 		if err != nil {
 			return err
@@ -84,48 +108,146 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 				return err
 			}
 		} else {
-			if _, err := io.WriteString(w, `<table class="tbl">
-<thead><tr><th>Name</th><th>Status</th><th>Sent</th><th>Delivered</th><th>Failed</th><th>Cost</th><th>Scheduled</th><th></th></tr></thead>
-<tbody>`); err != nil {
+			// Alpine.js filter tabs + table
+			_, err = fmt.Fprintf(w, `
+<div x-data="{status:''}">
+<div class="tmpl-tabs" style="margin-bottom:16px">
+  <button class="tmpl-tab" :class="{active:status===''}" @click="status=''">All <span class="badge" style="background:var(--accent-light,#e8f5e9);color:var(--success,#0E7A40);font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
+  <button class="tmpl-tab" :class="{active:status==='running'}" @click="status='running'">Active <span class="badge" style="background:var(--accent-light,#e8f5e9);color:var(--success,#0E7A40);font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
+  <button class="tmpl-tab" :class="{active:status==='draft'}" @click="status='draft'">Draft <span class="badge" style="background:#f3f4f6;color:#6b7280;font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
+  <button class="tmpl-tab" :class="{active:status==='paused'}" @click="status='paused'">Paused <span class="badge" style="background:#f3f4f6;color:#6b7280;font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
+  <button class="tmpl-tab" :class="{active:status==='failed'}" @click="status='failed'">Failed <span class="badge" style="background:#fef2f2;color:#ef4444;font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
+  <button class="tmpl-tab" :class="{active:status==='completed'}" @click="status='completed'">Completed <span class="badge" style="background:var(--accent-light,#e8f5e9);color:var(--success,#0E7A40);font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
+  <button class="tmpl-tab" :class="{active:status==='cancelled'}" @click="status='cancelled'">Cancelled <span class="badge" style="background:#fdf4ff;color:#a855f7;font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
+</div>
+<div class="card-static">
+<table class="tbl">
+<thead><tr>
+  <th style="width:32px"></th>
+  <th>NAME</th><th>STATUS</th><th>SENT</th><th>DELIVERED</th>
+  <th>FAILED</th><th>SUPPRESSED</th><th>COST</th><th>SCHEDULED</th><th>ACTIONS</th><th></th>
+</tr></thead>
+<tbody>`,
+				counts["all"], counts["running"], counts["draft"],
+				counts["paused"], counts["failed"], counts["completed"], counts["cancelled"],
+			)
+			if err != nil {
 				return err
 			}
+
 			for _, c := range cs {
 				sched := "—"
 				if c.ScheduledAt != nil {
 					sched = c.ScheduledAt.Format("02 Jan 15:04")
 				}
-				cancelBtn := ""
-				if c.Status == "running" || c.Status == "scheduled" {
-					cancelBtn = fmt.Sprintf(
-						`<form method="post" action="/campaigns/%s/cancel" style="display:inline">`+
-							`<button class="btn btn-danger" type="submit">Cancel</button></form>`,
+
+				isFailed := c.FailedCount > 0 && c.SentCount == 0
+				// Alpine x-show condition
+				xShow := fmt.Sprintf(`status==='' || status==='%s'`, c.Status)
+				if isFailed {
+					xShow += ` || status==='failed'`
+				}
+
+				// Status badge class
+				badgeClass := "badge-" + c.Status
+				switch c.Status {
+				case "running":
+					badgeClass = "badge-approved"
+				case "completed":
+					badgeClass = "badge-approved"
+				case "cancelled":
+					badgeClass = "badge-rejected"
+				case "paused":
+					badgeClass = "badge-paused"
+				case "failed":
+					badgeClass = "badge-rejected"
+				case "scheduled":
+					badgeClass = "badge-pending"
+				case "draft":
+					badgeClass = "badge-pending"
+				}
+
+				// Action buttons
+				actionsHTML := ""
+				if c.Status == "running" {
+					actionsHTML += fmt.Sprintf(
+						`<form method="post" action="/campaigns/%s/pause" style="display:inline"><button class="btn btn-sm btn-secondary" type="submit">&#8214; Pause</button></form> `,
 						c.ID)
 				}
-				if _, err := fmt.Fprintf(w,
-					`<tr>
-<td><a href="/campaigns/%s/report">%s</a></td>
-<td>%s</td><td>%d</td><td>%d</td><td>%d</td>
-<td>₹%.2f</td><td>%s</td>
-<td>
-<div id="prog-%s"
-  hx-get="/campaigns/%s/progress"
-  hx-trigger="%s"
-  hx-swap="outerHTML">
-</div>
-%s
-</td>
+				if c.Status == "running" || c.Status == "scheduled" {
+					actionsHTML += fmt.Sprintf(
+						`<form method="post" action="/campaigns/%s/cancel" style="display:inline"><button class="btn btn-sm btn-danger" type="submit">Cancel</button></form>`,
+						c.ID)
+				}
+
+				// Progress bar
+				pct := 0
+				if c.TotalRecipients > 0 {
+					pct = (c.SentCount + c.FailedCount + c.SkippedCount) * 100 / c.TotalRecipients
+				}
+				progHTML := fmt.Sprintf(
+					`<div class="prog-wrap"><div class="prog-track"><div class="prog-fill" style="width:%d%%"></div></div><span class="prog-label">%d/%d</span></div>`,
+					pct, c.SentCount+c.FailedCount, c.TotalRecipients,
+				)
+
+				if _, err := fmt.Fprintf(w, `<tr x-show="%s" id="cmp-row-%s">
+  <td><button onclick="toggleCmpDetail('%s')" id="cmp-chev-%s" class="btn btn-sm" style="padding:2px 6px;background:transparent;border:1px solid var(--border);font-size:12px">&#9654;</button></td>
+  <td><a href="/campaigns/%s/report" style="font-weight:600">%s</a></td>
+  <td><span class="badge %s">%s</span></td>
+  <td>%d</td><td>%d</td>
+  <td style="color:var(--danger,#ef4444)">%d</td>
+  <td>%d</td>
+  <td>&#8377;%.2f</td>
+  <td style="font-size:13px;color:var(--text-secondary)">%s</td>
+  <td>%s</td>
+  <td>%s</td>
+</tr>
+<tr id="cmp-detail-%s" style="display:none">
+  <td colspan="11" style="padding:0">
+    <div data-cmp-id="%s" style="padding:12px;background:var(--accent-lighter,#f8fafc);border-top:1px solid var(--border)">
+      Loading...
+    </div>
+  </td>
 </tr>`,
-					c.ID, html.EscapeString(c.Name),
-					c.Status, c.SentCount, c.DeliveredCount, c.FailedCount,
-					c.CostTotalINR, sched,
+					xShow, c.ID,
 					c.ID, c.ID,
-					progressTrigger(c.Status),
-					cancelBtn,
+					c.ID, html.EscapeString(c.Name),
+					badgeClass, c.Status,
+					c.SentCount, c.DeliveredCount,
+					c.FailedCount,
+					c.SkippedCount,
+					c.CostTotalINR,
+					sched,
+					actionsHTML,
+					progHTML,
+					c.ID,
+					c.ID,
 				); err != nil {
 					return err
 				}
 			}
-			if _, err := io.WriteString(w, `</tbody></table>`); err != nil {
+
+			if _, err := io.WriteString(w, `</tbody></table>
+</div>
+</div>
+
+<script>
+function toggleCmpDetail(id) {
+  var row = document.getElementById('cmp-detail-' + id);
+  var chev = document.getElementById('cmp-chev-' + id);
+  if (!row) return;
+  var open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : '';
+  if (chev) chev.innerHTML = open ? '&#9654;' : '&#9660;';
+  if (!open) {
+    var inner = row.querySelector('[data-cmp-id]');
+    if (inner && !inner.dataset.loaded) {
+      inner.dataset.loaded = '1';
+      htmx.ajax('GET', '/campaigns/' + id + '/recipients', {target: inner, swap: 'innerHTML'});
+    }
+  }
+}
+</script>`); err != nil {
 				return err
 			}
 		}
@@ -135,6 +257,44 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 			return err
 		}
 		_, err = io.WriteString(w, ShellClose())
+		return err
+	})
+}
+
+// CampaignRecipientRows renders the expandable recipient detail rows for a campaign.
+func CampaignRecipientRows(recipients []db.CampaignRecipient) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		if len(recipients) == 0 {
+			_, err := io.WriteString(w, `<p style="font-size:13px;color:var(--text-secondary);padding:8px 0">No recipients found.</p>`)
+			return err
+		}
+		if _, err := io.WriteString(w, `<table class="tbl" style="font-size:13px"><thead><tr><th>CONTACT</th><th>PHONE</th><th>STATUS</th><th>SENT AT</th><th>NOTE</th></tr></thead><tbody>`); err != nil {
+			return err
+		}
+		for _, r := range recipients {
+			name := r.Name
+			if name == "" {
+				name = r.WAPhone
+			}
+			sentAt := "—"
+			if r.SentAt != nil {
+				sentAt = r.SentAt.Format("02 Jan 15:04")
+			}
+			note := "—"
+			if r.SkipReason != nil && *r.SkipReason != "" {
+				note = html.EscapeString(*r.SkipReason)
+			}
+			if _, err := fmt.Fprintf(w, `<tr><td>%s</td><td>%s</td><td><span class="badge badge-%s">%s</span></td><td>%s</td><td>%s</td></tr>`,
+				html.EscapeString(name),
+				html.EscapeString(r.WAPhone),
+				r.Status, r.Status,
+				sentAt,
+				note,
+			); err != nil {
+				return err
+			}
+		}
+		_, err := io.WriteString(w, `</tbody></table>`)
 		return err
 	})
 }
