@@ -81,12 +81,16 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
 <div class="page-hd">
-<h1>Analytics</h1>
+<div>
+<h1 class="screen-title">Analytics</h1>
+<p class="screen-subtitle">Delivery performance and cost breakdown.</p>
+</div>
 <form method="get" action="/analytics" class="an-date-form">
 <input type="date" name="from" value="%s">
+<span style="color:var(--text-muted)">→</span>
 <input type="date" name="to" value="%s">
-<button class="btn btn--secondary" type="submit">Apply</button>
-<a class="btn btn--secondary" href="/analytics/export.csv">Export CSV</a>
+<button class="btn btn-secondary btn-sm" type="submit">Apply</button>
+<a class="btn btn-secondary btn-sm" href="/analytics/export.csv">Export CSV</a>
 </form>
 </div>`,
 			data.From.Format("2006-01-02"), data.To.Format("2006-01-02"))

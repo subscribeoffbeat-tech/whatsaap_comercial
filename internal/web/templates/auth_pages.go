@@ -31,7 +31,7 @@ func LoginPage(flash string) templ.Component {
 <input type="email" name="email" required autofocus autocomplete="email"></label>
 <label class="field"><span>Password</span>
 <input type="password" name="password" required autocomplete="current-password"></label>
-<button class="btn btn--primary" type="submit">Sign in</button>
+<button class="btn btn-primary" type="submit">Sign in</button>
 </form>
 </div>
 </body></html>`, flashHTML)
@@ -62,7 +62,7 @@ func InvitePage(name, token, errMsg string) templ.Component {
 <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
 <label class="field"><span>Confirm password</span>
 <input type="password" name="confirm" required minlength="8" autocomplete="new-password"></label>
-<button class="btn btn--primary" type="submit">Activate account</button>
+<button class="btn btn-primary" type="submit">Activate account</button>
 </form>
 </div>
 </body></html>`, html.EscapeString(name), errHTML, html.EscapeString(token))
@@ -112,7 +112,7 @@ func OnboardingPage(flash string) templ.Component {
 <input type="password" name="password" required minlength="8"></label>
 <label class="field"><span>Confirm password</span>
 <input type="password" name="confirm" required minlength="8"></label>
-<button class="btn btn--primary" type="submit">Create admin account</button>
+<button class="btn btn-primary" type="submit">Create admin account</button>
 </form>
 </div>
 </body></html>`, flashHTML)
@@ -145,7 +145,7 @@ configure missing values on your server before proceeding.
 <div class="onb-checklist">
 %s%s%s%s%s</div>
 <div style="display:flex;justify-content:flex-end;margin-top:1.5rem">
-<a class="btn btn--primary" href="/">Continue to app →</a>
+<a class="btn btn-primary" href="/">Continue to app →</a>
 </div>
 </div>
 </body></html>`,
