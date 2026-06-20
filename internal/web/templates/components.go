@@ -3,6 +3,7 @@ package templates
 import (
 	"fmt"
 	"html"
+	"strings"
 )
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -135,7 +136,134 @@ func EmptyStateHTML(iconSVG, title, body string, actions []EmptyAction) string {
 	)
 }
 
-// Pre-built SVG icons for empty states (24×24, stroke="currentColor").
+// ── Form error helpers (G3) ───────────────────────────────────────────────────
+
+// FieldError returns a small inline error message for a single form field.
+func FieldError(msg string) string {
+	if msg == "" {
+		return ""
+	}
+	return fmt.Sprintf(`<p class="field-err" role="alert">%s</p>`, html.EscapeString(msg))
+}
+
+// FlashScript returns an inline <script> that fires window.__showToast on
+// DOMContentLoaded.  Use this for redirect-flow flash messages so the toast
+// appears after the next full-page render.
+func FlashScript(kind ToastKind, msg string) string {
+	return fmt.Sprintf(
+		`<script>document.addEventListener('DOMContentLoaded',function(){window.__showToast&&window.__showToast('%s','%s')})</script>`,
+		string(kind),
+		// single-quote-safe: escape ' so the inline JS string stays valid
+		strings.ReplaceAll(html.EscapeString(msg), "'", `\'`),
+	)
+}
+
+// FormBanner returns a full-width error banner for form-level errors.
+func FormBanner(msg string) string {
+	if msg == "" {
+		return ""
+	}
+	return fmt.Sprintf(
+		`<div class="callout callout--danger" role="alert" aria-live="assertive"><span aria-hidden="true">⚠</span> %s</div>`,
+		html.EscapeString(msg),
+	)
+}
+
+// ── Badge helper (G5) ─────────────────────────────────────────────────────────
+
+// BadgeHTML returns a status badge span.
+// variant maps to a CSS class: badge-success, badge-warning, badge-danger,
+// badge-info, badge-neutral, badge-primary, badge-approved, badge-pending,
+// badge-rejected, badge-on, badge-off, or any badge-* class in app.css.
+func BadgeHTML(variant, label string) string {
+	return fmt.Sprintf(`<span class="badge badge-%s">%s</span>`,
+		html.EscapeString(variant), html.EscapeString(label))
+}
+
+// ── Callout helper ────────────────────────────────────────────────────────────
+
+// CalloutHTML returns a contextual callout box.
+// kind is one of: info, warning, danger, success — maps to callout--{kind} CSS class.
+// msg is a plain string and will be HTML-escaped.
+func CalloutHTML(kind, msg string) string {
+	icon := "ℹ"
+	role := "status"
+	switch kind {
+	case "warning":
+		icon = "⚠"
+		role = "alert"
+	case "danger":
+		icon = "⛔"
+		role = "alert"
+	case "success":
+		icon = "✓"
+	}
+	return fmt.Sprintf(
+		`<div class="callout callout--%s" role="%s"><span aria-hidden="true">%s</span> %s</div>`,
+		html.EscapeString(kind), role, icon, html.EscapeString(msg),
+	)
+}
+
+// ── Modal shell helper (G4) ───────────────────────────────────────────────────
+
+// ModalShell returns a fully-accessible <dialog> wrapper.
+// id must be unique on the page. title is shown as the dialog heading.
+// bodyHTML is trusted server-side HTML (not user input).
+// Open with: document.getElementById(id).showModal()
+// Clicking the backdrop (outside the dialog box) closes the dialog automatically.
+func ModalShell(id, title, bodyHTML string) string {
+	titleID := id + "-title"
+	return fmt.Sprintf(
+		`<dialog id="%s" aria-modal="true" aria-labelledby="%s" onclick="if(event.target===this)this.close()">`+
+			`<h2 id="%s" style="margin:0 0 16px;font-size:17px;font-weight:700">%s</h2>`+
+			`%s`+
+			`</dialog>`,
+		html.EscapeString(id),
+		html.EscapeString(titleID),
+		html.EscapeString(titleID),
+		html.EscapeString(title),
+		bodyHTML,
+	)
+}
+
+// ModalShellRaw is like ModalShell but accepts the full inner HTML directly,
+// for dialogs that need custom headers (gradient bands, summary DL layouts, etc.).
+// The caller must include an element with id=labelledByID somewhere in innerHTML.
+// dialogClass is optional; pass "" for no class attribute.
+func ModalShellRaw(id, dialogClass, labelledByID, innerHTML string) string {
+	clsAttr := ""
+	if dialogClass != "" {
+		clsAttr = fmt.Sprintf(` class="%s"`, html.EscapeString(dialogClass))
+	}
+	return fmt.Sprintf(
+		`<dialog id="%s"%s aria-modal="true" aria-labelledby="%s" onclick="if(event.target===this)this.close()">%s</dialog>`,
+		html.EscapeString(id),
+		clsAttr,
+		html.EscapeString(labelledByID),
+		innerHTML,
+	)
+}
+
+// ── Skeleton loader (G1b) ─────────────────────────────────────────────────────
+
+// SkeletonRows returns n placeholder rows shown while a table loads via HTMX.
+func SkeletonRows(n int) string {
+	row := `<div class="skeleton-row">` +
+		`<div class="skeleton" style="width:36px;height:36px;border-radius:50%;flex-shrink:0"></div>` +
+		`<div style="flex:1;display:flex;flex-direction:column;gap:6px">` +
+		`<div class="skeleton" style="height:13px;width:55%"></div>` +
+		`<div class="skeleton" style="height:11px;width:35%"></div>` +
+		`</div>` +
+		`<div class="skeleton" style="height:20px;width:60px;border-radius:20px"></div>` +
+		`</div>`
+	out := `<div style="padding:8px 0">`
+	for i := 0; i < n; i++ {
+		out += row
+	}
+	return out + `</div>`
+}
+
+// ── Pre-built SVG icons for empty states (24×24, stroke="currentColor"). ─────
 const (
 	EmptyIconContacts   = `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>`
 	EmptyIconCampaigns  = `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l18-7-7 18-2.5-7.5L3 11z"/></svg>`

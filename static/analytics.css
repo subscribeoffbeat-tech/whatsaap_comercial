@@ -62,7 +62,7 @@
   align-items: start;
   margin-bottom: 1.5rem;
 }
-@media (max-width: 720px) { .an-grid { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .an-grid { grid-template-columns: 1fr; } }
 
 /* ── CSS bar chart ───────────────────────────────────────────────── */
 .an-chart {

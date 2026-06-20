@@ -639,3 +639,17 @@
 .cmp-detail-inner .rpt-table tbody tr:hover td {
   background: none;
 }
+
+@media (max-width: 900px) {
+  .wizard-steps { flex-wrap: wrap; gap: 6px; }
+  .wizard-form { padding: 20px 18px; }
+}
+
+@media (max-width: 600px) {
+  .wizard { border-radius: var(--radius); }
+  .wizard-steps { flex-wrap: wrap; gap: 4px; padding: 10px 12px; }
+  .wizard-steps .step { font-size: 12px; padding: 4px 8px; }
+  .wizard-form { padding: 14px; }
+  .wizard-btns, .wizard-actions { flex-direction: column; gap: 8px; }
+  .wizard-btns .btn, .wizard-actions .btn { width: 100%; text-align: center; justify-content: center; }
+}

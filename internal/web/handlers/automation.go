@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -40,15 +41,16 @@ func (h *AutomationHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpls, _ := db.ListTemplates(r.Context(), h.pool)
 	agent := mw.AgentFromCtx(r.Context())
+	flash := r.URL.Query().Get("flash")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	templates.AutomationPage(agent, rules, tmpls).Render(r.Context(), w)
+	templates.AutomationPage(agent, rules, tmpls, flash).Render(r.Context(), w)
 }
 
 func (h *AutomationHandler) NewForm(w http.ResponseWriter, r *http.Request) {
 	tmpls, _ := db.ListTemplates(r.Context(), h.pool)
 	agent := mw.AgentFromCtx(r.Context())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	templates.AutomationForm(agent, nil, tmpls).Render(r.Context(), w)
+	templates.AutomationForm(agent, nil, tmpls, "").Render(r.Context(), w)
 }
 
 func (h *AutomationHandler) EditForm(w http.ResponseWriter, r *http.Request) {
@@ -69,13 +71,17 @@ func (h *AutomationHandler) EditForm(w http.ResponseWriter, r *http.Request) {
 	tmpls, _ := db.ListTemplates(r.Context(), h.pool)
 	agent := mw.AgentFromCtx(r.Context())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	templates.AutomationForm(agent, rule, tmpls).Render(r.Context(), w)
+	templates.AutomationForm(agent, rule, tmpls, "").Render(r.Context(), w)
 }
 
 func (h *AutomationHandler) Create(w http.ResponseWriter, r *http.Request) {
 	rule, err := parseRuleForm(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		tmpls, _ := db.ListTemplates(r.Context(), h.pool)
+		agent := mw.AgentFromCtx(r.Context())
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		templates.AutomationForm(agent, nil, tmpls, err.Error()).Render(r.Context(), w)
 		return
 	}
 	if err := db.CreateRule(r.Context(), h.pool, rule); err != nil {
@@ -83,7 +89,7 @@ func (h *AutomationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "create failed", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/automation", http.StatusSeeOther)
+	http.Redirect(w, r, "/automation?flash=Rule+created.", http.StatusSeeOther)
 }
 
 func (h *AutomationHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +100,12 @@ func (h *AutomationHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	rule, err := parseRuleForm(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		dbRule, _ := db.GetRule(r.Context(), h.pool, id)
+		tmpls, _ := db.ListTemplates(r.Context(), h.pool)
+		agent := mw.AgentFromCtx(r.Context())
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		templates.AutomationForm(agent, dbRule, tmpls, err.Error()).Render(r.Context(), w)
 		return
 	}
 	rule.ID = id
@@ -103,7 +114,7 @@ func (h *AutomationHandler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "update failed", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/automation", http.StatusSeeOther)
+	http.Redirect(w, r, "/automation?flash=Rule+saved.", http.StatusSeeOther)
 }
 
 func (h *AutomationHandler) Toggle(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +134,7 @@ func (h *AutomationHandler) Toggle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "toggle failed", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/automation", http.StatusSeeOther)
+	http.Redirect(w, r, "/automation?flash=Rule+updated.", http.StatusSeeOther)
 }
 
 func (h *AutomationHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -137,8 +148,8 @@ func (h *AutomationHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "delete failed", http.StatusInternalServerError)
 		return
 	}
-	// Return empty 200 so HTMX removes the row.
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Rule deleted.", "", ""))
 }
 
 // parseRuleForm reads an automation rule from the request form.

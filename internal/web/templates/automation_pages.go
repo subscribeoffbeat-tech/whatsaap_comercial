@@ -12,10 +12,15 @@ import (
 	mw "whatsapptool/internal/web/middleware"
 )
 
-func AutomationPage(agent *mw.AgentClaims, rules []*db.AutomationRule, tmpls []db.Template) templ.Component {
+func AutomationPage(agent *mw.AgentClaims, rules []*db.AutomationRule, tmpls []db.Template, flash string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/automation", "Automation", "")); err != nil {
 			return err
+		}
+		if flash != "" {
+			if _, err := io.WriteString(w, FlashScript(ToastSuccess, flash)); err != nil {
+				return err
+			}
 		}
 		_, err := io.WriteString(w, `
 <div class="page-wrap">
@@ -28,22 +33,25 @@ func AutomationPage(agent *mw.AgentClaims, rules []*db.AutomationRule, tmpls []d
 </div>
 
 <div x-data="{ trigger: '' }">
-<div class="au-tabs">
-  <button type="button" class="au-tab" :class="trigger==='' ? 'active' : ''" @click="trigger=''">All</button>
-  <button type="button" class="au-tab" :class="trigger==='keyword' ? 'active' : ''" @click="trigger='keyword'">Keyword</button>
-  <button type="button" class="au-tab" :class="trigger==='welcome' ? 'active' : ''" @click="trigger='welcome'">Welcome</button>
-  <button type="button" class="au-tab" :class="trigger==='away' ? 'active' : ''" @click="trigger='away'">Away</button>
-  <button type="button" class="au-tab" :class="trigger==='stop' ? 'active' : ''" @click="trigger='stop'">Stop</button>
+<div class="au-tabs" role="tablist">
+  <button type="button" class="au-tab" role="tab" :class="trigger==='' ? 'active' : ''" :aria-selected="trigger===''" @click="trigger=''">All</button>
+  <button type="button" class="au-tab" role="tab" :class="trigger==='keyword' ? 'active' : ''" :aria-selected="trigger==='keyword'" @click="trigger='keyword'">Keyword</button>
+  <button type="button" class="au-tab" role="tab" :class="trigger==='welcome' ? 'active' : ''" :aria-selected="trigger==='welcome'" @click="trigger='welcome'">Welcome</button>
+  <button type="button" class="au-tab" role="tab" :class="trigger==='away' ? 'active' : ''" :aria-selected="trigger==='away'" @click="trigger='away'">Away</button>
+  <button type="button" class="au-tab" role="tab" :class="trigger==='stop' ? 'active' : ''" :aria-selected="trigger==='stop'" @click="trigger='stop'">Stop</button>
 </div>
-<div class="card-static">
-<table class="au-table" id="rules-table">
+<div class="card-static" role="tabpanel" tabindex="0">
+<table class="au-table tbl" id="rules-table">
 <thead><tr><th>Name</th><th>Trigger</th><th>Keyword</th><th>Active</th><th>Actions</th></tr></thead>
 <tbody>`)
 		if err != nil {
 			return err
 		}
 		if len(rules) == 0 {
-			if _, err := io.WriteString(w, `<tr><td colspan="5"><div class="empty-state"><div class="empty-icon">&#9889;</div><div class="empty-title">No rules yet</div><div class="empty-desc">Create a keyword reply, welcome message, or away message to automate responses.</div></div></td></tr>`); err != nil {
+			empty := EmptyStateHTML(EmptyIconAutomation, "No rules yet",
+				"Create a keyword reply, welcome message, or away message to automate responses.",
+				[]EmptyAction{{Label: "New rule", Primary: true, HREF: "/automation/new"}})
+			if _, err := fmt.Fprintf(w, `<tr><td colspan="5">%s</td></tr>`, empty); err != nil {
 				return err
 			}
 		} else {
@@ -62,7 +70,7 @@ func AutomationPage(agent *mw.AgentClaims, rules []*db.AutomationRule, tmpls []d
 	})
 }
 
-func AutomationForm(agent *mw.AgentClaims, rule *db.AutomationRule, tmpls []db.Template) templ.Component {
+func AutomationForm(agent *mw.AgentClaims, rule *db.AutomationRule, tmpls []db.Template, errMsg string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/automation", "Automation", "")); err != nil {
 			return err
@@ -102,15 +110,16 @@ func AutomationForm(agent *mw.AgentClaims, rule *db.AutomationRule, tmpls []db.T
 <div class="page-wrap">
 <div class="page-hd"><div class="screen-title">%s</div></div>
 <div class="card-static au-form-card">
+%s
 <form method="%s" action="%s">
 <div class="form-group">
-  <label class="form-label">Name</label>
-  <input class="form-input" type="text" name="name" value="%s" required>
+  <label class="form-label" for="aut-name">Name</label>
+  <input id="aut-name" class="form-input" type="text" name="name" value="%s" required>
 </div>
 
 <div class="form-group">
-  <label class="form-label">Trigger type</label>
-  <select class="form-input" name="trigger_type">
+  <label class="form-label" for="aut-trigger">Trigger type</label>
+  <select id="aut-trigger" class="form-input" name="trigger_type">
     <option value="keyword"%s>Keyword</option>
     <option value="welcome"%s>Welcome (first message)</option>
     <option value="away"%s>Away (outside hours)</option>
@@ -118,28 +127,28 @@ func AutomationForm(agent *mw.AgentClaims, rule *db.AutomationRule, tmpls []db.T
 </div>
 
 <div class="form-group">
-  <label class="form-label">Keyword</label>
-  <input class="form-input" type="text" name="keyword" value="%s">
+  <label class="form-label" for="aut-keyword">Keyword</label>
+  <input id="aut-keyword" class="form-input" type="text" name="keyword" value="%s">
 </div>
 
 <div class="form-group">
-  <label class="form-label">Keyword match</label>
-  <select class="form-input" name="keyword_match">
+  <label class="form-label" for="aut-match">Keyword match</label>
+  <select id="aut-match" class="form-input" name="keyword_match">
     <option value="exact"%s>Exact</option>
     <option value="contains"%s>Contains</option>
   </select>
 </div>
 
 <div class="form-group">
-  <label class="form-label">Response text</label>
-  <textarea class="form-input" name="response_text" rows="3">%s</textarea>
+  <label class="form-label" for="aut-text">Response text</label>
+  <textarea id="aut-text" class="form-input" name="response_text" rows="3">%s</textarea>
 </div>
 
 <div class="form-group">
-  <label class="form-label">Template (optional)</label>
-  <select class="form-input" name="template_id">
+  <label class="form-label" for="aut-tmpl">Template (optional)</label>
+  <select id="aut-tmpl" class="form-input" name="template_id">
     <option value="">— none —</option>`,
-			html.EscapeString(title), method, html.EscapeString(action),
+			html.EscapeString(title), FormBanner(errMsg), method, html.EscapeString(action),
 			html.EscapeString(name),
 			sel(triggerType, "keyword"), sel(triggerType, "welcome"), sel(triggerType, "away"),
 			html.EscapeString(keyword),
@@ -169,8 +178,8 @@ func AutomationForm(agent *mw.AgentClaims, rule *db.AutomationRule, tmpls []db.T
 </div>
 
 <div class="form-group">
-  <label class="form-label">Priority <span style="color:var(--text-muted);font-weight:400">(lower number = higher priority)</span></label>
-  <input class="form-input" type="number" name="priority" value="%d" min="0" style="max-width:120px">
+  <label class="form-label" for="aut-priority">Priority <span style="color:var(--text-muted);font-weight:400">(lower number = higher priority)</span></label>
+  <input id="aut-priority" class="form-input" type="number" name="priority" value="%d" min="0" style="max-width:120px">
 </div>
 
 <div class="form-group">
@@ -223,7 +232,7 @@ func AutomationRuleRow(rule *db.AutomationRule, tmpls []db.Template) templ.Compo
 			activeTitle = "Active — click to deactivate"
 		}
 		toggleHTML := fmt.Sprintf(`<form method="post" action="/automation/%d/toggle" style="margin:0">
-  <button type="submit" class="toggle-wrap" title="%s" style="background:none;border:none;cursor:pointer;padding:0">
+  <button type="submit" class="toggle-wrap" aria-label="%s" style="background:none;border:none;cursor:pointer;padding:0">
     <span class="toggle-sw">
       <input type="checkbox"%s style="pointer-events:none">
       <span class="toggle-track"></span>

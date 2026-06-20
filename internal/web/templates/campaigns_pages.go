@@ -111,16 +111,16 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 			// Alpine.js filter tabs + table
 			_, err = fmt.Fprintf(w, `
 <div x-data="{status:''}">
-<div class="tmpl-tabs" style="margin-bottom:16px">
-  <button class="tmpl-tab" :class="{active:status===''}" @click="status=''">All <span class="badge" style="background:var(--accent-light,#e8f5e9);color:var(--success,#0E7A40);font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
-  <button class="tmpl-tab" :class="{active:status==='running'}" @click="status='running'">Active <span class="badge" style="background:var(--accent-light,#e8f5e9);color:var(--success,#0E7A40);font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
-  <button class="tmpl-tab" :class="{active:status==='draft'}" @click="status='draft'">Draft <span class="badge" style="background:#f3f4f6;color:#6b7280;font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
-  <button class="tmpl-tab" :class="{active:status==='paused'}" @click="status='paused'">Paused <span class="badge" style="background:#f3f4f6;color:#6b7280;font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
-  <button class="tmpl-tab" :class="{active:status==='failed'}" @click="status='failed'">Failed <span class="badge" style="background:#fef2f2;color:#ef4444;font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
-  <button class="tmpl-tab" :class="{active:status==='completed'}" @click="status='completed'">Completed <span class="badge" style="background:var(--accent-light,#e8f5e9);color:var(--success,#0E7A40);font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
-  <button class="tmpl-tab" :class="{active:status==='cancelled'}" @click="status='cancelled'">Cancelled <span class="badge" style="background:#fdf4ff;color:#a855f7;font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px">%d</span></button>
+<div class="tmpl-tabs" style="margin-bottom:16px" role="tablist">
+  <button class="tmpl-tab" role="tab" :class="{active:status===''}" :aria-selected="status===''" @click="status=''">All <span class="badge-cnt badge-cnt-success">%d</span></button>
+  <button class="tmpl-tab" role="tab" :class="{active:status==='running'}" :aria-selected="status==='running'" @click="status='running'">Active <span class="badge-cnt badge-cnt-success">%d</span></button>
+  <button class="tmpl-tab" role="tab" :class="{active:status==='draft'}" :aria-selected="status==='draft'" @click="status='draft'">Draft <span class="badge-cnt badge-cnt-neutral">%d</span></button>
+  <button class="tmpl-tab" role="tab" :class="{active:status==='paused'}" :aria-selected="status==='paused'" @click="status='paused'">Paused <span class="badge-cnt badge-cnt-neutral">%d</span></button>
+  <button class="tmpl-tab" role="tab" :class="{active:status==='failed'}" :aria-selected="status==='failed'" @click="status='failed'">Failed <span class="badge-cnt badge-cnt-danger">%d</span></button>
+  <button class="tmpl-tab" role="tab" :class="{active:status==='completed'}" :aria-selected="status==='completed'" @click="status='completed'">Completed <span class="badge-cnt badge-cnt-success">%d</span></button>
+  <button class="tmpl-tab" role="tab" :class="{active:status==='cancelled'}" :aria-selected="status==='cancelled'" @click="status='cancelled'">Cancelled <span class="badge-cnt badge-cnt-purple">%d</span></button>
 </div>
-<div class="card-static">
+<div class="card-static" role="tabpanel" tabindex="0">
 <table class="tbl">
 <thead><tr>
   <th style="width:32px"></th>
@@ -148,35 +148,30 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 					xShow += ` || status==='failed'`
 				}
 
-				// Status badge class
-				badgeClass := "badge-" + c.Status
+				// Status badge
+				badgeVariant := c.Status
 				switch c.Status {
-				case "running":
-					badgeClass = "badge-approved"
-				case "completed":
-					badgeClass = "badge-approved"
-				case "cancelled":
-					badgeClass = "badge-rejected"
+				case "running", "completed":
+					badgeVariant = "approved"
+				case "cancelled", "failed":
+					badgeVariant = "rejected"
 				case "paused":
-					badgeClass = "badge-paused"
-				case "failed":
-					badgeClass = "badge-rejected"
-				case "scheduled":
-					badgeClass = "badge-pending"
-				case "draft":
-					badgeClass = "badge-pending"
+					badgeVariant = "paused"
+				case "scheduled", "draft":
+					badgeVariant = "pending"
 				}
+				statusBadge := BadgeHTML(badgeVariant, c.Status)
 
 				// Action buttons
 				actionsHTML := ""
 				if c.Status == "running" {
 					actionsHTML += fmt.Sprintf(
-						`<form method="post" action="/campaigns/%s/pause" style="display:inline"><button class="btn btn-sm btn-secondary" type="submit">&#8214; Pause</button></form> `,
+						`<form hx-post="/campaigns/%s/pause" hx-swap="none" hx-disabled-elt="find button" style="display:inline"><button class="btn btn-sm btn-secondary" type="submit">&#8214; Pause</button></form> `,
 						c.ID)
 				}
 				if c.Status == "running" || c.Status == "scheduled" {
 					actionsHTML += fmt.Sprintf(
-						`<form method="post" action="/campaigns/%s/cancel" style="display:inline"><button class="btn btn-sm btn-danger" type="submit">Cancel</button></form>`,
+						`<form hx-post="/campaigns/%s/cancel" hx-swap="none" hx-disabled-elt="find button" style="display:inline"><button class="btn btn-sm btn-danger" type="submit">Cancel</button></form>`,
 						c.ID)
 				}
 
@@ -193,7 +188,7 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 				if _, err := fmt.Fprintf(w, `<tr x-show="%s" id="cmp-row-%s">
   <td><button onclick="toggleCmpDetail('%s')" id="cmp-chev-%s" class="btn btn-sm" style="padding:2px 6px;background:transparent;border:1px solid var(--border);font-size:12px">&#9654;</button></td>
   <td><a href="/campaigns/%s/report" style="font-weight:600">%s</a></td>
-  <td><span class="badge %s">%s</span></td>
+  <td>%s</td>
   <td>%d</td><td>%d</td>
   <td style="color:var(--danger,#ef4444)">%d</td>
   <td>%d</td>
@@ -204,7 +199,7 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 </tr>
 <tr id="cmp-detail-%s" style="display:none">
   <td colspan="11" style="padding:0">
-    <div data-cmp-id="%s" style="padding:12px;background:var(--accent-lighter,#f8fafc);border-top:1px solid var(--border)">
+    <div data-cmp-id="%s" style="padding:12px;background:var(--accent-lighter,#f8fafc);border-top:1px solid var(--border)" aria-live="polite" aria-atomic="false">
       Loading...
     </div>
   </td>
@@ -212,7 +207,7 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 					xShow, c.ID,
 					c.ID, c.ID,
 					c.ID, html.EscapeString(c.Name),
-					badgeClass, c.Status,
+					statusBadge,
 					c.SentCount, c.DeliveredCount,
 					c.FailedCount,
 					c.SkippedCount,
@@ -284,10 +279,10 @@ func CampaignRecipientRows(recipients []db.CampaignRecipient) templ.Component {
 			if r.SkipReason != nil && *r.SkipReason != "" {
 				note = html.EscapeString(*r.SkipReason)
 			}
-			if _, err := fmt.Fprintf(w, `<tr><td>%s</td><td>%s</td><td><span class="badge badge-%s">%s</span></td><td>%s</td><td>%s</td></tr>`,
+			if _, err := fmt.Fprintf(w, `<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>`,
 				html.EscapeString(name),
 				html.EscapeString(r.WAPhone),
-				r.Status, r.Status,
+				BadgeHTML(r.Status, r.Status),
 				sentAt,
 				note,
 			); err != nil {
@@ -431,9 +426,7 @@ func WizardStep2(state WizardState, tmpls []db.Template) templ.Component {
 				msg = fmt.Sprintf("%d contacts skipped (frequency cap, last 24h)",
 					state.SkipReport.FreqCap)
 			}
-			skipCallout = `<div class="callout callout--warning" role="status">` +
-				`<span aria-hidden="true">⚠</span> ` +
-				html.EscapeString(msg) + `</div>`
+			skipCallout = CalloutHTML("warning", msg)
 		}
 
 		_, err := fmt.Fprintf(w, `
@@ -464,10 +457,10 @@ func WizardStep2(state WizardState, tmpls []db.Template) templ.Component {
 			if _, err := fmt.Fprintf(w,
 				`<label class="tmpl-option">
 <input type="radio" name="template_id" value="%s"%s>
-<strong>%s</strong> <span class="badge badge-%s">%s</span> / %s / %s
+<strong>%s</strong> %s / %s / %s
 </label>`,
 				t.ID, checked, html.EscapeString(t.Name),
-				t.Status, t.Status, t.Language, t.Category,
+				BadgeHTML(t.Status, t.Status), t.Language, t.Category,
 			); err != nil {
 				return err
 			}
@@ -499,8 +492,7 @@ func wizardStep3Inner(state WizardState, errMsg string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		errHTML := ""
 		if errMsg != "" {
-			errHTML = `<div class="callout callout--warning" role="alert">` +
-				html.EscapeString(errMsg) + `</div>`
+			errHTML = CalloutHTML("warning", errMsg)
 		}
 		_, err := fmt.Fprintf(w, `
 <div class="wizard">
@@ -586,30 +578,40 @@ func WizardStep4(state WizardState, tmpl *db.Template) templ.Component {
 			pct := projected * 100 / state.DailyCap
 			switch {
 			case projected >= state.DailyCap:
-				tierBanner = fmt.Sprintf(
-					`<div class="callout callout--danger" role="alert">`+
-						`<span aria-hidden="true">⛔</span> `+
-						`This campaign (%d messages) would exceed your daily cap of %d — `+
-						`it will be blocked at launch. Reduce audience or try tomorrow.</div>`,
-					state.EligibleCount, state.DailyCap)
+				tierBanner = CalloutHTML("danger", fmt.Sprintf(
+					"This campaign (%d messages) would exceed your daily cap of %d — it will be blocked at launch. Reduce audience or try tomorrow.",
+					state.EligibleCount, state.DailyCap))
 			case pct >= 70:
-				tierBanner = fmt.Sprintf(
-					`<div class="callout callout--warning" role="alert">`+
-						`<span aria-hidden="true">⚠</span> `+
-						`Adding %d messages brings today's projected total to %d%% of your %d daily cap `+
-						`(%d sent so far).</div>`,
-					state.EligibleCount, pct, state.DailyCap, state.DailySent)
+				tierBanner = CalloutHTML("warning", fmt.Sprintf(
+					"Adding %d messages brings today's projected total to %d%% of your %d daily cap (%d sent so far).",
+					state.EligibleCount, pct, state.DailyCap, state.DailySent))
 			default:
-				tierBanner = fmt.Sprintf(
-					`<div class="callout callout--info" role="status">`+
-						`<span aria-hidden="true">ℹ</span> `+
-						`Daily cap: %d sent · %d remaining · this campaign: %d messages.</div>`,
-					state.DailySent, remaining, state.EligibleCount)
+				tierBanner = CalloutHTML("info", fmt.Sprintf(
+					"Daily cap: %d sent · %d remaining · this campaign: %d messages.",
+					state.DailySent, remaining, state.EligibleCount))
 			}
 		}
 
 		// The form carries no submit button of its own; the confirm dialog's
 		// "Confirm & send" button submits it via form="launch-form".
+		confirmInner := fmt.Sprintf(
+			`<h2 id="confirm-launch-title">Confirm campaign launch</h2>`+
+				`<div class="confirm-summary"><dl>`+
+				`<dt>Recipients</dt><dd>%d contacts</dd>`+
+				`<dt>Category</dt><dd>%s</dd>`+
+				`<dt>Estimated cost</dt><dd>&#8377;%.2f (incl. 18%% GST)</dd>`+
+				`</dl></div>`+
+				`<p class="confirm-note">This action cannot be undone. %d messages will be queued for delivery.</p>`+
+				`<div class="confirm-btns">`+
+				`<button type="button" class="btn btn-secondary" onclick="document.getElementById('confirm-launch').close()">Cancel</button>`+
+				`<button type="submit" form="launch-form" class="btn btn-primary">Confirm &amp; send to %d contacts</button>`+
+				`</div>`,
+			state.EligibleCount,
+			html.EscapeString(tmplCategory),
+			state.EstCost,
+			state.EligibleCount,
+			state.EligibleCount,
+		)
 		_, err := fmt.Fprintf(w, `
 <div class="wizard">
 <div class="wizard-steps">
@@ -628,32 +630,16 @@ func WizardStep4(state WizardState, tmpl *db.Template) templ.Component {
 <dt>Template</dt><dd>%s</dd>
 <dt>Category</dt><dd>%s</dd>
 <dt>Scheduling</dt><dd>%s</dd>
-<dt>Estimated cost</dt><dd>₹%.2f</dd>
+<dt>Estimated cost</dt><dd>&#8377;%.2f</dd>
 </dl>
 <div class="wizard-btns">
 <button type="button" class="btn btn-primary"
-  onclick="document.getElementById('confirm-launch').showModal()">Review &amp; launch →</button>
+  onclick="openModal('confirm-launch',this)">Review &amp; launch &#8594;</button>
 <a class="btn btn-secondary" href="/campaigns">Cancel</a>
 </div>
 </form>
 </div>
-
-<dialog id="confirm-launch" class="confirm-dialog">
-<h2>Confirm campaign launch</h2>
-<div class="confirm-summary">
-<dl>
-<dt>Recipients</dt><dd>%d contacts</dd>
-<dt>Category</dt><dd>%s</dd>
-<dt>Estimated cost</dt><dd>₹%.2f (incl. 18%% GST)</dd>
-</dl>
-</div>
-<p class="confirm-note">This action cannot be undone. %d messages will be queued for delivery.</p>
-<div class="confirm-btns">
-<button type="button" class="btn btn-secondary"
-  onclick="document.getElementById('confirm-launch').close()">Cancel</button>
-<button type="submit" form="launch-form" class="btn btn-primary">Confirm &amp; send to %d contacts</button>
-</div>
-</dialog>`,
+%s`,
 			html.EscapeString(encodeState(state)),
 			tierBanner,
 			html.EscapeString(state.Name),
@@ -662,12 +648,7 @@ func WizardStep4(state WizardState, tmpl *db.Template) templ.Component {
 			html.EscapeString(tmplCategory),
 			html.EscapeString(schedInfo),
 			state.EstCost,
-			// confirm dialog:
-			state.EligibleCount,
-			html.EscapeString(tmplCategory),
-			state.EstCost,
-			state.EligibleCount,
-			state.EligibleCount,
+			ModalShellRaw("confirm-launch", "confirm-dialog", "confirm-launch-title", confirmInner),
 		)
 		return err
 	})
@@ -686,7 +667,7 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport) templ.C
 <div class="page-wrap">
 <div class="page-hd">
 <div class="screen-title">%s</div>
-<span class="badge badge-%s">%s</span>
+%s
 </div>
 <div class="stat-row">
 <div class="stat-card"><div class="stat-val">%d</div><div class="stat-lbl">Total recipients</div></div>
@@ -704,7 +685,7 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport) templ.C
 </dl>
 </div>`,
 			html.EscapeString(report.Name),
-			report.Status, report.Status,
+			BadgeHTML(report.Status, report.Status),
 			report.TotalRecipients, report.SentCount, report.DeliveredCount,
 			report.ReadCount, report.FailedCount, report.ClickCount,
 			report.CostTotalINR,

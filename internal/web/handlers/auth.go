@@ -91,7 +91,9 @@ func (h *AuthHandler) InvitePage(w http.ResponseWriter, r *http.Request) {
 	token := chi.URLParam(r, "token")
 	agent, err := db.GetAgentByInviteToken(r.Context(), h.pool, token)
 	if err != nil {
-		http.Error(w, "Invalid or expired invite link.", http.StatusNotFound)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		templates.ErrorPage(404, "Invalid invite link", "This invite has expired or is no longer valid.").Render(r.Context(), w)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -102,7 +104,9 @@ func (h *AuthHandler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 	token := chi.URLParam(r, "token")
 	agent, err := db.GetAgentByInviteToken(r.Context(), h.pool, token)
 	if err != nil {
-		http.Error(w, "Invalid or expired invite link.", http.StatusNotFound)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		templates.ErrorPage(404, "Invalid invite link", "This invite has expired or is no longer valid.").Render(r.Context(), w)
 		return
 	}
 	if err := r.ParseForm(); err != nil {

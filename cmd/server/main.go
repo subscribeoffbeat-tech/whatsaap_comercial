@@ -19,6 +19,7 @@ import (
 	"whatsapptool/internal/db"
 	"whatsapptool/internal/web/handlers"
 	mw "whatsapptool/internal/web/middleware"
+	"whatsapptool/internal/web/templates"
 	"whatsapptool/internal/web/ws"
 	"whatsapptool/internal/whatsapp"
 	"whatsapptool/static"
@@ -85,7 +86,30 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if err := recover(); err != nil {
+					log.Printf("panic: %v", err)
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = templates.ErrorPage(500, "Something went wrong", "An unexpected error occurred. Please try again.").Render(r.Context(), w)
+				}
+			}()
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		_ = templates.ErrorPage(404, "Page not found", "The page you're looking for doesn't exist or has been moved.").Render(r.Context(), w)
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = templates.ErrorPage(405, "Method not allowed", "This action isn't available here.").Render(r.Context(), w)
+	})
 
 	// ── Static assets & public infrastructure ────────────────────────────────
 	staticFS, err := fs.Sub(static.FS, ".")
@@ -141,9 +165,15 @@ func main() {
 			analyticsH.Mount(r)
 		})
 
+		forbidFn := func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusForbidden)
+			_ = templates.ErrorPage(403, "Access denied", "You don't have permission to view this page.").Render(r.Context(), w)
+		}
+
 		// Manager+ routes
 		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireRole("admin", "manager"))
+			r.Use(mw.RequireRole(forbidFn, "admin", "manager"))
 			r.Route("/contacts", func(r chi.Router) {
 				contactsH.Mount(r)
 			})
@@ -160,7 +190,7 @@ func main() {
 
 		// Admin-only routes
 		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireRole("admin"))
+			r.Use(mw.RequireRole(forbidFn, "admin"))
 			r.Route("/team", func(r chi.Router) {
 				teamH.Mount(r)
 			})

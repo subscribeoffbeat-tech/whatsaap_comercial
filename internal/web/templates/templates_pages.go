@@ -25,39 +25,43 @@ func TemplatesPage(agent *mw.AgentClaims) templ.Component {
 <p class="screen-subtitle">Browse approved templates and the sample library.</p>
 </div>
 <button class="btn btn-primary btn-sm"
-  onclick="document.getElementById('new-tmpl-modal').showModal()">+ New template</button>
+  onclick="openModal('new-tmpl-modal',this)">+ New template</button>
 </div>
 
-<div class="tmpl-tabs">
-  <button class="tmpl-tab active"
-    hx-get="/templates/gallery" hx-target="#tmpl-gallery" hx-swap="innerHTML"
-    onclick="document.querySelectorAll('.tmpl-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active')">All</button>
-  <button class="tmpl-tab"
-    hx-get="/templates/gallery?status=approved" hx-target="#tmpl-gallery" hx-swap="innerHTML"
-    onclick="document.querySelectorAll('.tmpl-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active')">Approved</button>
-  <button class="tmpl-tab"
-    hx-get="/templates/gallery?status=pending" hx-target="#tmpl-gallery" hx-swap="innerHTML"
-    onclick="document.querySelectorAll('.tmpl-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active')">Pending</button>
-  <button class="tmpl-tab"
-    hx-get="/templates/gallery?status=draft" hx-target="#tmpl-gallery" hx-swap="innerHTML"
-    onclick="document.querySelectorAll('.tmpl-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active')">Drafts</button>
-  <button class="tmpl-tab"
-    hx-get="/templates/gallery?status=rejected" hx-target="#tmpl-gallery" hx-swap="innerHTML"
-    onclick="document.querySelectorAll('.tmpl-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active')">Rejected</button>
-  <button class="tmpl-tab tmpl-tab-lib"
-    hx-get="/templates/library" hx-target="#tmpl-gallery" hx-swap="innerHTML"
-    onclick="document.querySelectorAll('.tmpl-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active')">&#128218; Library</button>
+<div class="tmpl-tabs" role="tablist" x-data="{tab:'all'}">
+  <button class="tmpl-tab" role="tab" type="button" :class="{'active':tab==='all'}" :aria-selected="tab==='all'"
+    hx-get="/templates/gallery" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
+    @click="tab='all'">All</button>
+  <button class="tmpl-tab" role="tab" type="button" :class="{'active':tab==='approved'}" :aria-selected="tab==='approved'"
+    hx-get="/templates/gallery?status=approved" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
+    @click="tab='approved'">Approved</button>
+  <button class="tmpl-tab" role="tab" type="button" :class="{'active':tab==='pending'}" :aria-selected="tab==='pending'"
+    hx-get="/templates/gallery?status=pending" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
+    @click="tab='pending'">Pending</button>
+  <button class="tmpl-tab" role="tab" type="button" :class="{'active':tab==='draft'}" :aria-selected="tab==='draft'"
+    hx-get="/templates/gallery?status=draft" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
+    @click="tab='draft'">Drafts</button>
+  <button class="tmpl-tab" role="tab" type="button" :class="{'active':tab==='rejected'}" :aria-selected="tab==='rejected'"
+    hx-get="/templates/gallery?status=rejected" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
+    @click="tab='rejected'">Rejected</button>
+  <button class="tmpl-tab tmpl-tab-lib" role="tab" type="button" :class="{'active':tab==='library'}" :aria-selected="tab==='library'"
+    hx-get="/templates/library" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
+    @click="tab='library'">&#128218; Library</button>
+  <span id="tmpl-loading" class="htmx-indicator" aria-hidden="true" style="align-self:center;margin-left:4px"><span class="htmx-ind-spin"></span></span>
 </div>
 
 <div id="tmpl-gallery"
+  role="tabpanel" tabindex="0"
   hx-get="/templates/gallery"
   hx-trigger="load, templatesUpdated from:body"
-  hx-swap="innerHTML">
-</div>
+  hx-swap="innerHTML"
+  aria-live="polite" aria-atomic="false">` + SkeletonRows(4) + `</div>
 
-<dialog id="new-tmpl-modal">
-<form method="post" action="/templates" hx-post="/templates" hx-target="#tmpl-gallery" hx-swap="innerHTML">
-<h2>New template</h2>
+` + ModalShell("new-tmpl-modal", "New template",
+`<form method="post" action="/templates" hx-post="/templates" hx-target="#tmpl-gallery" hx-swap="innerHTML"
+  hx-disabled-elt="find button[type='submit']"
+  hx-on::response-error="document.getElementById('tmpl-form-errors').innerHTML=event.detail.xhr.responseText">
+<div id="tmpl-form-errors" role="alert" aria-live="polite"></div>
 <label class="field"><span>Name (snake_case)</span>
 <input type="text" name="name" required pattern="[a-z0-9_]+" placeholder="promo_offer"></label>
 <label class="field"><span>Language</span>
@@ -77,8 +81,7 @@ func TemplatesPage(agent *mw.AgentClaims) templ.Component {
 <button class="btn btn-primary btn-sm" type="submit">Create &amp; save</button>
 <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('new-tmpl-modal').close()">Cancel</button>
 </div>
-</form>
-</dialog>
+</form>`) + `
 </div>`)
 		if err != nil {
 			return err
@@ -91,14 +94,18 @@ func TemplatesPage(agent *mw.AgentClaims) templ.Component {
 func TemplateGallery(tmpls []db.Template) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if len(tmpls) == 0 {
-			_, err := io.WriteString(w, `<div class="empty-state"><div class="empty-icon">&#9889;</div><div class="empty-title">No templates</div><div class="empty-desc">Create a new template or browse the library.</div></div>`)
+			_, err := io.WriteString(w, EmptyStateHTML(EmptyIconTemplates,
+				"No templates yet",
+				"Create a new template or browse the Meta-approved library.",
+				[]EmptyAction{
+					{Label: "New template", Primary: true, AtClick: "document.getElementById('new-tmpl-modal').showModal()"},
+				}))
 			return err
 		}
 		if _, err := io.WriteString(w, `<div class="tmpl-gallery">`); err != nil {
 			return err
 		}
 		for _, t := range tmpls {
-			statusClass := "badge-" + t.Status
 			catClass := "cat-" + t.Category
 
 			// Extract body preview from components
@@ -116,13 +123,13 @@ func TemplateGallery(tmpls []db.Template) templ.Component {
 <div class="tmpl-card-hd">
 <span class="tmpl-name">%s</span>
 <span class="badge badge-cat %s">%s</span>
-<span class="badge %s">%s</span>
+%s
 </div>
 <div class="tmpl-body-preview">%s</div>
 <div class="tmpl-card-actions">`,
 				html.EscapeString(t.Name),
 				catClass, t.Category,
-				statusClass, t.Status,
+				BadgeHTML(t.Status, t.Status),
 				html.EscapeString(bodyPreview),
 			); err != nil {
 				return err
@@ -162,7 +169,7 @@ func TemplateGallery(tmpls []db.Template) templ.Component {
 				return err
 			}
 		}
-		_, err := io.WriteString(w, `</div><div id="tmpl-editor"></div>`)
+		_, err := io.WriteString(w, `</div><div id="tmpl-editor" aria-live="polite" aria-atomic="false"></div>`)
 		return err
 	})
 }
@@ -249,7 +256,10 @@ func TemplateEditorForm(t *db.Template) templ.Component {
 <form method="post" action="/templates/%s"
   hx-put="/templates/%s"
   hx-target="#tmpl-gallery"
-  hx-swap="innerHTML">
+  hx-swap="innerHTML"
+  hx-disabled-elt="find button[type='submit']"
+  hx-on::response-error="document.getElementById('tmpl-edit-errors').innerHTML=event.detail.xhr.responseText">
+<div id="tmpl-edit-errors" role="alert" aria-live="polite"></div>
 <label class="field"><span>Name</span>
 <input type="text" name="name" value="%s" required pattern="[a-z0-9_]+"></label>
 <label class="field"><span>Language</span>

@@ -69,9 +69,8 @@ func qualityBadgeHTML(qualityRating string) string {
 		return ""
 	}
 	cls := "quality-" + strings.ToLower(qualityRating)
-	return fmt.Sprintf(`<span class="badge badge-neutral" title="Meta quality: %s" style="gap:6px">
-        <span class="quality-dot %s"></span>%s
-      </span>`,
+	return fmt.Sprintf(
+		`<span class="badge badge-neutral" aria-label="Meta quality: %s" style="gap:6px"><span class="quality-dot %s" aria-hidden="true"></span>%s</span>`,
 		escHTML(qualityRating),
 		escHTML(cls),
 		escHTML(qualityRating),
@@ -100,7 +99,7 @@ func avatarDropdownHTML(agent *mw.AgentClaims) string {
 	}
 	initials := avatarInitials(name)
 	return fmt.Sprintf(`<div class="dropdown" x-data="{open:false}">
-  <button class="topnav-avatar" title="%s" @click="open=!open" @click.outside="open=false">%s</button>
+  <button class="topnav-avatar" aria-label="%s" aria-haspopup="true" @click="open=!open" @click.outside="open=false">%s</button>
   <div class="dropdown-menu" x-show="open" x-cloak style="min-width:180px">
     <span class="dropdown-item" style="font-size:12px;color:var(--text-muted);cursor:default;line-height:1.4">
       <strong>%s</strong><br>%s
@@ -143,6 +142,56 @@ func ShellOpen(agent *mw.AgentClaims, activePath, pageTitle, qualityRating strin
 <script src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<div id="global-spinner" aria-hidden="true"></div>
+<script>
+(function(){
+  function showToast(kind, msg) {
+    var region = document.getElementById('toast-region');
+    if (!region) return;
+    var d = document.createElement('div');
+    d.className = 'toast toast--' + kind;
+    d.setAttribute('role', (kind === 'error' || kind === 'warning') ? 'alert' : 'status');
+    d.innerHTML = '<div class="body"><div class="msg">' + msg.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div></div>' +
+      '<button class="x" type="button" aria-label="Dismiss" onclick="this.closest(\'.toast\').remove()">&#215;</button>';
+    region.prepend(d);
+    if (kind === 'success' || kind === 'info') {
+      setTimeout(function(){ d.remove(); }, 5000);
+    }
+  }
+  window.__showToast = showToast;
+
+  function openModal(id, trigger) {
+    var d = document.getElementById(id);
+    if (!d) return;
+    d.addEventListener('close', function() { if (trigger) trigger.focus(); }, {once: true});
+    d.showModal();
+  }
+  window.openModal = openModal;
+
+  document.addEventListener('htmx:beforeRequest', function(e){
+    document.getElementById('global-spinner').classList.add('active');
+    e.detail.elt.setAttribute('aria-busy','true');
+  });
+  document.addEventListener('htmx:afterRequest', function(e){
+    document.getElementById('global-spinner').classList.remove('active');
+    e.detail.elt.removeAttribute('aria-busy');
+  });
+  document.addEventListener('htmx:responseError', function(e){
+    var code = e.detail.xhr ? e.detail.xhr.status : 0;
+    var msg = code >= 500 ? 'Server error — please try again' :
+              code === 403 ? 'Access denied' :
+              code === 404 ? 'Not found' :
+              code === 422 ? (e.detail.xhr.responseText || 'Validation error') :
+              code >= 400  ? (e.detail.xhr.responseText || 'Request failed') :
+              'Request failed';
+    showToast('error', msg.trim().substring(0, 200));
+  });
+  document.addEventListener('showToast', function(e){
+    showToast(e.detail.kind || 'info', e.detail.msg || '');
+  });
+})();
+</script>
 <div class="app-layout">
 <nav class="topnav">
   <a class="topnav-logo" href="/">
@@ -160,7 +209,7 @@ func ShellOpen(agent *mw.AgentClaims, activePath, pageTitle, qualityRating strin
   </div>
 </nav>
 <div class="main-area">
-<div class="screen">
+<div class="screen" id="main-content">
 `,
 		escHTML(pageTitle),
 		navPillsHTML(agent, activePath),

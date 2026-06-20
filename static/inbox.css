@@ -611,3 +611,30 @@
 .convs::-webkit-scrollbar-thumb,
 .th-body::-webkit-scrollbar-thumb,
 .ibx-contact::-webkit-scrollbar-thumb { background: rgba(108,99,255,0.15); border-radius: 3px; }
+
+/* ── G7: Responsive inbox ───────────────────────────────────────────── */
+/* Tablets (≤900px): hide contact panel, shrink list */
+@media (max-width: 900px) {
+  :root { --ibx-list-w: 260px; --ibx-contact-w: 0px; }
+  .ibx-contact { display: none; }
+}
+/* Mobile (≤640px): single-pane — list OR thread, never side-by-side    */
+@media (max-width: 640px) {
+  .ibx-wrap { position: relative; }
+  .ibx-list  { width: 100%; min-width: 100%; border-right: none; }
+  .ibx-thread {
+    position: absolute; inset: 0;
+    transform: translateX(100%);
+    transition: transform 0.22s ease;
+    background: var(--bg-page);
+    z-index: 10;
+  }
+  /* JS adds .thread-open to ibx-wrap when a conversation is selected */
+  .ibx-wrap.thread-open .ibx-thread { transform: translateX(0); }
+  .ibx-wrap.thread-open .ibx-list   { visibility: hidden; }
+  /* Back button shown on mobile — hidden on desktop */
+  .th-back { display: flex; }
+}
+@media (min-width: 641px) {
+  .th-back { display: none; }
+}

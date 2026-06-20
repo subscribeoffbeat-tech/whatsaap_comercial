@@ -20,7 +20,7 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 
 		flashHTML := ""
 		if flash != "" {
-			flashHTML = `<div class="toast toast--info"><strong>Invite link:</strong> ` + html.EscapeString(flash) + `</div>`
+			flashHTML = CalloutHTML("info", "Invite link — copy and share with the new member: "+flash)
 		}
 
 		_, err := fmt.Fprintf(w, `
@@ -30,20 +30,20 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 <h1 class="screen-title">Team</h1>
 <p class="screen-subtitle">Manage your team, roles and monthly limits.</p>
 </div>
-<button class="btn btn-primary btn-sm" onclick="document.getElementById('invite-modal').showModal()">+ Invite member</button>
+<button class="btn btn-primary btn-sm" onclick="openModal('invite-modal',this)">+ Invite member</button>
 </div>
 %s
 
 <div x-data="{role:''}">
-<div class="tmpl-tabs" style="margin-bottom:16px">
-  <button class="tmpl-tab" :class="{ active: role==='' }" @click="role=''">All</button>
-  <button class="tmpl-tab" :class="{ active: role==='admin' }" @click="role='admin'">Admin</button>
-  <button class="tmpl-tab" :class="{ active: role==='manager' }" @click="role='manager'">Manager</button>
-  <button class="tmpl-tab" :class="{ active: role==='agent' }" @click="role='agent'">Member</button>
+<div class="tmpl-tabs" style="margin-bottom:16px" role="tablist">
+  <button class="tmpl-tab" role="tab" :class="{ active: role==='' }" :aria-selected="role===''" @click="role=''">All</button>
+  <button class="tmpl-tab" role="tab" :class="{ active: role==='admin' }" :aria-selected="role==='admin'" @click="role='admin'">Admin</button>
+  <button class="tmpl-tab" role="tab" :class="{ active: role==='manager' }" :aria-selected="role==='manager'" @click="role='manager'">Manager</button>
+  <button class="tmpl-tab" role="tab" :class="{ active: role==='agent' }" :aria-selected="role==='agent'" @click="role='agent'">Member</button>
 </div>
 
-<div class="card-static" style="margin-bottom:24px">
-<table>
+<div class="card-static" style="margin-bottom:24px" role="tabpanel" tabindex="0">
+<table class="tbl">
 <thead>
 <tr><th>Name</th><th>Email</th><th>Role</th><th>Monthly limit</th><th>Status</th><th>Actions</th></tr>
 </thead>
@@ -52,14 +52,22 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 			return err
 		}
 
+		if len(agents) == 0 {
+			empty := EmptyStateHTML(EmptyIconContacts, "No team members yet",
+				"Invite your first team member to get started.",
+				[]EmptyAction{{Label: "Invite member", Primary: true, AtClick: "document.getElementById('invite-modal').showModal()"}})
+			if _, err := fmt.Fprintf(w, `<tr><td colspan="6">%s</td></tr>`, empty); err != nil {
+				return err
+			}
+		}
+
 		for _, a := range agents {
-			status := `<span class="badge badge-approved">Active</span>`
+			status := BadgeHTML("approved", "Active")
 			if !a.Active {
-				// Check if it's a pending invite (has no password hash → invite_token set)
 				if a.InviteToken != nil {
-					status = `<span class="badge badge-pending">Pending invite</span>`
+					status = BadgeHTML("pending", "Pending invite")
 				} else {
-					status = `<span class="badge badge-rejected">Inactive</span>`
+					status = BadgeHTML("rejected", "Inactive")
 				}
 			}
 
@@ -81,11 +89,11 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 			roleBadge := ""
 			switch a.Role {
 			case "admin":
-				roleBadge = `<span class="badge badge-approved" style="margin-right:4px">Admin</span>`
+				roleBadge = BadgeHTML("approved", "Admin")
 			case "manager":
-				roleBadge = `<span class="badge badge-pending" style="margin-right:4px">Manager</span>`
+				roleBadge = BadgeHTML("pending", "Manager")
 			default:
-				roleBadge = `<span class="badge" style="margin-right:4px">Member</span>`
+				roleBadge = BadgeHTML("neutral", "Member")
 			}
 
 			// Self marker
@@ -108,7 +116,7 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 </form></td>
 <td>%s
   <button class="btn btn-secondary btn-sm" style="margin-left:6px;font-size:11px"
-    onclick="document.getElementById('lim-%s').showModal()">Set</button>
+    onclick="openModal('lim-%s',this)">Set</button>
 </td>
 <td>%s</td>
 <td style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;min-width:200px">`,
@@ -145,7 +153,7 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 						`<button class="btn btn-secondary btn-sm"
   onclick="navigator.clipboard.writeText('%s').then(()=>alert('Copied!'))">Copy link</button>
 <form method="post" action="/team/%s/reinvite" style="display:inline">
-  <button class="btn btn-secondary btn-sm" title="Generate a new invite link">Re-invite</button>
+  <button class="btn btn-secondary btn-sm" aria-label="Generate a new invite link">Re-invite</button>
 </form>
 <form method="post" action="/team/%s/activate" style="display:inline">
   <input type="hidden" name="active" value="true">
@@ -168,9 +176,11 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 				// Delete button (always shown for non-self)
 				if _, err := fmt.Fprintf(w,
 					`<button class="btn btn-sm" style="background:var(--danger-light);color:var(--danger);border:1px solid var(--danger-light)"
-  onclick="if(confirm('Delete %s from the team?')) { fetch('/team/%s', {method:'DELETE'}).then(()=>location.reload()) }">
-  Delete</button>`,
-					html.EscapeString(a.Name), a.ID); err != nil {
+  hx-delete="/team/%s"
+  hx-confirm="Delete %s from the team?"
+  hx-target="closest tr"
+  hx-swap="outerHTML">Delete</button>`,
+					a.ID, html.EscapeString(a.Name)); err != nil {
 					return err
 				}
 			}
@@ -180,21 +190,19 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 			}
 
 			// Limit dialog for this agent
-			if _, err := fmt.Fprintf(w, `
-<dialog id="lim-%s">
-<form method="post" action="/team/%s/limits">
-<h2 style="margin-top:0;font-size:16px">Monthly limit — %s</h2>
-<div class="form-group">
-  <label class="form-label">Monthly message cap <span style="color:var(--text-muted);font-weight:400">(0 = unlimited)</span></label>
-  <input class="form-input" type="number" name="monthly_msg_cap" min="0" value="%d" placeholder="0 = unlimited" style="max-width:160px">
-</div>
-<div class="modal-btns">
-  <button class="btn btn-primary btn-sm" type="submit">Save</button>
-  <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('lim-%s').close()">Cancel</button>
-</div>
-</form>
-</dialog>`,
-				a.ID, a.ID, html.EscapeString(a.Name), currentCap, a.ID); err != nil {
+			limBody := fmt.Sprintf(
+				`<form method="post" action="/team/%s/limits">`+
+					`<div class="form-group">`+
+					`<label class="form-label" for="lim-cap-%s">Monthly message cap <span style="color:var(--text-muted);font-weight:400">(0 = unlimited)</span></label>`+
+					`<input id="lim-cap-%s" class="form-input" type="number" name="monthly_msg_cap" min="0" value="%d" placeholder="0 = unlimited" style="max-width:160px">`+
+					`</div>`+
+					`<div class="modal-btns">`+
+					`<button class="btn btn-primary btn-sm" type="submit">Save</button>`+
+					`<button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('lim-%s').close()">Cancel</button>`+
+					`</div></form>`,
+				a.ID, a.ID, a.ID, currentCap, a.ID)
+			limTitle := "Monthly limit — " + a.Name
+			if _, err := io.WriteString(w, ModalShell("lim-"+a.ID, limTitle, limBody)); err != nil {
 				return err
 			}
 		}
@@ -222,35 +230,28 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 			}
 		}
 
-		if _, err := io.WriteString(w, `</tbody></table>
-
-<dialog id="invite-modal">
-<form method="post" action="/team/invite">
-<h2>Invite member</h2>
-<div class="form-group">
-  <label class="form-label">Name</label>
-  <input class="form-input" type="text" name="name" required>
-</div>
-<div class="form-group">
-  <label class="form-label">Email</label>
-  <input class="form-input" type="email" name="email" required>
-</div>
-<div class="form-group">
-  <label class="form-label">Role</label>
-  <select class="form-input" name="role">
-    <option value="agent">Member</option>
-    <option value="manager">Manager</option>
-    <option value="admin">Admin</option>
-  </select>
-</div>
-<div class="modal-btns">
-<button class="btn btn-primary btn-sm" type="submit">Send invite</button>
-<button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('invite-modal').close()">Cancel</button>
-</div>
-</form>
-</dialog>
-
-</div>`); err != nil {
+		inviteBody := `<form hx-post="/team/invite" hx-target="body" hx-swap="none"` +
+			` hx-disabled-elt="find button[type='submit']"` +
+			` hx-on::after-request="if(event.detail.successful)document.getElementById('invite-modal').close()"` +
+			` hx-on::response-error="document.getElementById('inv-form-errors').innerHTML=event.detail.xhr.responseText">` +
+			`<div id="inv-form-errors" role="alert" aria-live="polite"></div>` +
+			`<div class="form-group"><label class="form-label" for="inv-name">Name</label>` +
+			`<input id="inv-name" class="form-input" type="text" name="name" required></div>` +
+			`<div class="form-group"><label class="form-label" for="inv-email">Email</label>` +
+			`<input id="inv-email" class="form-input" type="email" name="email" required></div>` +
+			`<div class="form-group"><label class="form-label" for="inv-role">Role</label>` +
+			`<select id="inv-role" class="form-input" name="role">` +
+			`<option value="agent">Member</option>` +
+			`<option value="manager">Manager</option>` +
+			`<option value="admin">Admin</option>` +
+			`</select></div>` +
+			`<div class="modal-btns">` +
+			`<button class="btn btn-primary btn-sm" type="submit">Send invite</button>` +
+			`<button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('invite-modal').close()">Cancel</button>` +
+			`</div></form>`
+		if _, err := io.WriteString(w, `</tbody></table>`+
+			ModalShell("invite-modal", "Invite member", inviteBody)+
+			`</div>`); err != nil {
 			return err
 		}
 

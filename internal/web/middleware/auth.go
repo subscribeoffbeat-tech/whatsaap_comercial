@@ -133,8 +133,9 @@ func RequireAuth(secret []byte) func(http.Handler) http.Handler {
 }
 
 // RequireRole allows only agents whose role is in the given list.
-// Agents with other roles receive 403 Forbidden.
-func RequireRole(roles ...string) func(http.Handler) http.Handler {
+// forbidden is called (instead of a plain 403) when access is denied —
+// pass a handler that renders a branded error page.
+func RequireRole(forbidden http.HandlerFunc, roles ...string) func(http.Handler) http.Handler {
 	allowed := make(map[string]bool, len(roles))
 	for _, r := range roles {
 		allowed[r] = true
@@ -143,7 +144,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			agent := AgentFromCtx(r.Context())
 			if agent == nil || !allowed[agent.Role] {
-				http.Error(w, "forbidden", http.StatusForbidden)
+				forbidden(w, r)
 				return
 			}
 			next.ServeHTTP(w, r)

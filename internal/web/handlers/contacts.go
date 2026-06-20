@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -89,7 +90,7 @@ func (h *ContactsHandler) Table(w http.ResponseWriter, r *http.Request) {
 			f.TagID = &id
 		}
 	}
-	switch q.Get("opted_in") {
+	switch q.Get("opted_in_filter") {
 	case "true":
 		t := true; f.OptedIn = &t
 	case "false":
@@ -102,7 +103,7 @@ func (h *ContactsHandler) Table(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	searchActive := q.Get("search") != "" || q.Get("tag") != "" || q.Get("opted_in") != ""
+	searchActive := q.Get("search") != "" || q.Get("tag") != "" || q.Get("opted_in_filter") != ""
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := templates.ContactTable(contacts, total, offset, 50, searchActive).Render(r.Context(), w); err != nil {
 		log.Printf("contact table render: %v", err)
@@ -127,7 +128,9 @@ func (h *ContactsHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	phone, err := db.NormalizePhone(rawPhone)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, templates.FieldError(err.Error()))
 		return
 	}
 
@@ -160,7 +163,8 @@ func (h *ContactsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Trigger", "contactsUpdated")
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Contact added.", "", ""))
 }
 
 // ── Detail panel ─────────────────────────────────────────────────────────────
@@ -235,7 +239,8 @@ func (h *ContactsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	db.Log(r.Context(), h.pool, actor.ID, "contact_deleted", "contact", id, nil)
 	w.Header().Set("HX-Trigger", "contactsUpdated")
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Contact deleted.", "", ""))
 }
 
 // ── Tag operations on a contact ───────────────────────────────────────────────

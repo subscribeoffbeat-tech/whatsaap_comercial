@@ -13,7 +13,7 @@ func LoginPage(flash string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		flashHTML := ""
 		if flash != "" {
-			flashHTML = `<p class="auth-err">` + html.EscapeString(flash) + `</p>`
+			flashHTML = FormBanner(flash)
 		}
 		_, err := fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="en">
@@ -43,7 +43,7 @@ func InvitePage(name, token, errMsg string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		errHTML := ""
 		if errMsg != "" {
-			errHTML = `<p class="auth-err">` + html.EscapeString(errMsg) + `</p>`
+			errHTML = FormBanner(errMsg)
 		}
 		_, err := fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="en">
@@ -83,7 +83,7 @@ func OnboardingPage(flash string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		flashHTML := ""
 		if flash != "" {
-			flashHTML = `<p class="auth-err">` + html.EscapeString(flash) + `</p>`
+			flashHTML = FormBanner(flash)
 		}
 		_, err := fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="en">

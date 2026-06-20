@@ -91,7 +91,9 @@ func (h *TemplatesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if msgs := validateTemplateVars(t, fallbacks); len(msgs) > 0 {
-		http.Error(w, strings.Join(msgs, "; "), http.StatusUnprocessableEntity)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprint(w, templates.FormBanner(strings.Join(msgs, "; ")))
 		return
 	}
 	if err := db.CreateTemplate(r.Context(), h.pool, t); err != nil {
@@ -100,8 +102,8 @@ func (h *TemplatesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Trigger", "templatesUpdated")
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"id": t.ID})
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Template saved.", "", ""))
 }
 
 // ── Edit form ─────────────────────────────────────────────────────────────────
@@ -130,7 +132,9 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	t.ID = id
 	if msgs := validateTemplateVars(t, fallbacks); len(msgs) > 0 {
-		http.Error(w, strings.Join(msgs, "; "), http.StatusUnprocessableEntity)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprint(w, templates.FormBanner(strings.Join(msgs, "; ")))
 		return
 	}
 	if err := db.UpdateTemplate(r.Context(), h.pool, t); err != nil {
@@ -139,7 +143,8 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Trigger", "templatesUpdated")
-	w.WriteHeader(http.StatusNoContent)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Template updated.", "", ""))
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -152,7 +157,8 @@ func (h *TemplatesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Trigger", "templatesUpdated")
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Template deleted.", "", ""))
 }
 
 // ── Submit to Meta ─────────────────────────────────────────────────────────────

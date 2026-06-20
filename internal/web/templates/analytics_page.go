@@ -130,8 +130,11 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 
 		// ── Empty state ───────────────────────────────────────────────────────
 		if data.Overview.Sent == 0 {
-			if _, err := io.WriteString(w,
-				`<p class="empty-state">No messages sent in this period.</p>`); err != nil {
+			if _, err := io.WriteString(w, EmptyStateHTML(EmptyIconCampaigns,
+				"No data yet",
+				"No messages were sent in this period.",
+				nil,
+			)); err != nil {
 				return err
 			}
 		}
@@ -211,7 +214,7 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 		if !isAgent && len(data.ByCat) > 0 {
 			if _, err := io.WriteString(w, `
 <section class="an-section"><h2>Cost by category</h2>
-<table class="an-table"><thead><tr><th>Category</th><th>Messages</th><th>Cost (INR)</th></tr></thead><tbody>`); err != nil {
+<table class="an-table tbl"><thead><tr><th>Category</th><th>Messages</th><th>Cost (INR)</th></tr></thead><tbody>`); err != nil {
 				return err
 			}
 			for _, c := range data.ByCat {
@@ -231,7 +234,7 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 		if !isAgent && len(data.ByCampaign) > 0 {
 			if _, err := io.WriteString(w, `
 <section class="an-section"><h2>Cost by campaign</h2>
-<table class="an-table"><thead><tr><th>Campaign</th><th>Messages</th><th>Cost (INR)</th></tr></thead><tbody>`); err != nil {
+<table class="an-table tbl"><thead><tr><th>Campaign</th><th>Messages</th><th>Cost (INR)</th></tr></thead><tbody>`); err != nil {
 				return err
 			}
 			for _, c := range data.ByCampaign {
@@ -251,7 +254,7 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 		if len(data.AgentStats) > 0 {
 			if _, err := io.WriteString(w, `
 <section class="an-section"><h2>Agent performance</h2>
-<table class="an-table"><thead><tr><th>Agent</th><th>Messages sent</th><th>Convs resolved</th></tr></thead><tbody>`); err != nil {
+<table class="an-table tbl"><thead><tr><th>Agent</th><th>Messages sent</th><th>Convs resolved</th></tr></thead><tbody>`); err != nil {
 				return err
 			}
 			for _, s := range data.AgentStats {

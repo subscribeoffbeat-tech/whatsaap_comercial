@@ -132,3 +132,9 @@
   margin-bottom: 0.75rem;
 }
 .back-link:hover { color: var(--text); }
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .au-table-wrap, .card-static { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .au-actions { flex-direction: column; gap: 4px; }
+}

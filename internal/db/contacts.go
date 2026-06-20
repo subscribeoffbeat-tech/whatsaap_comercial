@@ -376,17 +376,20 @@ func ListNotes(ctx context.Context, pool *pgxpool.Pool, contactID string) ([]Con
 func scanContact(row interface{ Scan(dest ...any) error }) (*Contact, error) {
 	var c Contact
 	var (
-		email, optInSource     pgtype.Text
-		optInAt, optOutAt      pgtype.Timestamptz
-		customRaw              string
+		email, optInSource, industry pgtype.Text
+		optInAt, optOutAt            pgtype.Timestamptz
+		customRaw                    string
 	)
 	if err := row.Scan(
-		&c.ID, &c.WAPhone, &c.Name, &email, &c.Industry,
+		&c.ID, &c.WAPhone, &c.Name, &email, &industry,
 		&customRaw, &c.OptedIn, &optInSource,
 		&optInAt, &optOutAt, &c.IsBlocked,
 		&c.CreatedAt, &c.UpdatedAt,
 	); err != nil {
 		return nil, fmt.Errorf("scan contact: %w", err)
+	}
+	if industry.Valid {
+		c.Industry = industry.String
 	}
 	if c.CustomFields == nil {
 		c.CustomFields = map[string]any{}

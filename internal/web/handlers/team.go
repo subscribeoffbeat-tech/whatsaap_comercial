@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -51,27 +52,35 @@ func (h *TeamHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *TeamHandler) Invite(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/team", http.StatusSeeOther)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, templates.FormBanner("Invalid form submission."))
 		return
 	}
 	name := r.FormValue("name")
 	email := r.FormValue("email")
 	role := r.FormValue("role")
 	if name == "" || email == "" || role == "" {
-		http.Redirect(w, r, "/team", http.StatusSeeOther)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprint(w, templates.FormBanner("Name, email and role are all required."))
 		return
 	}
 	token, err := GenerateInviteToken()
 	if err != nil {
 		log.Printf("generate invite token: %v", err)
-		http.Redirect(w, r, "/team", http.StatusSeeOther)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, templates.FormBanner("Failed to generate invite link — please try again."))
 		return
 	}
 	expires := time.Now().Add(InviteExpiry)
 	invited, err := db.CreateInvitedAgent(r.Context(), h.pool, name, email, role, token, expires)
 	if err != nil {
 		log.Printf("create invited agent: %v", err)
-		http.Redirect(w, r, "/team", http.StatusSeeOther)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, templates.FormBanner("Could not create the invite — the email may already be registered."))
 		return
 	}
 	actor := mw.AgentFromCtx(r.Context())
@@ -79,7 +88,8 @@ func (h *TeamHandler) Invite(w http.ResponseWriter, r *http.Request) {
 		map[string]any{"name": name, "email": email, "role": role})
 
 	inviteURL := h.baseURL + "/invite/" + token
-	http.Redirect(w, r, "/team?invite_url="+inviteURL, http.StatusSeeOther)
+	w.Header().Set("HX-Redirect", "/team?invite_url="+inviteURL)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +130,6 @@ func (h *TeamHandler) SetActive(w http.ResponseWriter, r *http.Request) {
 func (h *TeamHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	actor := mw.AgentFromCtx(r.Context())
-	// Prevent self-deletion.
 	if actor != nil && actor.ID == id {
 		http.Error(w, "cannot delete yourself", http.StatusBadRequest)
 		return
@@ -129,7 +138,9 @@ func (h *TeamHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		log.Printf("delete agent %s: %v", id, err)
 	}
 	db.Log(r.Context(), h.pool, actor.ID, "agent_deleted", "agent", id, nil)
-	w.WriteHeader(http.StatusOK)
+	// hx-swap="outerHTML" on the <tr> — OOB toast fires, empty body removes the row.
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Member removed.", "", ""))
 }
 
 func (h *TeamHandler) SetLimits(w http.ResponseWriter, r *http.Request) {

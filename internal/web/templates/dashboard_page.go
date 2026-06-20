@@ -120,7 +120,7 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 
 		// ── Two-column layout ─────────────────────────────────────────────────────
 		if _, err := io.WriteString(w, `
-<div style="display:grid;grid-template-columns:1fr 300px;gap:24px;align-items:start">`); err != nil {
+<div style="display:grid;grid-template-columns:1fr 280px;gap:24px;align-items:start">`); err != nil {
 			return err
 		}
 
@@ -135,11 +135,15 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 		}
 
 		if len(recent) == 0 {
-			if _, err := io.WriteString(w, `<p class="empty-state" style="margin:16px 0">No campaigns yet. <a href="/campaigns/new">Create one →</a></p>`); err != nil {
+			if _, err := io.WriteString(w, EmptyStateHTML(EmptyIconCampaigns,
+				"No campaigns yet",
+				"Launch your first broadcast to get started.",
+				[]EmptyAction{{Label: "New campaign", Primary: true, HREF: "/campaigns/new"}},
+			)); err != nil {
 				return err
 			}
 		} else {
-			if _, err := io.WriteString(w, `<table class="an-table"><thead><tr>
+			if _, err := io.WriteString(w, `<table class="an-table tbl"><thead><tr>
 <th>CAMPAIGN</th><th>STATUS</th><th>SENT</th><th>DELIVERED</th><th>FAILED</th>`); err != nil {
 				return err
 			}
@@ -152,8 +156,7 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 				return err
 			}
 			for _, c := range recent {
-				statusBadge := fmt.Sprintf(`<span class="badge badge-%s">%s</span>`,
-					html.EscapeString(c.Status), html.EscapeString(c.Status))
+				statusBadge := BadgeHTML(c.Status, c.Status)
 				if _, err := fmt.Fprintf(w,
 					`<tr><td><a href="/campaigns/%s/report" style="font-weight:500">%s</a></td><td>%s</td><td>%d</td><td>%d</td><td>%d</td>`,
 					html.EscapeString(c.ID), html.EscapeString(c.Name),

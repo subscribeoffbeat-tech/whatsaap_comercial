@@ -33,7 +33,7 @@ func SettingsPage(d SettingsViewData, actor *mw.AgentClaims, saved bool) templ.C
 
 		savedBanner := ""
 		if saved {
-			savedBanner = `<div class="toast toast--success">Settings saved.</div>`
+			savedBanner = FlashScript(ToastSuccess, "Settings saved.")
 		}
 
 		_, err := fmt.Fprintf(w, `

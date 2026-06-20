@@ -290,8 +290,8 @@
 .modal-btns { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
 .req { color: var(--danger); }
 
-/* ── Native <dialog> modal ──────────────────────────────────────── */
-dialog {
+/* ── Add-contact modal (nc-dialog) ──────────────────────────────── */
+.nc-dialog {
   border: none;
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
@@ -303,19 +303,19 @@ dialog {
   max-height: 90vh;
   overflow-y: auto;
 }
-dialog::backdrop { background: rgba(26,29,46,0.4); backdrop-filter: blur(4px); }
-dialog h2 {
+.nc-dialog::backdrop { background: rgba(26,29,46,0.4); backdrop-filter: blur(4px); }
+.nc-dialog h2 {
   font-size: 17px;
   font-weight: 700;
   padding: 20px 22px 16px;
   border-bottom: 1px solid var(--border-light);
 }
-dialog > form,
-dialog > .import-body,
-dialog > .import-steps-wrap { padding: 20px 22px; }
-dialog #import-steps { padding: 0; }
-dialog .import-map,
-dialog .import-preview { padding: 0 0 8px; }
+.nc-dialog > form,
+.nc-dialog > .import-body,
+.nc-dialog > .import-steps-wrap { padding: 20px 22px; }
+.nc-dialog #import-steps { padding: 0; }
+.import-map,
+.import-preview { padding: 0 0 8px; }
 
 /* ── Contacts table (new design) ─────────────────────────── */
 .contacts-tbl {
@@ -468,16 +468,7 @@ dialog .import-preview { padding: 0 0 8px; }
 .ct-panel-edit { padding: 0 16px 16px; border-top: 1px solid var(--border-light); margin-top: 4px; }
 .ct-panel-edit h4 { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin: 12px 0 8px; text-transform: uppercase; letter-spacing: 0.04em; }
 
-/* ── Add Contact modal ──────────────────────────────────────── */
-.nc-dialog {
-  width: 480px;
-  border: none;
-  border-radius: 18px;
-  padding: 0;
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
-}
-.nc-dialog::backdrop { background: rgba(26,29,46,0.45); backdrop-filter: blur(4px); }
+/* .nc-hd and friends — used by the gradient header inside new-contact-modal */
 
 .nc-hd {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -645,3 +636,15 @@ dialog .import-preview { padding: 0 0 8px; }
 }
 .ct-tag-opt:hover { filter: brightness(0.92); }
 [x-cloak] { display: none !important; }
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  .contact-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .contacts-filters { flex-direction: column; align-items: stretch; }
+  .contacts-filters .search-input { width: 100%; }
+  .ct-opt-tabs { align-self: flex-start; }
+}
+@media (max-width: 600px) {
+  .contact-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .ct-pagination { flex-wrap: wrap; gap: 6px; }
+}

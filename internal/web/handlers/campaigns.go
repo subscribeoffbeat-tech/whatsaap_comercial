@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -307,7 +308,8 @@ func (h *CampaignHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cancel: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/campaigns", http.StatusSeeOther)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Campaign cancelled.", "", ""))
 }
 
 func (h *CampaignHandler) Pause(w http.ResponseWriter, r *http.Request) {
@@ -316,7 +318,8 @@ func (h *CampaignHandler) Pause(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "pause: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/campaigns", http.StatusSeeOther)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Campaign paused.", "", ""))
 }
 
 func (h *CampaignHandler) RecipientsList(w http.ResponseWriter, r *http.Request) {

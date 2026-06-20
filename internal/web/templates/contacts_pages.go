@@ -30,7 +30,7 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
 		}
 
 		// Build industry options for the add-contact modal
-		industryOpts := `<option value="">— select industry —</option>`
+		industryOpts := `<option value="">&#8212; select industry &#8212;</option>`
 		for _, ind := range industries {
 			industryOpts += fmt.Sprintf(`<option value="%s">%s</option>`, html.EscapeString(ind), html.EscapeString(ind))
 		}
@@ -41,6 +41,67 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
 			industryList += fmt.Sprintf(`<div style="padding:4px 0;font-size:13px">%s</div>`, html.EscapeString(ind))
 		}
 
+		// Pre-build the new-contact modal using ModalShellRaw so the canonical
+		// aria-modal/aria-labelledby/backdrop-close wrapper lives in one place (G-AP).
+		// for/id pairing added to every input/select (G-AQ).
+		ncInner := fmt.Sprintf(
+			`<div class="modal-gradient-hd" style="background:linear-gradient(135deg,#6c63ff,#a855f7);padding:28px 24px;text-align:center;position:relative;border-radius:12px 12px 0 0">`+
+				`<button type="button" onclick="document.getElementById('new-contact-modal').close()"`+
+				` style="position:absolute;top:12px;right:16px;background:rgba(255,255,255,0.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%%;cursor:pointer;font-size:16px">&#215;</button>`+
+				`<div style="width:60px;height:60px;border-radius:50%%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px;color:#fff">?</div>`+
+				`<div id="new-contact-modal-title" style="color:#fff;font-size:18px;font-weight:700">Add Contact</div>`+
+				`<div style="color:rgba(255,255,255,0.8);font-size:13px;margin-top:4px">Fill in the details to create a new contact</div>`+
+				`</div>`+
+				`<div style="padding:20px 24px">`+
+				`<form hx-post="/contacts" hx-target="body" hx-swap="none"`+
+				` hx-disabled-elt="find button[type='submit']"`+
+				` hx-on::after-request="if(event.detail.successful){document.getElementById('new-contact-modal').close();htmx.trigger(document.body,'contactsUpdated')}"`+
+				` hx-on::response-error="document.getElementById('nc-form-errors').innerHTML=event.detail.xhr.responseText">`+
+				`<div id="nc-form-errors"></div>`+
+				`<div class="form-group">`+
+				`<label class="form-label" for="nc-phone">Phone <span style="color:var(--danger)">*</span></label>`+
+				`<div style="display:flex;gap:8px">`+
+				`<select name="country_code" class="form-input" style="width:110px" aria-label="Country code">`+
+				`<option value="+91">+91 IN</option><option value="+1">+1 US</option>`+
+				`<option value="+44">+44 GB</option><option value="+971">+971 AE</option><option value="+65">+65 SG</option>`+
+				`</select>`+
+				`<input id="nc-phone" class="form-input" type="tel" name="phone_number" required placeholder="9876543210" style="flex:1">`+
+				`</div></div>`+
+				`<div class="form-group">`+
+				`<label class="form-label" for="nc-name">Full name</label>`+
+				`<input id="nc-name" class="form-input" type="text" name="name" placeholder="Anita Desai">`+
+				`</div>`+
+				`<div class="form-group">`+
+				`<label class="form-label" for="nc-email">Email</label>`+
+				`<input id="nc-email" class="form-input" type="email" name="email" placeholder="anita@example.com">`+
+				`</div>`+
+				`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">`+
+				`<div class="form-group">`+
+				`<label class="form-label" for="nc-company">Company</label>`+
+				`<input id="nc-company" class="form-input" type="text" name="company" placeholder="Acme Pvt Ltd">`+
+				`</div>`+
+				`<div class="form-group">`+
+				`<label class="form-label" for="nc-role">Role</label>`+
+				`<input id="nc-role" class="form-input" type="text" name="role" placeholder="Sales Manager">`+
+				`</div></div>`+
+				`<div class="form-group">`+
+				`<label class="form-label" for="nc-industry">Industry</label>`+
+				`<select id="nc-industry" class="form-input" name="industry">%s</select>`+
+				`</div>`+
+				`<label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--success-light,#f0fdf4);border-radius:var(--radius,6px);margin-bottom:16px;cursor:pointer">`+
+				`<input type="checkbox" name="opt_in" value="true" style="margin-top:3px">`+
+				`<div>`+
+				`<div style="font-weight:600;font-size:14px">Opted-in to marketing</div>`+
+				`<div style="font-size:12px;color:var(--text-secondary)">Contact has given consent to receive WhatsApp messages</div>`+
+				`</div></label>`+
+				`<div style="display:flex;gap:8px;justify-content:flex-end">`+
+				`<button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('new-contact-modal').close()">Cancel</button>`+
+				`<button class="btn btn-primary btn-sm" type="submit">Add contact</button>`+
+				`</div></form></div>`,
+			industryOpts,
+		)
+		ncDialogHTML := ModalShellRaw("new-contact-modal", "nc-dialog", "new-contact-modal-title", ncInner)
+
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap contacts-wrap">
 <div class="page-hd">
@@ -50,28 +111,29 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
   </div>
   <div style="display:flex;gap:0.5rem;align-items:center">
     <div class="view-toggle" id="view-toggle">
-      <button class="view-btn active" id="btn-grid" onclick="setView('grid')" title="Grid view">
+      <button class="view-btn active" id="btn-grid" onclick="setView('grid')" aria-label="Grid view">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
       </button>
-      <button class="view-btn" id="btn-list" onclick="setView('list')" title="List view">
+      <button class="view-btn" id="btn-list" onclick="setView('list')" aria-label="List view">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="14" height="2" rx="1"/><rect x="1" y="7" width="14" height="2" rx="1"/><rect x="1" y="12" width="14" height="2" rx="1"/></svg>
       </button>
     </div>
-    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-modal').showModal()">Import CSV</button>
-    <button class="btn btn-primary btn-sm" onclick="document.getElementById('new-contact-modal').showModal()">+ Add contact</button>
+    <button class="btn btn-secondary btn-sm" onclick="openModal('import-modal',this)">Import CSV</button>
+    <button class="btn btn-primary btn-sm" onclick="openModal('new-contact-modal',this)">+ Add contact</button>
   </div>
 </div>
 
 <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-  <div class="ct-opt-tabs" id="opt-tabs">
-    <button class="ct-opt-tab active" onclick="setOptFilter('',event)">All</button>
-    <button class="ct-opt-tab" onclick="setOptFilter('true',event)">Opted in</button>
-    <button class="ct-opt-tab" onclick="setOptFilter('false',event)">Opted out</button>
+  <div class="ct-opt-tabs" id="opt-tabs" role="tablist" x-data="{optFilter:''}">
+    <button class="ct-opt-tab" role="tab" type="button" :class="{'active':optFilter===''}" :aria-selected="optFilter===''" @click="optFilter='';setOptFilter('',null)">All</button>
+    <button class="ct-opt-tab" role="tab" type="button" :class="{'active':optFilter==='true'}" :aria-selected="optFilter==='true'" @click="optFilter='true';setOptFilter('true',null)">Opted in</button>
+    <button class="ct-opt-tab" role="tab" type="button" :class="{'active':optFilter==='false'}" :aria-selected="optFilter==='false'" @click="optFilter='false';setOptFilter('false',null)">Opted out</button>
   </div>
   <input type="search" placeholder="Search name or phone..."
     hx-get="/contacts/table" hx-trigger="input changed delay:300ms" hx-target="#contacts-table" hx-swap="innerHTML"
-    hx-include="#opt-filter-input,#tag-filter-input"
+    hx-include="#opt-filter-input,#tag-filter-input" hx-indicator="#ct-search-ind"
     name="search" class="form-input search-input" style="flex:1;min-width:200px;max-width:360px">
+  <span id="ct-search-ind" class="htmx-indicator" aria-hidden="true"><span class="htmx-ind-spin"></span></span>
 </div>
 <input type="hidden" id="opt-filter-input" name="opted_in_filter" value="">
 <input type="hidden" id="tag-filter-input" name="tag" value="">
@@ -91,92 +153,31 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
 </details>
 
 <div id="contacts-table"
+  role="tabpanel" tabindex="0"
   hx-get="/contacts/table"
   hx-trigger="load, contactsUpdated from:body"
-  hx-swap="innerHTML">
-</div>
+  hx-swap="innerHTML"
+  aria-live="polite" aria-atomic="false">` + SkeletonRows(6) + `</div>
 
-<div id="contact-detail"></div>
+<div id="contact-detail" aria-live="polite" aria-atomic="false"></div>
 
-<dialog id="import-modal">
-<h2>Import contacts from CSV</h2>
-<form hx-post="/contacts/import/upload" hx-target="#import-steps" hx-swap="innerHTML" enctype="multipart/form-data">
+` + ModalShell("import-modal", "Import contacts from CSV",
+			`<form hx-post="/contacts/import/upload" hx-target="#import-steps" hx-swap="innerHTML" enctype="multipart/form-data" hx-disabled-elt="find button[type='submit']">
 <label class="field"><span>CSV file</span><input type="file" name="csv_file" accept=".csv" required></label>
 <div class="modal-btns">
 <button class="btn btn-primary btn-sm" type="submit">Upload &amp; map columns</button>
 <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('import-modal').close()">Cancel</button>
 </div>
 </form>
-<div id="import-steps"></div>
-</dialog>
+<div id="import-steps" aria-live="polite" aria-atomic="false"></div>`) + `
 
-<dialog id="new-contact-modal" class="modal-dialog">
-<div class="modal-gradient-hd" style="background:linear-gradient(135deg,#6c63ff,#a855f7);padding:28px 24px;text-align:center;position:relative;border-radius:12px 12px 0 0">
-  <button type="button" onclick="document.getElementById('new-contact-modal').close()"
-    style="position:absolute;top:12px;right:16px;background:rgba(255,255,255,0.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%%;cursor:pointer;font-size:16px">&#215;</button>
-  <div style="width:60px;height:60px;border-radius:50%%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px;color:#fff">?</div>
-  <div style="color:#fff;font-size:18px;font-weight:700">Add Contact</div>
-  <div style="color:rgba(255,255,255,0.8);font-size:13px;margin-top:4px">Fill in the details to create a new contact</div>
-</div>
-<div style="padding:20px 24px">
-<form hx-post="/contacts" hx-target="body" hx-swap="none" hx-on::after-request="if(event.detail.successful){document.getElementById('new-contact-modal').close();htmx.trigger(document.body,'contactsUpdated')}">
-<div class="form-group">
-  <label class="form-label">Phone <span style="color:var(--danger)">*</span></label>
-  <div style="display:flex;gap:8px">
-    <select name="country_code" class="form-input" style="width:110px">
-      <option value="+91">+91 IN</option>
-      <option value="+1">+1 US</option>
-      <option value="+44">+44 GB</option>
-      <option value="+971">+971 AE</option>
-      <option value="+65">+65 SG</option>
-    </select>
-    <input class="form-input" type="tel" name="phone_number" required placeholder="9876543210" style="flex:1">
-  </div>
-</div>
-<div class="form-group">
-  <label class="form-label">Full name</label>
-  <input class="form-input" type="text" name="name" placeholder="Anita Desai">
-</div>
-<div class="form-group">
-  <label class="form-label">Email</label>
-  <input class="form-input" type="email" name="email" placeholder="anita@example.com">
-</div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-  <div class="form-group">
-    <label class="form-label">Company</label>
-    <input class="form-input" type="text" name="company" placeholder="Acme Pvt Ltd">
-  </div>
-  <div class="form-group">
-    <label class="form-label">Role</label>
-    <input class="form-input" type="text" name="role" placeholder="Sales Manager">
-  </div>
-</div>
-<div class="form-group">
-  <label class="form-label">Industry</label>
-  <select class="form-input" name="industry">%s</select>
-</div>
-<label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--success-light,#f0fdf4);border-radius:var(--radius,6px);margin-bottom:16px;cursor:pointer">
-  <input type="checkbox" name="opt_in" value="true" style="margin-top:3px">
-  <div>
-    <div style="font-weight:600;font-size:14px">Opted-in to marketing</div>
-    <div style="font-size:12px;color:var(--text-secondary)">Contact has given consent to receive WhatsApp messages</div>
-  </div>
-</label>
-<div style="display:flex;gap:8px;justify-content:flex-end">
-  <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('new-contact-modal').close()">Cancel</button>
-  <button class="btn btn-primary btn-sm" type="submit">Add contact</button>
-</div>
-</form>
-</div>
-</dialog>
+%s
 
 </div>
 
 <script>
 function setOptFilter(val, evt) {
   document.getElementById('opt-filter-input').value = val;
-  document.querySelectorAll('.ct-opt-tab').forEach(function(t){ t.classList.remove('active'); });
-  if (evt && evt.target) evt.target.classList.add('active');
   htmx.ajax('GET', '/contacts/table', {target:'#contacts-table', swap:'innerHTML',
     values: {opted_in_filter: val, search: (document.querySelector('[name=search]') || {}).value || ''}});
 }
@@ -186,7 +187,7 @@ function setView(v) {
   document.getElementById('btn-list').classList.toggle('active', v === 'list');
   htmx.ajax('GET', '/contacts/table?view=' + v, {target:'#contacts-table', swap:'innerHTML'});
 }
-</script>`, industryList, industryOpts)
+</script>`, industryList, ncDialogHTML)
 		if err != nil {
 			return err
 		}
@@ -237,17 +238,21 @@ func avatarGradient(id string) string {
 func ContactTable(contacts []db.Contact, total int, offset, limit int, searchActive bool) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if len(contacts) == 0 {
-			msg := "No contacts yet."
+			icon := EmptyIconContacts
+			title := "No contacts yet"
+			body := "Import a CSV or add contacts manually to get started."
 			if searchActive {
-				msg = "No contacts match your search."
+				icon = EmptyIconSearch
+				title = "No contacts found"
+				body = "Try a different search term or clear your filters."
 			}
-			_, err := fmt.Fprintf(w, `<p class="empty-state">%s</p>`, msg)
+			_, err := io.WriteString(w, EmptyStateHTML(icon, title, body, nil))
 			return err
 		}
 
 		end := offset + len(contacts)
 		_, err := fmt.Fprintf(w, `<div class="contacts-table-wrap">
-<div class="table-count">%d–%d of %d</div>
+<div class="table-count">%d&#8211;%d of %d</div>
 <table class="tbl">
 <thead><tr>
   <th>PERSON</th><th>COMPANY</th><th>INDUSTRY</th><th>ROLE</th><th>STATUS</th><th>ACTIONS</th>
@@ -258,26 +263,26 @@ func ContactTable(contacts []db.Contact, total int, offset, limit int, searchAct
 		}
 
 		for _, c := range contacts {
-			company := "—"
+			company := "&#8212;"
 			if v, ok := c.CustomFields["company"]; ok {
 				if s, ok := v.(string); ok && s != "" {
 					company = html.EscapeString(s)
 				}
 			}
-			role := "—"
+			role := "&#8212;"
 			if v, ok := c.CustomFields["role"]; ok {
 				if s, ok := v.(string); ok && s != "" {
 					role = html.EscapeString(s)
 				}
 			}
-			industryHTML := "—"
+			industryHTML := "&#8212;"
 			if c.Industry != "" {
 				industryHTML = fmt.Sprintf(`<span class="ind-chip">%s</span>`, html.EscapeString(c.Industry))
 			}
 
-			statusHTML := `<span class="badge badge-off">Not opted in</span>`
+			statusHTML := BadgeHTML("off", "Not opted in")
 			if c.OptedIn {
-				statusHTML = `<span class="badge badge-on">Opted in</span>`
+				statusHTML = BadgeHTML("on", "Opted in")
 			}
 
 			initials := contactAvatarInitials(c.Name, c.WAPhone)
@@ -305,13 +310,13 @@ func ContactTable(contacts []db.Contact, total int, offset, limit int, searchAct
     <div style="display:flex;gap:6px">
       <button class="btn btn-sm btn-secondary"
         hx-get="/contacts/%s" hx-target="#contact-detail" hx-swap="innerHTML"
-        title="Edit">&#9998;</button>
+        aria-label="Edit">&#9998;</button>
       <button class="btn btn-sm btn-danger"
         hx-delete="/contacts/%s"
         hx-confirm="Permanently delete this contact?"
         hx-target="#contacts-table" hx-swap="innerHTML"
         hx-include="#opt-filter-input,#tag-filter-input,[name=search]"
-        title="Delete">&#128465;</button>
+        aria-label="Delete">&#128465;</button>
     </div>
   </td>
 </tr>`,
@@ -340,10 +345,10 @@ func ContactTable(contacts []db.Contact, total int, offset, limit int, searchAct
 			if prev < 0 {
 				prev = 0
 			}
-			paginationHTML += fmt.Sprintf(`<button class="btn btn-secondary btn-sm" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table" hx-swap="innerHTML">&#8592; Previous</button>`, prev)
+			paginationHTML += fmt.Sprintf(`<button class="btn btn-secondary btn-sm" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table" hx-swap="innerHTML" hx-indicator="#ct-search-ind">&#8592; Previous</button>`, prev)
 		}
 		if end < total {
-			paginationHTML += fmt.Sprintf(`<button class="btn btn-secondary btn-sm" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table" hx-swap="innerHTML">Next &#8594;</button>`, offset+limit)
+			paginationHTML += fmt.Sprintf(`<button class="btn btn-secondary btn-sm" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table" hx-swap="innerHTML" hx-indicator="#ct-search-ind">Next &#8594;</button>`, offset+limit)
 		}
 		paginationHTML += `</div>`
 		if _, err := io.WriteString(w, paginationHTML+"</div>"); err != nil {
@@ -355,7 +360,7 @@ func ContactTable(contacts []db.Contact, total int, offset, limit int, searchAct
 
 func ContactDetail(c *db.Contact, tags []db.Tag, notes []db.ContactNote, allTags []db.Tag) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		email := "—"
+		email := "&#8212;"
 		if c.Email != nil {
 			email = *c.Email
 		}
@@ -389,7 +394,7 @@ func ContactDetail(c *db.Contact, tags []db.Tag, notes []db.ContactNote, allTags
 		}
 
 		if _, err := fmt.Fprintf(w, `<h3>Tags</h3>
-<div id="contact-tags-%s">`, c.ID); err != nil {
+<div id="contact-tags-%s" aria-live="polite" aria-atomic="false">`, c.ID); err != nil {
 			return err
 		}
 		if err := ContactTagList(tags, allTags, c.ID).Render(ctx, w); err != nil {
@@ -400,7 +405,7 @@ func ContactDetail(c *db.Contact, tags []db.Tag, notes []db.ContactNote, allTags
 		}
 
 		if _, err := fmt.Fprintf(w, `<h3>Notes</h3>
-<div id="contact-notes-%s">`, c.ID); err != nil {
+<div id="contact-notes-%s" aria-live="polite" aria-atomic="false">`, c.ID); err != nil {
 			return err
 		}
 		if err := ContactNoteList(notes).Render(ctx, w); err != nil {
@@ -429,7 +434,7 @@ func ContactTagList(tags []db.Tag, allTags []db.Tag, contactID string) templ.Com
 <button type="button" aria-label="remove tag"
   hx-delete="/contacts/%s/tags/%d"
   hx-target="#contact-tags-%s"
-  hx-swap="innerHTML">×</button></span>`,
+  hx-swap="innerHTML">Ã—</button></span>`,
 				html.EscapeString(t.Color), html.EscapeString(t.Name), contactID, t.ID, contactID,
 			); err != nil {
 				return err
@@ -527,7 +532,7 @@ func SegmentList(segs []db.Segment) templ.Component {
 
 func ImportMapColumns(headers []string, csvData string, rowCount int) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		opts := `<option value="">— skip —</option>`
+		opts := `<option value="">&#8212; skip &#8212;</option>`
 		for i, h := range headers {
 			opts += fmt.Sprintf(`<option value="%d">%s</option>`, i, html.EscapeString(h))
 		}
@@ -569,9 +574,9 @@ func ImportPreview(rows []ImportPreviewRow, total int, csvData string, phoneCol,
 			return err
 		}
 		for _, r := range rows {
-			status := `<span class="badge badge-approved">Valid</span>`
+			status := BadgeHTML("approved", "Valid")
 			if !r.Valid {
-				status = `<span class="badge badge-rejected">` + html.EscapeString(r.Error) + `</span>`
+				status = BadgeHTML("rejected", r.Error)
 			}
 			if _, err := fmt.Fprintf(w, `<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>`,
 				html.EscapeString(r.Phone), html.EscapeString(r.Name),
@@ -620,3 +625,4 @@ func ImportResult(inserted, skipped, invalidCount int) templ.Component {
 		return err
 	})
 }
+
