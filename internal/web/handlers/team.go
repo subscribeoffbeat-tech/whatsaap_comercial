@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -29,6 +30,8 @@ func (h *TeamHandler) Mount(r chi.Router) {
 	r.Post("/invite", h.Invite)
 	r.Post("/{id}/role", h.UpdateRole)
 	r.Post("/{id}/activate", h.SetActive)
+	r.Post("/{id}/limits", h.SetLimits)
+	r.Post("/{id}/reinvite", h.Reinvite)
 	r.Delete("/{id}", h.Delete)
 }
 
@@ -38,11 +41,12 @@ func (h *TeamHandler) List(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "load agents: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	limits, _ := db.ListAgentLimits(r.Context(), h.pool)
 	auditLog, _ := db.ListAuditLog(r.Context(), h.pool, "", 50, 0)
 	actor := mw.AgentFromCtx(r.Context())
 	flash := r.URL.Query().Get("invite_url")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	templates.TeamPage(agents, auditLog, actor, flash).Render(r.Context(), w)
+	templates.TeamPage(agents, limits, auditLog, actor, flash).Render(r.Context(), w)
 }
 
 func (h *TeamHandler) Invite(w http.ResponseWriter, r *http.Request) {
@@ -126,4 +130,40 @@ func (h *TeamHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	db.Log(r.Context(), h.pool, actor.ID, "agent_deleted", "agent", id, nil)
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *TeamHandler) SetLimits(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	cap := 0
+	if v := r.FormValue("monthly_msg_cap"); v != "" {
+		if n, err2 := strconv.Atoi(v); err2 == nil && n >= 0 {
+			cap = n
+		}
+	}
+	if err := db.SetAgentMsgCap(r.Context(), h.pool, id, cap); err != nil {
+		log.Printf("set agent limits %s: %v", id, err)
+	}
+	http.Redirect(w, r, "/team", http.StatusSeeOther)
+}
+
+func (h *TeamHandler) Reinvite(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	token, err := GenerateInviteToken()
+	if err != nil {
+		log.Printf("generate reinvite token: %v", err)
+		http.Redirect(w, r, "/team", http.StatusSeeOther)
+		return
+	}
+	expires := time.Now().Add(InviteExpiry)
+	if err := db.UpdateInviteToken(r.Context(), h.pool, id, token, expires); err != nil {
+		log.Printf("reinvite %s: %v", id, err)
+		http.Redirect(w, r, "/team", http.StatusSeeOther)
+		return
+	}
+	inviteURL := h.baseURL + "/invite/" + token
+	http.Redirect(w, r, "/team?invite_url="+inviteURL, http.StatusSeeOther)
 }

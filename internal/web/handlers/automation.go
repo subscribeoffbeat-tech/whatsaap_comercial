@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
@@ -113,30 +112,18 @@ func (h *AutomationHandler) Toggle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-	// Parse desired state from JSON body {"active": true/false}
-	var req struct {
-		Active bool `json:"active"`
+	// Load the current rule to flip its state.
+	rule, err := db.GetRule(r.Context(), h.pool, id)
+	if err != nil {
+		http.Error(w, "rule not found", http.StatusNotFound)
+		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// Fallback: read from form value
-		if err2 := r.ParseForm(); err2 == nil {
-			req.Active = r.FormValue("active") == "true"
-		}
-	}
-	if err := db.ToggleRule(r.Context(), h.pool, id, req.Active); err != nil {
+	if err := db.ToggleRule(r.Context(), h.pool, id, !rule.Active); err != nil {
 		log.Printf("toggle rule %d: %v", id, err)
 		http.Error(w, "toggle failed", http.StatusInternalServerError)
 		return
 	}
-	// Return updated row for HTMX swap.
-	rule, _ := db.GetRule(r.Context(), h.pool, id)
-	if rule != nil {
-		tmpls, _ := db.ListTemplates(r.Context(), h.pool)
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		templates.AutomationRuleRow(rule, tmpls).Render(r.Context(), w)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
+	http.Redirect(w, r, "/automation", http.StatusSeeOther)
 }
 
 func (h *AutomationHandler) Delete(w http.ResponseWriter, r *http.Request) {

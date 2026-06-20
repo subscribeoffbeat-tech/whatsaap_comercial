@@ -162,3 +162,11 @@ func DeleteAgent(ctx context.Context, pool *pgxpool.Pool, agentID string) error 
 	_, err := pool.Exec(ctx, `DELETE FROM agents WHERE id = $1::uuid`, agentID)
 	return err
 }
+
+// UpdateInviteToken replaces the invite token for an existing (pending) agent.
+func UpdateInviteToken(ctx context.Context, pool *pgxpool.Pool, agentID, token string, expiresAt time.Time) error {
+	_, err := pool.Exec(ctx,
+		`UPDATE agents SET invite_token = $1, invite_expires_at = $2 WHERE id = $3::uuid`,
+		token, expiresAt, agentID)
+	return err
+}

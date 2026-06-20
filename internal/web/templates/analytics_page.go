@@ -106,11 +106,11 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 			failStr = fmt.Sprintf("%.1f%%", failPct)
 		}
 		if _, err := fmt.Fprintf(w, `
-<div class="an-cards">
-<div class="an-card"><div class="an-card-val">%d</div><div class="an-card-lbl">Sent</div></div>
-<div class="an-card"><div class="an-card-val">%s</div><div class="an-card-lbl">Delivered</div></div>
-<div class="an-card"><div class="an-card-val">%s</div><div class="an-card-lbl">Read</div></div>
-<div class="an-card"><div class="an-card-val an-val--danger">%s</div><div class="an-card-lbl">Failed</div></div>`,
+<div class="stat-grid">
+<div class="stat-card"><div class="stat-label">Sent</div><div class="stat-value">%d</div><div class="stat-sub">messages dispatched</div></div>
+<div class="stat-card"><div class="stat-label">Delivered</div><div class="stat-value">%s</div><div class="stat-sub">of messages sent</div></div>
+<div class="stat-card"><div class="stat-label">Read</div><div class="stat-value">%s</div><div class="stat-sub">of messages sent</div></div>
+<div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value" style="color:var(--danger)">%s</div><div class="stat-sub">delivery failures</div></div>`,
 			data.Overview.Sent, delivStr, readStr, failStr,
 		); err != nil {
 			return err
@@ -118,7 +118,7 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 		// Cost card: admin/manager only — must NOT appear in agent's rendered HTML.
 		if !isAgent {
 			if _, err := fmt.Fprintf(w,
-				`<div class="an-card"><div class="an-card-val">₹%.2f</div><div class="an-card-lbl">Cost (INR)</div></div>`,
+				`<div class="stat-card"><div class="stat-label">Cost</div><div class="stat-value">₹%.2f</div><div class="stat-sub">incl. 18%% GST</div></div>`,
 				data.Overview.CostINR,
 			); err != nil {
 				return err
