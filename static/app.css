@@ -896,11 +896,8 @@ dialog {
 /* illustration card */
 .auth-illus-wrap { display: flex; justify-content: center; margin-top: var(--sp-10); }
 .auth-illus-card {
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
   padding: var(--sp-8) var(--sp-10);
   color: var(--brand-700);
-  box-shadow: var(--shadow-md);
 }
 
 /* security feature list */
