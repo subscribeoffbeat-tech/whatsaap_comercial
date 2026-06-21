@@ -54,12 +54,14 @@ func navPillsHTML(agent *mw.AgentClaims, activePath string) string {
 			continue
 		}
 		cls := "topnav-pill"
+		ariaCurrent := ""
 		if activePath == item.Path ||
 			(item.Path != "/" && strings.HasPrefix(activePath, item.Path)) {
 			cls += " active"
+			ariaCurrent = ` aria-current="page"`
 		}
-		s += fmt.Sprintf(`<a href="%s" class="%s">%s</a>
-`, item.Path, cls, item.Label)
+		s += fmt.Sprintf(`<a href="%s" class="%s"%s>%s</a>
+`, item.Path, cls, ariaCurrent, item.Label)
 	}
 	return s
 }

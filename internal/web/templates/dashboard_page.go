@@ -59,6 +59,19 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 			return err
 		}
 
+		// ── Quality alert banner (yellow / red only) ─────────────────────────────
+		if stats.QualityRating == "red" {
+			if _, err := io.WriteString(w, CalloutHTML("danger",
+				"Your WhatsApp phone quality is low. Sending may be restricted by Meta.")); err != nil {
+				return err
+			}
+		} else if stats.QualityRating == "yellow" {
+			if _, err := io.WriteString(w, CalloutHTML("warning",
+				"Your WhatsApp phone quality has dropped. Review your messaging to avoid sending restrictions.")); err != nil {
+				return err
+			}
+		}
+
 		// ── Stat cards ────────────────────────────────────────────────────────────
 		if _, err := io.WriteString(w, `<div class="stat-grid">`); err != nil {
 			return err
@@ -76,7 +89,7 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 			return err
 		}
 		if _, err := fmt.Fprintf(w,
-			`<div class="stat-card"><div class="stat-label">Chats waiting</div><div class="stat-value">%d</div><div class="stat-sub">open conversations</div></div>`,
+			`<a href="/inbox" class="stat-card stat-card--link"><div class="stat-label">Chats waiting</div><div class="stat-value">%d</div><div class="stat-sub">open conversations</div></a>`,
 			stats.ChatsWaiting,
 		); err != nil {
 			return err
@@ -106,12 +119,13 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
   <div style="font-size:15px;font-weight:600;color:var(--text-strong)">Daily send capacity</div>
   <div style="font-size:13px;color:var(--text-secondary)">%d / %d messages</div>
 </div>
-<div class="tier-bar-wrap"><div class="%s" style="width:%d%%"></div></div>
+<div class="tier-bar-wrap" role="progressbar" aria-valuenow="%d" aria-valuemin="0" aria-valuemax="%d" aria-label="Daily send capacity: %d of %d messages used"><div class="%s" style="width:%d%%"></div></div>
 <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-top:6px">
   <span>%d</span><span>%d%% used</span><span>%d</span>
 </div>
 </div>`,
 			stats.SentToday, stats.DailyCap,
+			stats.SentToday, stats.DailyCap, stats.SentToday, stats.DailyCap,
 			fillClass, capPct,
 			stats.SentToday, capPct, stats.DailyCap,
 		); err != nil {
@@ -144,11 +158,11 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 			}
 		} else {
 			if _, err := io.WriteString(w, `<table class="an-table tbl"><thead><tr>
-<th>CAMPAIGN</th><th>STATUS</th><th>SENT</th><th>DELIVERED</th><th>FAILED</th>`); err != nil {
+<th scope="col">CAMPAIGN</th><th scope="col">STATUS</th><th scope="col">SENT</th><th scope="col">DELIVERED</th><th scope="col">FAILED</th>`); err != nil {
 				return err
 			}
 			if !isAgent {
-				if _, err := io.WriteString(w, `<th>COST</th>`); err != nil {
+				if _, err := io.WriteString(w, `<th scope="col">COST</th>`); err != nil {
 					return err
 				}
 			}

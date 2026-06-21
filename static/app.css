@@ -254,6 +254,8 @@ a { color: inherit; text-decoration: none; }
   transition: transform var(--duration-fast), box-shadow var(--duration-fast);
 }
 .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.stat-card--link { text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 6px; }
+.stat-card--link:hover { border-color: var(--accent); }
 .stat-label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
 .stat-value { font-size: 28px; font-weight: 700; line-height: 1.2; letter-spacing: -0.5px; }
 .stat-sub { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
@@ -474,12 +476,19 @@ tbody tr:last-child td { border-bottom: none; }
 .badge-dot.yellow { background: var(--warning); }
 .badge-dot.red    { background: var(--danger); }
 
-/* Campaign status badges (legacy compat) */
+/* Campaign status badges (legacy compat — two-class selectors) */
 .badge.status-scheduled { background: var(--info-bg);       color: var(--info-text); }
 .badge.status-running   { background: var(--success-light); color: var(--success-text); }
 .badge.status-completed { background: var(--success-bg);    color: var(--success-strong); }
 .badge.status-cancelled { background: var(--danger-light);  color: var(--danger); }
 .badge.status-paused    { background: var(--warning-light); color: var(--warning-text); }
+/* Campaign status badges — single-class form matching BadgeHTML output (badge-{variant}) */
+.badge-draft      { background: var(--accent-lighter); color: var(--text-secondary); }
+.badge-scheduled  { background: var(--info-bg);        color: var(--info-text); }
+.badge-running    { background: var(--success-light);  color: var(--success-text); }
+.badge-completed  { background: var(--success-bg);     color: var(--success-strong); }
+.badge-cancelled  { background: var(--danger-light);   color: var(--danger); }
+.badge-paused     { background: var(--warning-light);  color: var(--warning-text); }
 
 /* Campaign tab count pills (G-AA) */
 .badge-cnt { font-size: 11px; padding: 1px 6px; border-radius: var(--radius-sm); margin-left: 4px; font-weight: 600; }
