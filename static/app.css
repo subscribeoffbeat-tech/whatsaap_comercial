@@ -909,58 +909,26 @@ dialog {
   max-width: 380px;
   line-height: 1.5;
 }
-.auth-mockup { position: relative; z-index: 2; flex: 1; margin-top: var(--sp-10); }
-.auth-chat-window {
-  position: absolute; top: 0; left: -40px; right: 20px; bottom: 0;
-  background: var(--bg-card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-xl);
-  display: flex; flex-direction: column; overflow: hidden;
+/* illustration card */
+.auth-illus-wrap { display: flex; justify-content: center; margin-top: var(--sp-8); position: relative; z-index: 2; }
+.auth-illus-card {
+  background: var(--bg-fill-overlay-w-fill);
+  border-radius: var(--radius-md);
+  padding: var(--sp-8) var(--sp-10);
+  color: var(--brand-700);
 }
-.auth-chat-header {
-  padding: var(--sp-4);
-  background: var(--wa-surface); border-bottom: 1px solid var(--wa-border);
-  display: flex; align-items: center; gap: var(--sp-3); flex-shrink: 0;
-}
-.auth-chat-av {
-  width: 36px; height: 36px; border-radius: var(--radius-full);
-  background: var(--avatar-gradient);
+
+/* security feature list */
+.auth-features { margin-top: var(--sp-8); display: flex; flex-direction: column; gap: var(--sp-4); position: relative; z-index: 2; }
+.auth-feature-item { display: flex; align-items: flex-start; gap: var(--sp-3); }
+.auth-feature-icon {
+  width: 36px; height: 36px; border-radius: var(--radius-sm); flex-shrink: 0;
+  background: var(--bg-fill-overlay-w-subtle);
   display: flex; align-items: center; justify-content: center;
-  color: white; font-size: 13px; font-weight: 700; flex-shrink: 0;
+  color: white;
 }
-.auth-chat-name  { font-size: 13px; font-weight: 700; color: var(--wa-text); }
-.auth-chat-status { font-size: 11px; color: var(--wa-text-muted); }
-.auth-messages {
-  flex: 1; padding: var(--sp-4); background: var(--wa-bg);
-  display: flex; flex-direction: column; gap: var(--sp-3); overflow-y: auto;
-}
-.auth-msg { display: flex; margin-bottom: var(--sp-1); }
-.auth-msg.out { justify-content: flex-end; }
-.auth-bubble {
-  padding: 10px 14px; border-radius: var(--radius-sm);
-  font-size: 13px; line-height: 1.4; word-wrap: break-word;
-  max-width: 65%; box-shadow: var(--shadow-bubble);
-}
-.auth-msg.in  .auth-bubble { background: var(--wa-bubble-in); color: var(--wa-text); }
-.auth-msg.out .auth-bubble { background: var(--bubble-out);   color: var(--wa-text); }
-.auth-timestamp { font-size: 11px; color: var(--wa-text-muted); text-align: center; margin: var(--sp-2) 0; }
-.auth-composer {
-  padding: var(--sp-3) var(--sp-4);
-  background: var(--bg-card); border-top: 1px solid var(--wa-border);
-  display: flex; gap: var(--sp-2); align-items: center; flex-shrink: 0;
-}
-.auth-composer-input {
-  flex: 1; padding: 10px 14px;
-  border: 1.5px solid var(--border); border-radius: var(--radius-full);
-  font-size: 13px; outline: none; background: var(--wa-surface);
-}
-.auth-composer-btn {
-  width: 36px; height: 36px; border-radius: var(--radius-full);
-  background: var(--brand-600); color: white;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; transition: background var(--duration-base);
-}
-.auth-composer-btn:hover { background: var(--brand-700); }
+.auth-feature-title { font-size: var(--font-size-sm); font-weight: 700; color: var(--text-overlay-w-primary); margin-bottom: 3px; }
+.auth-feature-desc  { font-size: var(--font-size-sm); color: var(--text-overlay-w-secondary); line-height: 1.4; }
 
 @media (max-width: 900px) {
   .auth-shell { grid-template-columns: 1fr; }
