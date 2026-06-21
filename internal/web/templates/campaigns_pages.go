@@ -312,6 +312,9 @@ func WizardNewPage(agent *mw.AgentClaims, tags []db.Tag) templ.Component {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
 			return err
 		}
+		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
+			return err
+		}
 		state := WizardState{Step: 1}
 		if err := WizardStep1(state, tags).Render(ctx, w); err != nil {
 			return err
@@ -324,6 +327,9 @@ func WizardNewPage(agent *mw.AgentClaims, tags []db.Tag) templ.Component {
 func WizardStep2Page(agent *mw.AgentClaims, state WizardState, tmpls []db.Template) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
 			return err
 		}
 		if err := WizardStep2(state, tmpls).Render(ctx, w); err != nil {
@@ -339,6 +345,9 @@ func WizardStep3Page(agent *mw.AgentClaims, state WizardState) templ.Component {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
 			return err
 		}
+		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
+			return err
+		}
 		if err := WizardStep3(state).Render(ctx, w); err != nil {
 			return err
 		}
@@ -352,6 +361,9 @@ func WizardStep3ErrorPage(agent *mw.AgentClaims, state WizardState, errMsg strin
 		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
 			return err
 		}
+		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
+			return err
+		}
 		if err := WizardStep3Error(state, errMsg).Render(ctx, w); err != nil {
 			return err
 		}
@@ -363,6 +375,9 @@ func WizardStep3ErrorPage(agent *mw.AgentClaims, state WizardState, errMsg strin
 func WizardStep4Page(agent *mw.AgentClaims, state WizardState, tmpl *db.Template) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
 			return err
 		}
 		if err := WizardStep4(state, tmpl).Render(ctx, w); err != nil {

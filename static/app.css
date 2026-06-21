@@ -1065,6 +1065,8 @@ dialog {
 .wizard-nav li.done   { color: var(--success); }
 .wizard-body    { padding: 1.5rem; }
 .wizard-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.wiz-back-link { display:block; margin-bottom:12px; font-size:var(--font-size-sm); color:var(--text-muted); text-decoration:none; }
+.wiz-back-link:hover { color:var(--text); }
 
 /* ── Message bubble aliases (inbox) ─────────────────────────────────────────── */
 .bubble     { max-width: 65%; padding: 10px 16px; border-radius: 16px; font-size: 14px; line-height: 1.5; }
