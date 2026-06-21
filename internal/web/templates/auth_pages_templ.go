@@ -8,7 +8,7 @@ package templates
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-func LoginPage(flash string, next string) templ.Component {
+func authRightPanel() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -29,82 +29,379 @@ func LoginPage(flash string, next string) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex,nofollow\"><title>Sign in — Offbeat ChatFlow</title><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"\"><link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\"><link rel=\"stylesheet\" href=\"/static/tokens.css\"><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js\" defer></script></head><body class=\"auth-page\"><div class=\"auth-shell\"><div class=\"auth-left\"><div class=\"auth-form-wrap\"><div class=\"auth-logo\" aria-label=\"Offbeat ChatFlow\"><div class=\"auth-logo-wordmark\"><span class=\"auth-logo-top\">Offbeat</span> <span class=\"auth-logo-bottom\"><span class=\"auth-logo-chat\">Chat</span><span class=\"auth-logo-flow\">Flow</span></span></div><div class=\"auth-logo-rule\"></div></div><div class=\"auth-form-head\"><h1>Welcome back</h1><p>Enter your email and password to access your account.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"auth-right\" aria-hidden=\"true\"><div class=\"auth-showcase-head\"><h2>Your conversations, always secure.</h2><p>With invite-only access and time-limited reset links, you control who has access to sensitive customer conversations.</p></div><div class=\"auth-illus-wrap\"><div class=\"auth-illus-card\"><svg width=\"160\" height=\"120\" viewBox=\"0 0 160 120\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"30\" cy=\"24\" r=\"2.5\" stroke=\"none\" fill=\"currentColor\" opacity=\"0.35\"></circle> <circle cx=\"130\" cy=\"20\" r=\"1.8\" stroke=\"none\" fill=\"currentColor\" opacity=\"0.28\"></circle> <circle cx=\"148\" cy=\"40\" r=\"1.3\" stroke=\"none\" fill=\"currentColor\" opacity=\"0.22\"></circle> <circle cx=\"12\" cy=\"54\" r=\"1.3\" stroke=\"none\" fill=\"currentColor\" opacity=\"0.22\"></circle> <rect x=\"16\" y=\"46\" width=\"128\" height=\"68\" rx=\"6\"></rect> <polyline points=\"16,46 80,76 144,46\"></polyline> <rect x=\"59\" y=\"58\" width=\"42\" height=\"30\" rx=\"5\" fill=\"currentColor\" fill-opacity=\"0.08\"></rect> <path d=\"M67,58 v-10 a13,13 0 0,1 26,0 v10\" fill=\"none\"></path> <circle cx=\"80\" cy=\"73\" r=\"4\"></circle> <line x1=\"80\" y1=\"77\" x2=\"80\" y2=\"82\"></line></svg></div></div><div class=\"auth-features\"><div class=\"auth-feature-item\"><div class=\"auth-feature-icon\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"5\" y=\"11\" width=\"14\" height=\"10\" rx=\"2\"></rect> <path d=\"M8 11V7a4 4 0 0 1 8 0v4\"></path></svg></div><div><div class=\"auth-feature-title\">Invite-only access</div><div class=\"auth-feature-desc\">Only people your admin invites can join the workspace.</div></div></div><div class=\"auth-feature-item\"><div class=\"auth-feature-icon\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"2\" y=\"4\" width=\"20\" height=\"16\" rx=\"2\"></rect> <polyline points=\"2,4 12,13 22,4\"></polyline></svg></div><div><div class=\"auth-feature-title\">Reset via your invite email</div><div class=\"auth-feature-desc\">The reset link is sent to the same address your admin used to invite you.</div></div></div><div class=\"auth-feature-item\"><div class=\"auth-feature-icon\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle> <polyline points=\"12 6 12 12 16 14\"></polyline></svg></div><div><div class=\"auth-feature-title\">Links expire in 30 minutes</div><div class=\"auth-feature-desc\">Time-limited links keep your account safe from unauthorised access.</div></div></div></div></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func authLogo() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var2 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var2 == nil {
+			templ_7745c5c3_Var2 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"auth-logo\" aria-label=\"Offbeat ChatFlow\"><div class=\"auth-logo-wordmark\"><span class=\"auth-logo-top\">Offbeat</span> <span class=\"auth-logo-bottom\"><span class=\"auth-logo-chat\">Chat</span><span class=\"auth-logo-flow\">Flow</span></span></div><div class=\"auth-logo-rule\"></div></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func LoginPage(flash string, msg string, next string) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var3 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var3 == nil {
+			templ_7745c5c3_Var3 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex,nofollow\"><title>Sign in — Offbeat ChatFlow</title><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"\"><link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\"><link rel=\"stylesheet\" href=\"/static/tokens.css\"><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js\" defer></script></head><body class=\"auth-page\"><div class=\"auth-shell\"><div class=\"auth-left\"><div class=\"auth-form-wrap\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = authLogo().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"auth-form-head\"><h1>Welcome back</h1><p>Enter your email and password to access your account.</p></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if msg != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"callout callout--success\" role=\"status\" aria-live=\"polite\"><span aria-hidden=\"true\">✓</span> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var4 string
+			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 103, Col: 13}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var5 string
+			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(msg)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 103, Col: 20}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		if flash != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div id=\"login-err\" class=\"callout callout--danger\" role=\"alert\" aria-live=\"assertive\"><span aria-hidden=\"true\">⚠</span> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var6 string
+			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 109, Col: 13}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var7 string
+			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(flash)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 109, Col: 22}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<form method=\"post\" action=\"/login\" class=\"auth-form\" x-data=\"{ showPwd: false, capslock: false, submitting: false }\" x-on:submit=\"submitting = true\"><input type=\"hidden\" name=\"next\" value=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var8 string
+		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(next)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 119, Col: 52}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\"> <label class=\"field\" for=\"login-email\"><span>Email</span> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if flash != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div id=\"login-err\" class=\"callout callout--danger\" role=\"alert\" aria-live=\"assertive\"><span aria-hidden=\"true\">⚠</span> ")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var2 string
-			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 36, Col: 13}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var3 string
-			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(flash)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 36, Col: 22}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<form method=\"post\" action=\"/login\" class=\"auth-form\" x-data=\"{ showPwd: false, capslock: false, submitting: false }\" x-on:submit=\"submitting = true\"><input type=\"hidden\" name=\"next\" value=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var4 string
-		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(next)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 46, Col: 52}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\"> <label class=\"field\" for=\"login-email\"><span>Email</span> ")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		if flash != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<input id=\"login-email\" type=\"email\" name=\"email\" required autofocus autocomplete=\"email\" aria-describedby=\"login-err\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<input id=\"login-email\" type=\"email\" name=\"email\" required autofocus autocomplete=\"email\" aria-describedby=\"login-err\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<input id=\"login-email\" type=\"email\" name=\"email\" required autofocus autocomplete=\"email\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<input id=\"login-email\" type=\"email\" name=\"email\" required autofocus autocomplete=\"email\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</label> <label class=\"field\" for=\"login-pwd\"><span>Password</span><div class=\"auth-pwd-wrapper\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</label> <label class=\"field\" for=\"login-pwd\"><span>Password</span><div class=\"auth-pwd-wrapper\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if flash != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<input id=\"login-pwd\" type=\"password\" x-bind:type=\"showPwd ? 'text' : 'password'\" name=\"password\" required autocomplete=\"current-password\" x-on:keyup=\"capslock = $event.getModifierState('CapsLock')\" x-on:keydown=\"capslock = $event.getModifierState('CapsLock')\" aria-describedby=\"login-err\"> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<input id=\"login-pwd\" type=\"password\" x-bind:type=\"showPwd ? 'text' : 'password'\" name=\"password\" required autocomplete=\"current-password\" x-on:keyup=\"capslock = $event.getModifierState('CapsLock')\" x-on:keydown=\"capslock = $event.getModifierState('CapsLock')\" aria-describedby=\"login-err\"> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<input id=\"login-pwd\" type=\"password\" x-bind:type=\"showPwd ? 'text' : 'password'\" name=\"password\" required autocomplete=\"current-password\" x-on:keyup=\"capslock = $event.getModifierState('CapsLock')\" x-on:keydown=\"capslock = $event.getModifierState('CapsLock')\"> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<input id=\"login-pwd\" type=\"password\" x-bind:type=\"showPwd ? 'text' : 'password'\" name=\"password\" required autocomplete=\"current-password\" x-on:keyup=\"capslock = $event.getModifierState('CapsLock')\" x-on:keydown=\"capslock = $event.getModifierState('CapsLock')\"> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<button type=\"button\" class=\"auth-pwd-toggle\" x-on:click=\"showPwd = !showPwd\" x-bind:aria-pressed=\"showPwd.toString()\" x-bind:aria-label=\"showPwd ? 'Hide password' : 'Show password'\"><svg x-show=\"!showPwd\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle></svg> <svg x-show=\"showPwd\" x-cloak viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle> <line x1=\"2\" y1=\"2\" x2=\"18\" y2=\"18\" stroke-linecap=\"round\"></line></svg></button></div><span class=\"auth-caps-hint\" x-show=\"capslock\" x-cloak aria-live=\"polite\">⇪ Caps Lock is on</span></label> <button class=\"btn btn-primary\" type=\"submit\" x-bind:disabled=\"submitting\" x-bind:aria-busy=\"submitting.toString()\"><span x-show=\"!submitting\">Sign in</span> <span x-show=\"submitting\" x-cloak aria-hidden=\"true\">Signing in…</span></button></form><div class=\"auth-footer\"><span class=\"auth-forgot\">Forgot your password?</span> <span class=\"auth-help\">Contact your administrator to reset it.</span></div></div></div><div class=\"auth-right\" aria-hidden=\"true\"><div class=\"auth-showcase-head\"><h2>Your conversations, always secure.</h2><p>With invite-only access and time-limited reset links, you control who has access to sensitive customer conversations.</p></div><div class=\"auth-illus-wrap\"><div class=\"auth-illus-card\"><svg width=\"160\" height=\"120\" viewBox=\"0 0 160 120\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"30\" cy=\"24\" r=\"2.5\" stroke=\"none\" fill=\"currentColor\" opacity=\"0.35\"></circle> <circle cx=\"130\" cy=\"20\" r=\"1.8\" stroke=\"none\" fill=\"currentColor\" opacity=\"0.28\"></circle> <circle cx=\"148\" cy=\"40\" r=\"1.3\" stroke=\"none\" fill=\"currentColor\" opacity=\"0.22\"></circle> <circle cx=\"12\" cy=\"54\" r=\"1.3\" stroke=\"none\" fill=\"currentColor\" opacity=\"0.22\"></circle> <rect x=\"16\" y=\"46\" width=\"128\" height=\"68\" rx=\"6\"></rect> <polyline points=\"16,46 80,76 144,46\"></polyline> <rect x=\"59\" y=\"58\" width=\"42\" height=\"30\" rx=\"5\" fill=\"currentColor\" fill-opacity=\"0.08\"></rect> <path d=\"M67,58 v-10 a13,13 0 0,1 26,0 v10\" fill=\"none\"></path> <circle cx=\"80\" cy=\"73\" r=\"4\"></circle> <line x1=\"80\" y1=\"77\" x2=\"80\" y2=\"82\"></line></svg></div></div><div class=\"auth-features\"><div class=\"auth-feature-item\"><div class=\"auth-feature-icon\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"5\" y=\"11\" width=\"14\" height=\"10\" rx=\"2\"></rect> <path d=\"M8 11V7a4 4 0 0 1 8 0v4\"></path></svg></div><div><div class=\"auth-feature-title\">Invite-only access</div><div class=\"auth-feature-desc\">Only people your admin invites can join the workspace.</div></div></div><div class=\"auth-feature-item\"><div class=\"auth-feature-icon\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"2\" y=\"4\" width=\"20\" height=\"16\" rx=\"2\"></rect> <polyline points=\"2,4 12,13 22,4\"></polyline></svg></div><div><div class=\"auth-feature-title\">Reset via your invite email</div><div class=\"auth-feature-desc\">The reset link is sent to the same address your admin used to invite you.</div></div></div><div class=\"auth-feature-item\"><div class=\"auth-feature-icon\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle> <polyline points=\"12 6 12 12 16 14\"></polyline></svg></div><div><div class=\"auth-feature-title\">Links expire in 30 minutes</div><div class=\"auth-feature-desc\">Time-limited links keep your account safe from unauthorised access.</div></div></div></div></div></div></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<button type=\"button\" class=\"auth-pwd-toggle\" x-on:click=\"showPwd = !showPwd\" x-bind:aria-pressed=\"showPwd.toString()\" x-bind:aria-label=\"showPwd ? 'Hide password' : 'Show password'\"><svg x-show=\"!showPwd\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle></svg> <svg x-show=\"showPwd\" x-cloak viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle> <line x1=\"2\" y1=\"2\" x2=\"18\" y2=\"18\" stroke-linecap=\"round\"></line></svg></button></div><span class=\"auth-caps-hint\" x-show=\"capslock\" x-cloak aria-live=\"polite\">⇪ Caps Lock is on</span></label> <button class=\"btn btn-primary\" type=\"submit\" x-bind:disabled=\"submitting\" x-bind:aria-busy=\"submitting.toString()\"><span x-show=\"!submitting\">Sign in</span> <span x-show=\"submitting\" x-cloak aria-hidden=\"true\">Signing in…</span></button></form><div class=\"auth-footer\"><a href=\"/forgot-password\" class=\"auth-forgot\">Forgot your password?</a></div></div></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = authRightPanel().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</div></body></html>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func ForgotPasswordPage(msg string, msgType string) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var9 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var9 == nil {
+			templ_7745c5c3_Var9 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex,nofollow\"><title>Forgot password — Offbeat ChatFlow</title><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"\"><link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\"><link rel=\"stylesheet\" href=\"/static/tokens.css\"><link rel=\"stylesheet\" href=\"/static/app.css\"></head><body class=\"auth-page\"><div class=\"auth-shell\"><div class=\"auth-left\"><div class=\"auth-form-wrap\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = authLogo().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<a href=\"/login\" class=\"auth-back-link\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M19 12H5M12 5l-7 7 7 7\"></path></svg> Back to Sign In</a><div class=\"auth-icon-chip\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"5\" y=\"11\" width=\"14\" height=\"10\" rx=\"2\"></rect> <path d=\"M8 11V7a4 4 0 0 1 8 0v4\"></path></svg></div><div class=\"auth-form-head\"><h1>Forgot password?</h1><p>No problem. Enter the email linked to your account and we'll send you a secure password reset link.</p></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if msg != "" && msgType == "success" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"callout callout--success\" role=\"status\" aria-live=\"polite\"><span aria-hidden=\"true\">✓</span> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var10 string
+			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 249, Col: 13}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var11 string
+			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(msg)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 249, Col: 20}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		if msg != "" && msgType == "error" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<div class=\"callout callout--danger\" role=\"alert\" aria-live=\"assertive\"><span aria-hidden=\"true\">⚠</span> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var12 string
+			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 255, Col: 13}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var13 string
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(msg)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 255, Col: 20}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<form method=\"post\" action=\"/forgot-password\" class=\"auth-form\"><label class=\"field\" for=\"fp-email\"><span>Email</span> <input id=\"fp-email\" type=\"email\" name=\"email\" required autofocus autocomplete=\"email\" placeholder=\"you@company.in\"></label><div class=\"callout callout--info auth-info-callout\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" style=\"flex-shrink:0;margin-top:1px\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle> <line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"12\"></line> <line x1=\"12\" y1=\"16\" x2=\"12.01\" y2=\"16\"></line></svg> The reset link is sent to the same email address your admin used for your initial invite.</div><button class=\"btn btn-primary\" type=\"submit\">Send reset link</button></form><div class=\"auth-footer-copy\">Copyright © 2026 Offbeat ChatFlow</div></div></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = authRightPanel().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</div></body></html>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func ResetPasswordPage(token string, flash string) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var14 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var14 == nil {
+			templ_7745c5c3_Var14 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex,nofollow\"><title>Reset password — Offbeat ChatFlow</title><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"\"><link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\"><link rel=\"stylesheet\" href=\"/static/tokens.css\"><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js\" defer></script></head><body class=\"auth-page\"><div class=\"auth-shell\"><div class=\"auth-left\"><div class=\"auth-form-wrap\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = authLogo().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<a href=\"/forgot-password\" class=\"auth-back-link\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M19 12H5M12 5l-7 7 7 7\"></path></svg> Back</a><div class=\"auth-icon-chip\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"5\" y=\"11\" width=\"14\" height=\"10\" rx=\"2\"></rect> <path d=\"M8 11V7a4 4 0 0 1 8 0v4\"></path></svg></div><div class=\"auth-form-head\"><h1>Reset password</h1><p>Enter your new password below. Use at least 8 characters.</p></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if flash != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<div class=\"callout callout--danger\" role=\"alert\" aria-live=\"assertive\"><span aria-hidden=\"true\">⚠</span> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var15 string
+			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 329, Col: 13}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var16 string
+			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(flash)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 329, Col: 22}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<form method=\"post\" action=\"/reset-password\" class=\"auth-form\" x-data=\"{ showPwd: false, showConfirm: false, submitting: false }\" x-on:submit=\"submitting = true\"><input type=\"hidden\" name=\"token\" value=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var17 string
+		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(token)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 339, Col: 54}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\"> <label class=\"field\" for=\"rp-pwd\"><span>New password</span><div class=\"auth-pwd-wrapper\"><input id=\"rp-pwd\" x-bind:type=\"showPwd ? 'text' : 'password'\" name=\"password\" required autofocus autocomplete=\"new-password\" minlength=\"8\"> <button type=\"button\" class=\"auth-pwd-toggle\" x-on:click=\"showPwd = !showPwd\" x-bind:aria-pressed=\"showPwd.toString()\" x-bind:aria-label=\"showPwd ? 'Hide password' : 'Show password'\"><svg x-show=\"!showPwd\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle></svg> <svg x-show=\"showPwd\" x-cloak viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle> <line x1=\"2\" y1=\"2\" x2=\"18\" y2=\"18\" stroke-linecap=\"round\"></line></svg></button></div></label> <label class=\"field\" for=\"rp-confirm\"><span>Confirm new password</span><div class=\"auth-pwd-wrapper\"><input id=\"rp-confirm\" x-bind:type=\"showConfirm ? 'text' : 'password'\" name=\"confirm\" required autocomplete=\"new-password\" minlength=\"8\"> <button type=\"button\" class=\"auth-pwd-toggle\" x-on:click=\"showConfirm = !showConfirm\" x-bind:aria-pressed=\"showConfirm.toString()\" x-bind:aria-label=\"showConfirm ? 'Hide password' : 'Show password'\"><svg x-show=\"!showConfirm\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle></svg> <svg x-show=\"showConfirm\" x-cloak viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle> <line x1=\"2\" y1=\"2\" x2=\"18\" y2=\"18\" stroke-linecap=\"round\"></line></svg></button></div></label> <button class=\"btn btn-primary\" type=\"submit\" x-bind:disabled=\"submitting\" x-bind:aria-busy=\"submitting.toString()\"><span x-show=\"!submitting\">Set new password</span> <span x-show=\"submitting\" x-cloak aria-hidden=\"true\">Saving…</span></button></form><div class=\"auth-footer-copy\">Copyright © 2026 Offbeat ChatFlow</div></div></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = authRightPanel().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</div></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -163,6 +163,41 @@ func DeleteAgent(ctx context.Context, pool *pgxpool.Pool, agentID string) error 
 	return err
 }
 
+// SetPasswordResetToken stores a 30-minute password reset token for the agent.
+func SetPasswordResetToken(ctx context.Context, pool *pgxpool.Pool, agentID, token string, expiresAt time.Time) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE agents
+		SET password_reset_token = $1,
+		    password_reset_expires_at = $2,
+		    updated_at = NOW()
+		WHERE id = $3::uuid
+	`, token, expiresAt, agentID)
+	return err
+}
+
+// GetAgentByResetToken returns the active agent matching a valid (non-expired) reset token.
+func GetAgentByResetToken(ctx context.Context, pool *pgxpool.Pool, token string) (*Agent, error) {
+	return scanAgent(pool.QueryRow(ctx, `
+		SELECT `+agentColumns+` FROM agents
+		WHERE password_reset_token = $1
+		  AND password_reset_expires_at > NOW()
+		  AND active = TRUE
+	`, token))
+}
+
+// UsePasswordResetToken sets a new password hash and clears the reset token atomically.
+func UsePasswordResetToken(ctx context.Context, pool *pgxpool.Pool, agentID, passwordHash string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE agents
+		SET password_hash = $1,
+		    password_reset_token = NULL,
+		    password_reset_expires_at = NULL,
+		    updated_at = NOW()
+		WHERE id = $2::uuid
+	`, passwordHash, agentID)
+	return err
+}
+
 // UpdateInviteToken replaces the invite token for an existing (pending) agent.
 func UpdateInviteToken(ctx context.Context, pool *pgxpool.Pool, agentID, token string, expiresAt time.Time) error {
 	_, err := pool.Exec(ctx,

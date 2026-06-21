@@ -14,6 +14,7 @@ type Config struct {
 	JWTSecret   string
 	BaseURL     string
 	WA          WAConfig
+	SMTP        SMTPConfig
 }
 
 type WAConfig struct {
@@ -22,6 +23,14 @@ type WAConfig struct {
 	AccessToken        string
 	WebhookVerifyToken string
 	AppSecret          string
+}
+
+type SMTPConfig struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+	From     string
 }
 
 // Load reads configuration from environment variables, optionally loading a .env file first.
@@ -44,6 +53,13 @@ func Load() (*Config, error) {
 			AccessToken:        os.Getenv("WA_ACCESS_TOKEN"),
 			WebhookVerifyToken: os.Getenv("WA_WEBHOOK_VERIFY_TOKEN"),
 			AppSecret:          os.Getenv("WA_APP_SECRET"),
+		},
+		SMTP: SMTPConfig{
+			Host:     os.Getenv("SMTP_HOST"),
+			Port:     env("SMTP_PORT", "587"),
+			User:     os.Getenv("SMTP_USER"),
+			Password: os.Getenv("SMTP_PASSWORD"),
+			From:     env("SMTP_FROM", "noreply@theoffbeat.agency"),
 		},
 	}
 

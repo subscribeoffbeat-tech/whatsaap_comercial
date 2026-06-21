@@ -17,6 +17,7 @@ import (
 	"whatsapptool/internal/campaigns"
 	"whatsapptool/internal/config"
 	"whatsapptool/internal/db"
+	"whatsapptool/internal/email"
 	"whatsapptool/internal/web/handlers"
 	mw "whatsapptool/internal/web/middleware"
 	"whatsapptool/internal/web/templates"
@@ -79,7 +80,14 @@ func main() {
 	dashboardH  := handlers.NewDashboardHandler(pool)
 	clicksH     := handlers.NewClickHandler(pool)
 	jwtSecret   := []byte(cfg.JWTSecret)
-	authH       := handlers.NewAuthHandler(pool, jwtSecret, cfg.BaseURL)
+	var mailer *email.Sender
+	if cfg.SMTP.Host != "" {
+		mailer = email.NewSender(cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.User, cfg.SMTP.Password, cfg.SMTP.From)
+		log.Printf("SMTP configured: %s:%s from=%s", cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.From)
+	} else {
+		log.Printf("WARN: SMTP_HOST not set — password reset emails will not be sent")
+	}
+	authH       := handlers.NewAuthHandler(pool, jwtSecret, cfg.BaseURL, mailer)
 	teamH       := handlers.NewTeamHandler(pool, jwtSecret, cfg.BaseURL)
 	settingsH   := handlers.NewSettingsHandler(pool)
 	onboardingH := handlers.NewOnboardingHandler(pool, jwtSecret, cfg.WA.PhoneNumberID, cfg.WA.AccessToken)

@@ -874,9 +874,27 @@ dialog {
 
 /* footer */
 .auth-footer { margin-top: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-1); }
-/* TODO: SupportEmail → swap span.auth-forgot → <a href="mailto:…"> */
-.auth-forgot { font-size: var(--font-size-sm); color: var(--text-muted); }
-.auth-help   { font-size: var(--font-size-sm); color: var(--text-muted); }
+.auth-forgot { font-size: var(--font-size-sm); color: var(--text-muted); text-decoration: none; }
+.auth-forgot:hover { color: var(--brand-700); text-decoration: underline; }
+
+/* success callout */
+.callout--success { background: var(--brand-50); border-color: var(--brand-200, #bbf7d0); color: var(--brand-800, #166534); }
+
+/* forgot / reset password page extras */
+.auth-back-link {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  color: var(--text-muted); font-size: var(--font-size-sm);
+  text-decoration: none; margin-bottom: var(--sp-6);
+}
+.auth-back-link:hover { color: var(--text); }
+.auth-icon-chip {
+  width: 56px; height: 56px; border-radius: var(--radius-md);
+  background: var(--brand-100); color: var(--brand-700);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: var(--sp-6);
+}
+.auth-info-callout { margin-bottom: 0; }
+.auth-footer-copy { margin-top: var(--sp-8); font-size: var(--font-size-xs); color: var(--text-muted); }
 
 /* right: light showcase panel */
 .auth-right {
