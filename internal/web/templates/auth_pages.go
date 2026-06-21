@@ -9,36 +9,6 @@ import (
 	"github.com/a-h/templ"
 )
 
-func LoginPage(flash string) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		flashHTML := ""
-		if flash != "" {
-			flashHTML = FormBanner(flash)
-		}
-		_, err := fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sign in — Offbeat ChatFlow</title>
-<link rel="stylesheet" href="/static/tokens.css">
-<link rel="stylesheet" href="/static/app.css">
-</head>
-<body class="auth-page">
-<div class="auth-card">
-<h1 class="auth-title">Sign in</h1>
-%s
-<form method="post" action="/login" class="auth-form">
-<label class="field"><span>Email</span>
-<input type="email" name="email" required autofocus autocomplete="email"></label>
-<label class="field"><span>Password</span>
-<input type="password" name="password" required autocomplete="current-password"></label>
-<button class="btn btn-primary" type="submit">Sign in</button>
-</form>
-</div>
-</body></html>`, flashHTML)
-		return err
-	})
-}
-
 func InvitePage(name, token, errMsg string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		errHTML := ""

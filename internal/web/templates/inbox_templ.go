@@ -9,11 +9,6 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	"context"
-	"fmt"
-	"html"
-	"io"
-
 	"whatsapptool/internal/db"
 	mw "whatsapptool/internal/web/middleware"
 	"whatsapptool/internal/whatsapp"
@@ -45,7 +40,7 @@ func InboxPage(agent *mw.AgentClaims) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"ibx-wrap\" x-data=\"inboxApp()\" x-init=\"init()\"><aside class=\"ibx-list\"><div class=\"ibx-search\"><input type=\"search\" placeholder=\"Search…\" class=\"search-input\"></div><div class=\"ibx-filters\"><button class=\"chip sel\" hx-get=\"/inbox/convs\" hx-target=\"#conv-list\" hx-swap=\"innerHTML\">All</button> <button class=\"chip\" hx-get=\"/inbox/convs?assigned=unassigned\" hx-target=\"#conv-list\" hx-swap=\"innerHTML\">Unassigned</button> <button class=\"chip\" hx-get=\"/inbox/convs?assigned=me\" hx-target=\"#conv-list\" hx-swap=\"innerHTML\">Mine</button></div><div id=\"conv-list\" class=\"convs\" aria-live=\"polite\" aria-atomic=\"false\" hx-get=\"/inbox/convs\" hx-trigger=\"load\" hx-swap=\"innerHTML\">"+SkeletonRows(5)+"</div></aside><main class=\"ibx-thread\" id=\"thread\" aria-live=\"polite\" aria-atomic=\"false\"><div class=\"th-empty\"><p>Select a conversation to start messaging</p></div></main><aside class=\"ibx-contact\" id=\"contact-panel\"></aside></div><script>\n\tvar _activeConvID = null;\n\tfunction selectConv(id) {\n\t  _activeConvID = id;\n\t  document.querySelectorAll('.conv').forEach(function(el) { el.classList.remove('conv--active'); });\n\t  var el = document.querySelector('.conv[data-conv-id=\"' + id + '\"]');\n\t  if (el) el.classList.add('conv--active');\n\t  htmx.ajax('GET', '/inbox/convs/' + id + '/messages', {target: '#thread', swap: 'outerHTML'});\n\t  var wrap = document.querySelector('.ibx-wrap');\n\t  if (wrap) wrap.classList.add('thread-open');\n\t}\n\tfunction inboxApp() {\n\t  return {\n\t    ws: null,\n\t    init() { this.connectWS(); },\n\t    connectWS() {\n\t      const proto = location.protocol === 'https:' ? 'wss' : 'ws';\n\t      this.ws = new WebSocket(proto + '://' + location.host + '/ws');\n\t      this.ws.onmessage = (e) => this.onWSMessage(JSON.parse(e.data));\n\t      this.ws.onclose   = () => setTimeout(() => this.connectWS(), 3000);\n\t    },\n\t    onWSMessage(event) {\n\t      if (event.type === 'new_message') {\n\t        if (event.conversation_id === _activeConvID) {\n\t          htmx.ajax('GET', '/inbox/convs/' + _activeConvID + '/messages',\n\t            {target: '#thread', swap: 'outerHTML'});\n\t        }\n\t        htmx.ajax('GET', '/inbox/convs', {target: '#conv-list', swap: 'innerHTML'});\n\t      }\n\t      if (event.type === 'message_status') {\n\t        const el = document.querySelector('[data-wa-id=\"' + event.data.wa_message_id + '\"]');\n\t        if (el) {\n\t          el.dataset.status = event.data.status;\n\t          const ticks = el.querySelector('.stat');\n\t          if (ticks) ticks.outerHTML = msgStatusSVG(event.data.status);\n\t        }\n\t      }\n\t    }\n\t  };\n\t}\n\tfunction submitReply(convID, body) {\n\t  if (!body.trim()) return;\n\t  fetch('/inbox/convs/' + convID + '/messages', {\n\t    method: 'POST',\n\t    headers: {'Content-Type': 'application/json'},\n\t    body: JSON.stringify({body: body, type: 'text'})\n\t  })\n\t  .then(function(r) {\n\t    if (r.status === 422) {\n\t      return r.text().then(function(t) { alert('Cannot send: ' + t); throw new Error(t); });\n\t    }\n\t    if (!r.ok) { throw new Error('send failed: ' + r.status); }\n\t    return r.text();\n\t  })\n\t  .then(function(html) {\n\t    var target = document.getElementById('thread-messages');\n\t    if (target) target.insertAdjacentHTML('beforeend', html);\n\t  })\n\t  .catch(function(err) { console.error('submitReply:', err); });\n\t}\n\tfunction msgStatusSVG(s) {\n\t  const SVG1 = '<svg width=\"18\" height=\"16\" viewBox=\"0 0 18 16\"><path class=\"tick\" d=\"M3 8.5l3.5 3.5L14 4\"/></svg>';\n\t  const SVG2 = '<svg width=\"22\" height=\"16\" viewBox=\"0 0 22 16\"><path class=\"tick\" d=\"M2 8.5l3.5 3.5L13 4\"/><path class=\"tick\" d=\"M8 8.5l3.5 3.5L19 4\"/></svg>';\n\t  const SVG_Q = '<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\"><circle class=\"ico\" cx=\"8\" cy=\"8\" r=\"6\"/><path class=\"ico\" d=\"M8 4.6V8l2.4 1.6\"/></svg>';\n\t  const SVG_F = '<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\"><circle class=\"ico\" cx=\"8\" cy=\"8\" r=\"6\"/><path class=\"ico\" d=\"M8 5v3.5M8 10.6v.2\"/></svg>';\n\t  if (s === 'sent')      return '<span class=\"stat stat--sent\"      role=\"img\" aria-label=\"Sent\">'           + SVG1 + '</span>';\n\t  if (s === 'delivered') return '<span class=\"stat stat--delivered\" role=\"img\" aria-label=\"Delivered\">'      + SVG2 + '</span>';\n\t  if (s === 'read')      return '<span class=\"stat stat--read\"      role=\"img\" aria-label=\"Read\">'           + SVG2 + '</span>';\n\t  if (s === 'failed')    return '<span class=\"stat stat--failed\"    role=\"img\" aria-label=\"Failed to send\">' + SVG_F + '</span>';\n\t  return                        '<span class=\"stat stat--queued\"    role=\"img\" aria-label=\"Queued\">'         + SVG_Q + '</span>';\n\t}\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"ibx-wrap\" x-data=\"inboxApp()\" x-init=\"init()\"><aside class=\"ibx-list\"><div class=\"ibx-panel-hd\"><h2 class=\"ibx-panel-title\">Inbox</h2></div><div class=\"ibx-search\"><input type=\"search\" placeholder=\"Search…\" class=\"search-input\"></div><div class=\"ibx-filters\"><button class=\"chip sel\" onclick=\"switchChip(this)\" hx-get=\"/inbox/convs\" hx-target=\"#conv-list\" hx-swap=\"innerHTML\">All</button> <button class=\"chip\" onclick=\"switchChip(this)\" hx-get=\"/inbox/convs?assigned=unassigned\" hx-target=\"#conv-list\" hx-swap=\"innerHTML\">Unassigned</button> <button class=\"chip\" onclick=\"switchChip(this)\" hx-get=\"/inbox/convs?assigned=me\" hx-target=\"#conv-list\" hx-swap=\"innerHTML\">Mine</button></div><div class=\"ibx-tabs\" role=\"tablist\"><button class=\"tab-btn active\" onclick=\"switchTab(this)\" hx-get=\"/inbox/convs\" hx-target=\"#conv-list\" hx-swap=\"innerHTML\">Open</button> <button class=\"tab-btn\" onclick=\"switchTab(this)\" hx-get=\"/inbox/convs?status=closed\" hx-target=\"#conv-list\" hx-swap=\"innerHTML\">Closed</button></div><div id=\"conv-list\" class=\"convs\" hx-get=\"/inbox/convs\" hx-trigger=\"load\" hx-swap=\"innerHTML\"></div></aside><main class=\"ibx-thread\" id=\"thread\"><div class=\"th-empty\"><p>Select a conversation to start messaging</p></div></main><aside class=\"ibx-contact\" id=\"contact-panel\"></aside></div><script>\r\n\tfunction inboxApp() {\r\n\t  return {\r\n\t    ws: null, activeConvID: null,\r\n\t    init() { this.connectWS(); },\r\n\t    connectWS() {\r\n\t      const proto = location.protocol === 'https:' ? 'wss' : 'ws';\r\n\t      this.ws = new WebSocket(proto + '://' + location.host + '/ws');\r\n\t      this.ws.onmessage = (e) => this.onWSMessage(JSON.parse(e.data));\r\n\t      this.ws.onclose   = () => setTimeout(() => this.connectWS(), 3000);\r\n\t    },\r\n\t    onWSMessage(event) {\r\n\t      if (event.type === 'new_message') {\r\n\t        if (event.conversation_id === this.activeConvID) {\r\n\t          htmx.ajax('GET', '/inbox/convs/' + this.activeConvID + '/messages',\r\n\t            {target: '#thread', swap: 'outerHTML'});\r\n\t        }\r\n\t        htmx.ajax('GET', '/inbox/convs', {target: '#conv-list', swap: 'innerHTML'});\r\n\t      }\r\n\t      if (event.type === 'message_status') {\r\n\t        const el = document.querySelector('[data-wa-id=\"' + event.data.wa_message_id + '\"]');\r\n\t        if (el) {\r\n\t          el.dataset.status = event.data.status;\r\n\t          const ticks = el.querySelector('.stat');\r\n\t          if (ticks) ticks.outerHTML = msgStatusSVG(event.data.status);\r\n\t        }\r\n\t      }\r\n\t    },\r\n\t    selectConv(id) {\r\n\t      this.activeConvID = id;\r\n\t      htmx.ajax('GET', '/inbox/convs/' + id + '/messages', {target: '#thread', swap: 'outerHTML'});\r\n\t    }\r\n\t  };\r\n\t}\r\n\tfunction submitReply(convID, body) {\r\n\t  if (!body.trim()) return;\r\n\t  fetch('/inbox/convs/' + convID + '/messages', {\r\n\t    method: 'POST',\r\n\t    headers: {'Content-Type': 'application/json'},\r\n\t    body: JSON.stringify({body: body, type: 'text'})\r\n\t  })\r\n\t  .then(function(r) {\r\n\t    if (r.status === 422) {\r\n\t      return r.text().then(function(t) { alert('Cannot send: ' + t); throw new Error(t); });\r\n\t    }\r\n\t    if (!r.ok) { throw new Error('send failed: ' + r.status); }\r\n\t    return r.text();\r\n\t  })\r\n\t  .then(function(html) {\r\n\t    var target = document.getElementById('thread-messages');\r\n\t    if (target) target.insertAdjacentHTML('beforeend', html);\r\n\t  })\r\n\t  .catch(function(err) { console.error('submitReply:', err); });\r\n\t}\r\n\tfunction switchTab(btn) {\r\n\t  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });\r\n\t  btn.classList.add('active');\r\n\t}\r\n\tfunction switchChip(btn) {\r\n\t  document.querySelectorAll('.ibx-filters .chip').forEach(function(b) { b.classList.remove('sel'); });\r\n\t  btn.classList.add('sel');\r\n\t}\r\n\tfunction msgStatusSVG(s) {\r\n\t  const SVG1 = '<svg width=\"18\" height=\"16\" viewBox=\"0 0 18 16\"><path class=\"tick\" d=\"M3 8.5l3.5 3.5L14 4\"/></svg>';\r\n\t  const SVG2 = '<svg width=\"22\" height=\"16\" viewBox=\"0 0 22 16\"><path class=\"tick\" d=\"M2 8.5l3.5 3.5L13 4\"/><path class=\"tick\" d=\"M8 8.5l3.5 3.5L19 4\"/></svg>';\r\n\t  const SVG_Q = '<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\"><circle class=\"ico\" cx=\"8\" cy=\"8\" r=\"6\"/><path class=\"ico\" d=\"M8 4.6V8l2.4 1.6\"/></svg>';\r\n\t  const SVG_F = '<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\"><circle class=\"ico\" cx=\"8\" cy=\"8\" r=\"6\"/><path class=\"ico\" d=\"M8 5v3.5M8 10.6v.2\"/></svg>';\r\n\t  if (s === 'sent')      return '<span class=\"stat stat--sent\"      role=\"img\" aria-label=\"Sent\">'           + SVG1 + '</span>';\r\n\t  if (s === 'delivered') return '<span class=\"stat stat--delivered\" role=\"img\" aria-label=\"Delivered\">'      + SVG2 + '</span>';\r\n\t  if (s === 'read')      return '<span class=\"stat stat--read\"      role=\"img\" aria-label=\"Read\">'           + SVG2 + '</span>';\r\n\t  if (s === 'failed')    return '<span class=\"stat stat--failed\"    role=\"img\" aria-label=\"Failed to send\">' + SVG_F + '</span>';\r\n\t  return                        '<span class=\"stat stat--queued\"    role=\"img\" aria-label=\"Queued\">'         + SVG_Q + '</span>';\r\n\t}\r\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -122,8 +117,7 @@ func ConversationItem(c db.ConvListRow) templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		var templ_7745c5c3_Var4 templ.ComponentScript = templ.JSFuncCall("selectConv", c.ID)
-		templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var4)
+		templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.JSFuncCall("inboxApp().selectConv", c.ID))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -131,6 +125,7 @@ func ConversationItem(c db.ConvListRow) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
+		var templ_7745c5c3_Var4 templ.ComponentScript = templ.JSFuncCall("inboxApp().selectConv", c.ID)
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4.Call)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -142,7 +137,7 @@ func ConversationItem(c db.ConvListRow) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(c.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 129, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 150, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 		if templ_7745c5c3_Err != nil {
@@ -155,7 +150,7 @@ func ConversationItem(c db.ConvListRow) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(initial(c.ContactName))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 130, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 151, Col: 47}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -168,7 +163,7 @@ func ConversationItem(c db.ConvListRow) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(c.ContactName)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 132, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 153, Col: 41}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -181,7 +176,7 @@ func ConversationItem(c db.ConvListRow) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(truncate(c.LastBody, 42))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 133, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 154, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -194,7 +189,7 @@ func ConversationItem(c db.ConvListRow) templ.Component {
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(shortTime(c.LastMessageAt))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 136, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 157, Col: 54}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -219,7 +214,7 @@ func ConversationItem(c db.ConvListRow) templ.Component {
 }
 
 // MessageThread renders the center pane: header + messages + composer.
-func MessageThread(conv *db.Conversation, msgs []db.Message, contactName, contactSub string) templ.Component {
+func MessageThread(conv *db.Conversation, msgs []db.Message, contactName string, contactSub string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -247,80 +242,90 @@ func MessageThread(conv *db.Conversation, msgs []db.Message, contactName, contac
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.ResolveAttributeValue(conv.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 146, Col: 56}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 167, Col: 56}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		displayName := contactName
-		if displayName == "" {
-			displayName = conv.ContactID // handler already sets phone as fallback; UUID only if contact lookup failed
-		}
-		// th-hd: avatar
-		if _, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(`"><div class="th-hd"><div class="th-av" style="background:linear-gradient(135deg,#6c63ff,#a855f7);color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;flex-shrink:0">`); templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		if _, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(html.EscapeString(initial(displayName))); templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		// th-info: name
-		if _, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(`</div><div class="th-info"><div class="th-name">`); templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		if _, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(html.EscapeString(displayName)); templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		// th-sub: role + company
-		if _, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(`</div><div class="th-sub">`); templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		if _, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(html.EscapeString(contactSub)); templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		// close th-sub, close th-info, open th-status
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div></div><div class=\"th-status\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\"><div class=\"th-hd\"><div class=\"th-av\">💬</div><div class=\"th-info\"><div class=\"th-name\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if whatsapp.IsWindowOpen(conv.LastInboundAt) {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<span class=\"win-badge\">⏱ replies free for ")
+		var templ_7745c5c3_Var12 string
+		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(contactName)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 171, Col: 38}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if contactSub != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"th-sub\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var13 string
-			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(whatsapp.FormatExpiry(conv.LastInboundAt))
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(contactSub)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 153, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 173, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div class=\"th-status\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if whatsapp.IsWindowOpen(conv.LastInboundAt) {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<span class=\"win-badge\">⏱ replies free for ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var14 string
+			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(whatsapp.FormatExpiry(conv.LastInboundAt))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 177, Col: 94}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<span class=\"win-badge win-closed\">⏱ window closed — template only</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<span class=\"win-badge win-closed\">⏱ window closed — template only</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</div><div class=\"th-actions\"><button class=\"btn btn-secondary btn-sm\" hx-post=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div></div><div class=\"th-actions\"><button class=\"btn sm\" hx-post=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var14 string
-		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue("/inbox/convs/" + conv.ID + "/resolve")
+		var templ_7745c5c3_Var15 string
+		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue("/inbox/convs/" + conv.ID + "/resolve")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 161, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 185, Col: 53}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" hx-confirm=\"Resolve this conversation?\">Resolve</button></div></div><div class=\"th-body\" id=\"thread-messages\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\" hx-confirm=\"Resolve this conversation?\">Resolve</button></div></div><div class=\"th-body\" id=\"thread-messages\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -330,7 +335,7 @@ func MessageThread(conv *db.Conversation, msgs []db.Message, contactName, contac
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -338,7 +343,7 @@ func MessageThread(conv *db.Conversation, msgs []db.Message, contactName, contac
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -363,14 +368,14 @@ func msgStatus(status string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var15 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var15 == nil {
-			templ_7745c5c3_Var15 = templ.NopComponent
+		templ_7745c5c3_Var16 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var16 == nil {
+			templ_7745c5c3_Var16 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		switch status {
 		case "sent":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<span class=\"stat stat--sent\" role=\"img\" aria-label=\"Sent\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<span class=\"stat stat--sent\" role=\"img\" aria-label=\"Sent\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -378,12 +383,12 @@ func msgStatus(status string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "delivered":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<span class=\"stat stat--delivered\" role=\"img\" aria-label=\"Delivered\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<span class=\"stat stat--delivered\" role=\"img\" aria-label=\"Delivered\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -391,12 +396,12 @@ func msgStatus(status string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "read":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<span class=\"stat stat--read\" role=\"img\" aria-label=\"Read\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<span class=\"stat stat--read\" role=\"img\" aria-label=\"Read\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -404,12 +409,12 @@ func msgStatus(status string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "failed":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<span class=\"stat stat--failed\" role=\"img\" aria-label=\"Failed to send\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<span class=\"stat stat--failed\" role=\"img\" aria-label=\"Failed to send\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -417,12 +422,12 @@ func msgStatus(status string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		default:
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<span class=\"stat stat--queued\" role=\"img\" aria-label=\"Queued\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<span class=\"stat stat--queued\" role=\"img\" aria-label=\"Queued\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -430,7 +435,7 @@ func msgStatus(status string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -456,95 +461,95 @@ func MessageBubble(msg *db.Message) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var16 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var16 == nil {
-			templ_7745c5c3_Var16 = templ.NopComponent
+		templ_7745c5c3_Var17 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var17 == nil {
+			templ_7745c5c3_Var17 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		var templ_7745c5c3_Var17 = []any{bubbleClass(msg.Direction)}
-		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var17...)
+		var templ_7745c5c3_Var18 = []any{bubbleClass(msg.Direction)}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var18...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<div class=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var18 string
-		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var17).String())
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 1, Col: 0}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\" data-msg-id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<div class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var19 string
-		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(msg.ID)
+		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var18).String())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 193, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 1, Col: 0}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" data-wa-id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\" data-msg-id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var20 string
-		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(derefStr(msg.WAMessageID))
+		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(msg.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 194, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 217, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\" data-status=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\" data-wa-id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var21 string
-		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(msg.Status)
+		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(derefStr(msg.WAMessageID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 195, Col: 26}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 218, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\"><div class=\"bub-body\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "\" data-status=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var22 string
-		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(messageBody(msg))
+		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(msg.Status)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 196, Col: 42}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 219, Col: 26}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</div><div class=\"bub-meta t\"><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "\"><div class=\"bub-body\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var23 string
-		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(shortTimestamp(msg.CreatedAt))
+		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(messageBody(msg))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 198, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 220, Col: 42}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</span> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "</div><div class=\"bub-meta t\"><span>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var24 string
+		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(shortTimestamp(msg.CreatedAt))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 222, Col: 40}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</span> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -554,7 +559,7 @@ func MessageBubble(msg *db.Message) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -564,44 +569,91 @@ func MessageBubble(msg *db.Message) templ.Component {
 
 // Composer renders the reply input bar.
 func Composer(conv *db.Conversation) templ.Component {
-	windowOpen := whatsapp.IsWindowOpen(conv.LastInboundAt)
-	placeholder := composerPlaceholder(conv)
-	submitCall := "submitReply('" + conv.ID + "', body); body = ''"
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		// Main row: input + round send button
-		if _, err := fmt.Fprintf(w,
-			`<div class="composer" x-data="{ body: '' }"><div class="composer-row"><input class="composer-input" type="text" placeholder="%s" x-model="body" @keydown.enter="%s"><button class="send-btn" type="button" @click="%s" title="Send">`,
-			html.EscapeString(placeholder),
-			html.EscapeString(submitCall),
-			html.EscapeString(submitCall),
-		); err != nil {
-			return err
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
 		}
-		// Send icon (paper-plane SVG)
-		if _, err := io.WriteString(w, `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`); err != nil {
-			return err
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
 		}
-		if _, err := io.WriteString(w, `</button></div>`); err != nil {
-			return err
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var25 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var25 == nil {
+			templ_7745c5c3_Var25 = templ.NopComponent
 		}
-		// Toolbar row
-		if _, err := io.WriteString(w, `<div class="composer-toolbar">`); err != nil {
-			return err
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "<div class=\"composer\" x-data=\"{ body: '' }\"><button class=\"btn sm emoji-btn\" type=\"button\">😊</button> <input class=\"composer-input\" type=\"text\" placeholder=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
 		}
-		if !windowOpen {
-			if _, err := fmt.Fprintf(w,
-				`<button class="tb-btn" type="button" hx-get="/inbox/convs/%s/template-picker" hx-target="#template-modal">📋 Template</button>`,
-				html.EscapeString(conv.ID),
-			); err != nil {
-				return err
+		var templ_7745c5c3_Var26 string
+		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(composerPlaceholder(conv))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 236, Col: 42}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "\" x-model=\"body\" @keydown.enter=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var27 string
+		templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue("submitReply('" + conv.ID + "', body); body = ''")
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 238, Col: 69}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "\"> ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if !whatsapp.IsWindowOpen(conv.LastInboundAt) {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<button class=\"btn sm\" type=\"button\" hx-get=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var28 string
+			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue("/inbox/convs/" + conv.ID + "/template-picker")
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 241, Col: 59}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "\" hx-target=\"#template-modal\">Template</button> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
 			}
 		}
-		if _, err := io.WriteString(w, `<div class="tb-spacer"></div></div>`); err != nil {
-			return err
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<button class=\"btn pri sm\" type=\"button\" @click=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
 		}
-		// Template modal anchor
-		if _, err := io.WriteString(w, `<div id="template-modal"></div></div>`); err != nil {
-			return err
+		var templ_7745c5c3_Var29 string
+		templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue("submitReply('" + conv.ID + "', body); body = ''")
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/inbox.templ`, Line: 245, Col: 61}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "\">Send</button></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
 		}
 		return nil
 	})

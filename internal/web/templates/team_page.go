@@ -35,14 +35,14 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 %s
 
 <div x-data="{role:''}">
-<div class="tmpl-tabs" style="margin-bottom:16px" role="tablist">
+<div class="tmpl-tabs" style="margin-bottom:var(--gutter)" role="tablist">
   <button class="tmpl-tab" role="tab" :class="{ active: role==='' }" :aria-selected="role===''" @click="role=''">All</button>
   <button class="tmpl-tab" role="tab" :class="{ active: role==='admin' }" :aria-selected="role==='admin'" @click="role='admin'">Admin</button>
   <button class="tmpl-tab" role="tab" :class="{ active: role==='manager' }" :aria-selected="role==='manager'" @click="role='manager'">Manager</button>
   <button class="tmpl-tab" role="tab" :class="{ active: role==='agent' }" :aria-selected="role==='agent'" @click="role='agent'">Member</button>
 </div>
 
-<div class="card-static" style="margin-bottom:24px" role="tabpanel" tabindex="0">
+<div class="card-static" style="margin-bottom:var(--gutter)" role="tabpanel" tabindex="0">
 <table class="tbl">
 <thead>
 <tr><th>Name</th><th>Email</th><th>Role</th><th>Monthly limit</th><th>Status</th><th>Actions</th></tr>

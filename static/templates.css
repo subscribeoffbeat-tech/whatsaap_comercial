@@ -6,7 +6,7 @@
 .tmpl-tabs {
   display: flex;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: var(--gutter);
   flex-wrap: wrap;
 }
 .tmpl-tab {
@@ -18,18 +18,20 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast);
 }
 .tmpl-tab:hover { border-color: var(--accent); color: var(--accent); }
-.tmpl-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tmpl-tab.active { background: var(--accent); color: var(--text-on-fill); border-color: var(--accent); }
 
 /* ── Gallery grid ────────────────────────────────────────────────── */
 .tmpl-gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gutter);
+  margin-bottom: var(--gutter);
 }
+@media (max-width: 960px) { .tmpl-gallery { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 720px) { .tmpl-gallery { grid-template-columns: 1fr; } }
 
 /* ── Template card ───────────────────────────────────────────────── */
 .tmpl-card {
@@ -40,7 +42,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: box-shadow 0.15s, transform 0.15s;
+  transition: box-shadow var(--duration-base) var(--easing-slide), transform var(--duration-base) var(--easing-slide);
   box-shadow: var(--shadow-card);
 }
 .tmpl-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
@@ -97,7 +99,7 @@
   font-weight: 600;
   text-transform: capitalize;
 }
-.cat-marketing      { background: rgba(108,99,255,0.1);  color: var(--accent); }
+.cat-marketing      { background: var(--info-light);      color: var(--var-accent); }
 .cat-utility        { background: var(--info-bg);         color: var(--info-text); }
 .cat-authentication { background: var(--warning-light);   color: var(--warning-text); }
 
@@ -114,26 +116,28 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px 24px;
-  margin-top: 16px;
+  margin-top: var(--gutter);
   box-shadow: var(--shadow-card);
 }
 .tmpl-editor h3 {
   font-size: 16px;
   font-weight: 700;
-  margin-bottom: 16px;
+  margin-bottom: var(--gutter);
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border-light);
 }
 .tmpl-editor-grid {
   display: grid;
-  grid-template-columns: 1fr 360px;
-  gap: 24px;
+  grid-template-columns: 7fr 5fr;
+  gap: var(--gutter);
 }
+@media (max-width: 960px) { .tmpl-editor-grid { grid-template-columns: 1fr; } }
 .tmpl-form  { display: flex; flex-direction: column; gap: 14px; }
 .form-btns  { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
 
 /* ── Phone preview ───────────────────────────────────────────────── */
-.tmpl-preview { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 24px; }
+.tmpl-preview { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 24px; max-width: var(--tmpl-editor-w); justify-self: end; width: 100%; }
+@media (max-width: 960px) { .tmpl-preview { max-width: 100%; justify-self: stretch; } }
 .preview-label {
   font-size: 11px;
   text-transform: uppercase;
@@ -186,7 +190,7 @@ dialog.tmpl-dialog {
   background: var(--bg-card);
   color: var(--text);
 }
-dialog.tmpl-dialog::backdrop { background: rgba(26,29,46,0.4); backdrop-filter: blur(4px); }
+dialog.tmpl-dialog::backdrop { background: var(--overlay-bg); backdrop-filter: blur(4px); }
 dialog.tmpl-dialog h2 {
   font-size: 17px;
   font-weight: 700;
@@ -194,7 +198,7 @@ dialog.tmpl-dialog h2 {
   border-bottom: 1px solid var(--border-light);
 }
 dialog.tmpl-dialog form { padding: 20px 22px; }
-.modal-btns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+.modal-btns { display: flex; gap: 10px; justify-content: flex-end; margin-top: var(--gutter); }
 
 /* ── Button builder rows ─────────────────────────────────────────── */
 .tmpl-btn-row {
@@ -221,7 +225,7 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
   border-color: var(--accent);
   color: var(--accent);
 }
-.tmpl-tab-lib.active { background: var(--accent); color: #fff; }
+.tmpl-tab-lib.active { background: var(--accent); color: var(--text-on-fill); }
 
 /* ── Form info note ─────────────────────────────────────────────── */
 .form-note {
@@ -276,7 +280,7 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 16px;
-  margin-bottom: 16px;
+  margin-bottom: var(--gutter);
   font-size: 13px;
 }
 .lib-flow-step {
@@ -297,10 +301,11 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
 /* ── Library layout ──────────────────────────────────────────────── */
 .lib-layout {
   display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: 20px;
+  grid-template-columns: var(--lib-nav-w) 1fr;
+  gap: var(--gutter);
   margin-top: 4px;
 }
+@media (max-width: 720px) { .lib-layout { grid-template-columns: 1fr; } }
 .lib-sidebar {
   display: flex;
   flex-direction: column;
@@ -318,18 +323,20 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.12s;
+  transition: all var(--duration-fast);
 }
 .lib-nav-item:hover { background: var(--accent-lighter); color: var(--accent); }
-.lib-nav-item.active { background: var(--accent); color: #fff; }
+.lib-nav-item.active { background: var(--accent); color: var(--text-on-fill); }
 
 /* ── Library card grid ───────────────────────────────────────────── */
 .lib-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gutter);
   align-content: start;
 }
+@media (max-width: 960px) { .lib-cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 720px) { .lib-cards { grid-template-columns: 1fr; } }
 .lib-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -338,7 +345,7 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: box-shadow 0.15s, transform 0.15s;
+  transition: box-shadow var(--duration-base) var(--easing-slide), transform var(--duration-base) var(--easing-slide);
   box-shadow: var(--shadow-card);
 }
 .lib-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
@@ -379,10 +386,11 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
 /* ── Full-page template form ──────────────────────────────────────── */
 .tmpl-fp-grid {
   display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 24px;
+  grid-template-columns: 1fr var(--tmpl-fp-w);
+  gap: var(--gutter);
   align-items: start;
 }
+@media (max-width: 960px) { .tmpl-fp-grid { grid-template-columns: 1fr; } }
 .tmpl-fp-form {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -426,7 +434,7 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
   margin-bottom: 10px;
 }
 .preview-phone-full {
-  background: #e5ddd5;
+  background: var(--wa-bg);
   border-radius: 10px;
   padding: 14px 10px;
   min-height: 200px;
@@ -435,7 +443,7 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
   gap: 6px;
 }
 .preview-bub-full {
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 10px 10px 3px 10px;
   padding: 10px 12px;
   align-self: flex-end;
@@ -443,7 +451,7 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
   display: flex;
   flex-direction: column;
   gap: 5px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  box-shadow: var(--shadow-sm);
   word-break: break-word;
 }
 .preview-hdr-badge {
@@ -463,6 +471,6 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
   line-height: 1.5;
   color: var(--text);
 }
-.preview-footer-text { font-size: 11px; color: #9e9e9e; margin-top: 2px; }
-.preview-btns { border-top: 1px solid #e9e9e9; padding-top: 7px; display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
-.preview-btn { text-align: center; font-size: 13px; color: #0099cc; padding: 5px 8px; background: #f8f8f8; border-radius: 5px; }
+.preview-footer-text { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.preview-btns { border-top: 1px solid var(--border-light); padding-top: 7px; display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.preview-btn { text-align: center; font-size: 13px; color: var(--wa-link); padding: 5px 8px; background: var(--bg-page); border-radius: 5px; }

@@ -87,12 +87,12 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
-<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+<div class="page-hd" style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:var(--gutter);flex-wrap:wrap;gap:var(--gutter)">
   <div>
-    <h1 style="font-size:28px;font-weight:800;color:var(--text-primary,#111);margin:0 0 4px">Campaigns</h1>
+    <h1 class="screen-title" style="margin:0 0 4px">Campaigns</h1>
     <div style="color:var(--text-secondary);font-size:14px">Broadcast to opted-in contacts with approved templates</div>
   </div>
-  <a class="btn btn-primary" href="/campaigns/new" style="font-size:15px;padding:10px 20px">+ New campaign</a>
+  <a class="btn btn-primary" href="/campaigns/new" style="font-size:15px;padding:10px 22px;gap:6px">+ New campaign</a>
 </div>`)
 		if err != nil {
 			return err
@@ -108,24 +108,25 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 				return err
 			}
 		} else {
-			// Alpine.js filter tabs + table
+			// Tab strip + campaign table
 			_, err = fmt.Fprintf(w, `
-<div x-data="{status:''}">
-<div class="tmpl-tabs" style="margin-bottom:16px" role="tablist">
-  <button class="tmpl-tab" role="tab" :class="{active:status===''}" :aria-selected="status===''" @click="status=''">All <span class="badge-cnt badge-cnt-success">%d</span></button>
-  <button class="tmpl-tab" role="tab" :class="{active:status==='running'}" :aria-selected="status==='running'" @click="status='running'">Active <span class="badge-cnt badge-cnt-success">%d</span></button>
-  <button class="tmpl-tab" role="tab" :class="{active:status==='draft'}" :aria-selected="status==='draft'" @click="status='draft'">Draft <span class="badge-cnt badge-cnt-neutral">%d</span></button>
-  <button class="tmpl-tab" role="tab" :class="{active:status==='paused'}" :aria-selected="status==='paused'" @click="status='paused'">Paused <span class="badge-cnt badge-cnt-neutral">%d</span></button>
-  <button class="tmpl-tab" role="tab" :class="{active:status==='failed'}" :aria-selected="status==='failed'" @click="status='failed'">Failed <span class="badge-cnt badge-cnt-danger">%d</span></button>
-  <button class="tmpl-tab" role="tab" :class="{active:status==='completed'}" :aria-selected="status==='completed'" @click="status='completed'">Completed <span class="badge-cnt badge-cnt-success">%d</span></button>
-  <button class="tmpl-tab" role="tab" :class="{active:status==='cancelled'}" :aria-selected="status==='cancelled'" @click="status='cancelled'">Cancelled <span class="badge-cnt badge-cnt-purple">%d</span></button>
+<div x-data="{tab:''}">
+<div class="cmp-tabs" style="margin-bottom:var(--gutter)" role="tablist">
+  <button class="cmp-tab" role="tab" :class="{active:tab===''}" @click="tab=''">All <span class="cmp-tab-count">%d</span></button>
+  <button class="cmp-tab" role="tab" :class="{active:tab==='running'}" @click="tab='running'">Active <span class="cmp-tab-count">%d</span></button>
+  <button class="cmp-tab" role="tab" :class="{active:tab==='draft'}" @click="tab='draft'">Draft <span class="cmp-tab-count">%d</span></button>
+  <button class="cmp-tab" role="tab" :class="{active:tab==='paused'}" @click="tab='paused'">Paused <span class="cmp-tab-count">%d</span></button>
+  <button class="cmp-tab cmp-tab--danger" role="tab" :class="{active:tab==='failed'}" @click="tab='failed'">Failed <span class="cmp-tab-count">%d</span></button>
+  <button class="cmp-tab" role="tab" :class="{active:tab==='completed'}" @click="tab='completed'">Completed <span class="cmp-tab-count">%d</span></button>
+  <button class="cmp-tab" role="tab" :class="{active:tab==='cancelled'}" @click="tab='cancelled'">Cancelled <span class="cmp-tab-count">%d</span></button>
 </div>
 <div class="card-static" role="tabpanel" tabindex="0">
 <table class="tbl">
 <thead><tr>
-  <th style="width:32px"></th>
+  <th class="cmp-chev-cell"></th>
   <th>NAME</th><th>STATUS</th><th>SENT</th><th>DELIVERED</th>
-  <th>FAILED</th><th>SUPPRESSED</th><th>COST</th><th>SCHEDULED</th><th>ACTIONS</th><th></th>
+  <th>FAILED</th><th>SUPPRESSED</th><th>COST</th><th>SCHEDULED</th>
+  <th style="min-width:200px">PROGRESS</th>
 </tr></thead>
 <tbody>`,
 				counts["all"], counts["running"], counts["draft"],
@@ -136,16 +137,15 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 			}
 
 			for _, c := range cs {
-				sched := "—"
+				sched := "&#8212;"
 				if c.ScheduledAt != nil {
 					sched = c.ScheduledAt.Format("02 Jan 15:04")
 				}
 
 				isFailed := c.FailedCount > 0 && c.SentCount == 0
-				// Alpine x-show condition
-				xShow := fmt.Sprintf(`status==='' || status==='%s'`, c.Status)
+				xShow := fmt.Sprintf(`tab==='' || tab==='%s'`, c.Status)
 				if isFailed {
-					xShow += ` || status==='failed'`
+					xShow += ` || tab==='failed'`
 				}
 
 				// Status badge
@@ -162,16 +162,16 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 				}
 				statusBadge := BadgeHTML(badgeVariant, c.Status)
 
-				// Action buttons
+				// Action buttons — stop propagation so row click doesn't fire
 				actionsHTML := ""
 				if c.Status == "running" {
 					actionsHTML += fmt.Sprintf(
-						`<form hx-post="/campaigns/%s/pause" hx-swap="none" hx-disabled-elt="find button" style="display:inline"><button class="btn btn-sm btn-secondary" type="submit">&#8214; Pause</button></form> `,
+						`<form hx-post="/campaigns/%s/pause" hx-swap="none" hx-disabled-elt="find button" style="display:inline" onclick="event.stopPropagation()"><button class="btn btn-sm btn-secondary" type="submit">&#8214; Pause</button></form> `,
 						c.ID)
 				}
 				if c.Status == "running" || c.Status == "scheduled" {
 					actionsHTML += fmt.Sprintf(
-						`<form hx-post="/campaigns/%s/cancel" hx-swap="none" hx-disabled-elt="find button" style="display:inline"><button class="btn btn-sm btn-danger" type="submit">Cancel</button></form>`,
+						`<form hx-post="/campaigns/%s/cancel" hx-swap="none" hx-disabled-elt="find button" style="display:inline" onclick="event.stopPropagation()"><button class="btn btn-sm btn-danger-ghost" type="submit">Cancel</button></form>`,
 						c.ID)
 				}
 
@@ -181,39 +181,43 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 					pct = (c.SentCount + c.FailedCount + c.SkippedCount) * 100 / c.TotalRecipients
 				}
 				progHTML := fmt.Sprintf(
-					`<div class="prog-wrap"><div class="prog-track"><div class="prog-fill" style="width:%d%%"></div></div><span class="prog-label">%d/%d</span></div>`,
-					pct, c.SentCount+c.FailedCount, c.TotalRecipients,
+					`<div class="cmp-actions-inner">`+
+						`<div class="prog-wrap"><div class="prog-track"><div class="prog-fill" style="width:%d%%"></div></div>`+
+						`<span class="prog-label">%d/%d</span></div>`+
+						`<div class="cmp-action-btns">%s</div></div>`,
+					pct, c.SentCount+c.FailedCount, c.TotalRecipients, actionsHTML,
 				)
 
-				if _, err := fmt.Fprintf(w, `<tr x-show="%s" id="cmp-row-%s">
-  <td><button onclick="toggleCmpDetail('%s')" id="cmp-chev-%s" class="btn btn-sm" style="padding:2px 6px;background:transparent;border:1px solid var(--border);font-size:12px">&#9654;</button></td>
-  <td><a href="/campaigns/%s/report" style="font-weight:600">%s</a></td>
-  <td>%s</td>
-  <td>%d</td><td>%d</td>
-  <td style="color:var(--danger,#ef4444)">%d</td>
-  <td>%d</td>
-  <td>&#8377;%.2f</td>
-  <td style="font-size:13px;color:var(--text-secondary)">%s</td>
-  <td>%s</td>
-  <td>%s</td>
-</tr>
-<tr id="cmp-detail-%s" style="display:none">
-  <td colspan="11" style="padding:0">
-    <div data-cmp-id="%s" style="padding:12px;background:var(--accent-lighter,#f8fafc);border-top:1px solid var(--border)" aria-live="polite" aria-atomic="false">
-      Loading...
-    </div>
-  </td>
-</tr>`,
-					xShow, c.ID,
-					c.ID, c.ID,
+				failedCell := fmt.Sprintf(`<td>%d</td>`, c.FailedCount)
+				if c.FailedCount > 0 {
+					failedCell = fmt.Sprintf(`<td class="cmp-td-fail">%d</td>`, c.FailedCount)
+				}
+
+				if _, err := fmt.Fprintf(w,
+					`<tr x-show="%s" id="cmp-row-%s" class="cmp-row--expand" onclick="toggleCmpDetail('%s')">`+
+						`<td class="cmp-chev-cell"><span id="cmp-chev-%s" class="cmp-chev"></span></td>`+
+						`<td><a href="/campaigns/%s/report" class="cmp-name" onclick="event.stopPropagation()">%s</a></td>`+
+						`<td>%s</td>`+
+						`<td>%d</td><td>%d</td>`+
+						`%s`+
+						`<td>%d</td>`+
+						`<td>&#8377;%.2f</td>`+
+						`<td class="cmp-time">%s</td>`+
+						`<td>%s</td>`+
+						`</tr>`+
+						`<tr id="cmp-detail-%s" class="cmp-detail-row" style="display:none">`+
+						`<td colspan="10" class="cmp-detail-cell">`+
+						`<div data-cmp-id="%s" class="cmp-detail-inner" aria-live="polite">Loading&#8230;</div>`+
+						`</td></tr>`,
+					xShow, c.ID, c.ID,
+					c.ID,
 					c.ID, html.EscapeString(c.Name),
 					statusBadge,
 					c.SentCount, c.DeliveredCount,
-					c.FailedCount,
+					failedCell,
 					c.SkippedCount,
 					c.CostTotalINR,
 					sched,
-					actionsHTML,
 					progHTML,
 					c.ID,
 					c.ID,
@@ -233,7 +237,7 @@ function toggleCmpDetail(id) {
   if (!row) return;
   var open = row.style.display !== 'none';
   row.style.display = open ? 'none' : '';
-  if (chev) chev.innerHTML = open ? '&#9654;' : '&#9660;';
+  if (chev) chev.classList.toggle('open', !open);
   if (!open) {
     var inner = row.querySelector('[data-cmp-id]');
     if (inner && !inner.dataset.loaded) {
@@ -263,7 +267,7 @@ func CampaignRecipientRows(recipients []db.CampaignRecipient) templ.Component {
 			_, err := io.WriteString(w, `<p style="font-size:13px;color:var(--text-secondary);padding:8px 0">No recipients found.</p>`)
 			return err
 		}
-		if _, err := io.WriteString(w, `<table class="tbl" style="font-size:13px"><thead><tr><th>CONTACT</th><th>PHONE</th><th>STATUS</th><th>SENT AT</th><th>NOTE</th></tr></thead><tbody>`); err != nil {
+		if _, err := io.WriteString(w, `<table class="rpt-table"><thead><tr><th>CONTACT</th><th>PHONE</th><th>STATUS</th><th>SENT AT</th><th>NOTE</th></tr></thead><tbody>`); err != nil {
 			return err
 		}
 		for _, r := range recipients {
@@ -373,36 +377,79 @@ func WizardStep4Page(agent *mw.AgentClaims, state WizardState, tmpl *db.Template
 
 func WizardStep1(state WizardState, tags []db.Tag) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		tagOpts := ""
-		for _, t := range tags {
-			tagOpts += fmt.Sprintf(`<option value="%d">%s</option>`, t.ID, html.EscapeString(t.Name))
+		segSet := make(map[int64]bool, len(state.SegmentTags))
+		for _, id := range state.SegmentTags {
+			segSet[id] = true
 		}
+		exclSet := make(map[int64]bool, len(state.ExcludeTags))
+		for _, id := range state.ExcludeTags {
+			exclSet[id] = true
+		}
+
+		segChips := ""
+		exclChips := ""
+		for _, t := range tags {
+			segChecked := ""
+			if segSet[t.ID] {
+				segChecked = " checked"
+			}
+			exclChecked := ""
+			if exclSet[t.ID] {
+				exclChecked = " checked"
+			}
+			chip := fmt.Sprintf(`<label class="tag-pick-item"><input type="checkbox" name="%s" value="%d"%s>%s</label>`,
+				"%s", t.ID, "%s", html.EscapeString(t.Name))
+			segChips += fmt.Sprintf(`<label class="tag-pick-item"><input type="checkbox" name="segment_tags" value="%d"%s>%s</label>`,
+				t.ID, segChecked, html.EscapeString(t.Name))
+			exclChips += fmt.Sprintf(`<label class="tag-pick-item"><input type="checkbox" name="exclude_tags" value="%d"%s>%s</label>`,
+				t.ID, exclChecked, html.EscapeString(t.Name))
+			_ = chip
+		}
+		emptyHint := ""
+		if len(tags) == 0 {
+			emptyHint = `<span class="tag-pick-empty">No tags yet — all opted-in contacts will be included</span>`
+		}
+
 		_, err := fmt.Fprintf(w, `
+<div class="page-wrap">
 <div class="wizard">
 <div class="wizard-steps">
-<span class="step active">1 Audience</span>
-<span class="step">2 Message</span>
-<span class="step">3 Schedule</span>
-<span class="step">4 Review</span>
+  <span class="step active" aria-current="step">1 Audience</span>
+  <span class="step">2 Message</span>
+  <span class="step">3 Schedule</span>
+  <span class="step">4 Review</span>
 </div>
 <form method="post" action="/campaigns/wizard/audience" class="wizard-form">
-<h2>Step 1 — Name &amp; audience</h2>
+  <h2>Step 1 — Name &amp; audience</h2>
 
-<label class="field"><span>Campaign name</span>
-<input type="text" name="name" value="%s" required placeholder="June promo"></label>
+  <div class="form-group">
+    <label class="form-label" for="cmp-name">Campaign name</label>
+    <input id="cmp-name" class="form-input" type="text" name="name" value="%s" required placeholder="June promo">
+  </div>
 
-<label class="field"><span>Segment tags (contacts must have ALL selected tags)</span>
-<select name="segment_tags" multiple size="4">%s</select></label>
+  <div class="aud-cols">
+    <div class="form-group">
+      <label class="form-label">Include tags</label>
+      <p class="tag-pick-hint">Contacts must have ALL selected tags. Leave blank for all opted-in.</p>
+      <div class="tag-pick-wrap">%s%s</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Exclude tags</label>
+      <p class="tag-pick-hint">Contacts with ANY of these tags are excluded.</p>
+      <div class="tag-pick-wrap">%s%s</div>
+    </div>
+  </div>
 
-<label class="field"><span>Exclude tags (contacts with ANY of these are excluded)</span>
-<select name="exclude_tags" multiple size="4">%s</select></label>
-
-<div class="wizard-btns">
-<button class="btn btn-primary" type="submit">Next: choose message →</button>
-<a class="btn btn-secondary" href="/campaigns">Cancel</a>
-</div>
+  <div class="wizard-btns">
+    <button class="btn btn-primary" type="submit">Next: choose message →</button>
+    <a class="btn btn-secondary" href="/campaigns">Cancel</a>
+  </div>
 </form>
-</div>`, html.EscapeString(state.Name), tagOpts, tagOpts)
+</div>
+</div>`,
+			html.EscapeString(state.Name),
+			segChips, emptyHint,
+			exclChips, emptyHint)
 		return err
 	})
 }
@@ -430,17 +477,18 @@ func WizardStep2(state WizardState, tmpls []db.Template) templ.Component {
 		}
 
 		_, err := fmt.Fprintf(w, `
+<div class="page-wrap">
 <div class="wizard">
 <div class="wizard-steps">
-<span class="step done">1 Audience</span>
-<span class="step active">2 Message</span>
-<span class="step">3 Schedule</span>
-<span class="step">4 Review</span>
+  <span class="step done">1 Audience</span>
+  <span class="step active" aria-current="step">2 Message</span>
+  <span class="step">3 Schedule</span>
+  <span class="step">4 Review</span>
 </div>
 <form method="post" action="/campaigns/wizard/message" class="wizard-form">
 <input type="hidden" name="wizard_state" value="%s">
 <h2>Step 2 — Choose template</h2>
-<p>Eligible recipients: <strong>%d</strong></p>
+<p style="margin:0;font-size:14px;color:var(--text-secondary)">Eligible recipients: <strong style="color:var(--text)">%d</strong></p>
 %s
 <fieldset class="tmpl-picker">`,
 			html.EscapeString(encodeState(state)),
@@ -472,6 +520,7 @@ func WizardStep2(state WizardState, tmpls []db.Template) templ.Component {
 <a class="btn btn-secondary" href="/campaigns">Cancel</a>
 </div>
 </form>
+</div>
 </div>`)
 		return err
 	})
@@ -495,12 +544,13 @@ func wizardStep3Inner(state WizardState, errMsg string) templ.Component {
 			errHTML = CalloutHTML("warning", errMsg)
 		}
 		_, err := fmt.Fprintf(w, `
+<div class="page-wrap">
 <div class="wizard">
 <div class="wizard-steps">
-<span class="step done">1 Audience</span>
-<span class="step done">2 Message</span>
-<span class="step active">3 Schedule</span>
-<span class="step">4 Review</span>
+  <span class="step done">1 Audience</span>
+  <span class="step done">2 Message</span>
+  <span class="step active" aria-current="step">3 Schedule</span>
+  <span class="step">4 Review</span>
 </div>
 <form method="post" action="/campaigns/wizard/schedule" class="wizard-form"
   x-data="scheduleStep()"
@@ -508,17 +558,17 @@ func wizardStep3Inner(state WizardState, errMsg string) templ.Component {
 <input type="hidden" name="wizard_state" value="%s">
 <h2>Step 3 — Schedule</h2>
 %s
-<fieldset>
-<label class="field radio-row">
-<input type="radio" name="schedule_type" value="now" x-model="schedType"> Send now
+<fieldset style="border:none;padding:0;margin:0;display:flex;flex-direction:column;gap:12px">
+<label class="radio-row" style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
+<input type="radio" name="schedule_type" value="now" x-model="schedType" style="accent-color:var(--accent)"> Send now
 </label>
-<label class="field radio-row">
-<input type="radio" name="schedule_type" value="scheduled" x-model="schedType"> Schedule for later
+<label class="radio-row" style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
+<input type="radio" name="schedule_type" value="scheduled" x-model="schedType" style="accent-color:var(--accent)"> Schedule for later
 </label>
-<label class="field" x-show="schedType === 'scheduled'">
-<span>Date &amp; time (IST)</span>
-<input type="datetime-local" name="scheduled_at" x-model="scheduledAt">
-</label>
+<div class="form-group" x-show="schedType === 'scheduled'">
+<label class="form-label" for="sched-at">Date &amp; time (IST)</label>
+<input id="sched-at" class="form-input" type="datetime-local" name="scheduled_at" x-model="scheduledAt">
+</div>
 </fieldset>
 <div class="callout callout--warning" x-show="inQuietHours" x-cloak role="alert">
 <span aria-hidden="true">⚠</span>
@@ -531,6 +581,7 @@ Quiet hours: 9&nbsp;pm–9&nbsp;am IST. Choose a time between 9&nbsp;am and 9&nb
 <a class="btn btn-secondary" href="/campaigns">Cancel</a>
 </div>
 </form>
+</div>
 </div>
 <script>
 function scheduleStep() {
@@ -613,31 +664,33 @@ func WizardStep4(state WizardState, tmpl *db.Template) templ.Component {
 			state.EligibleCount,
 		)
 		_, err := fmt.Fprintf(w, `
+<div class="page-wrap">
 <div class="wizard">
 <div class="wizard-steps">
-<span class="step done">1 Audience</span>
-<span class="step done">2 Message</span>
-<span class="step done">3 Schedule</span>
-<span class="step active">4 Review</span>
+  <span class="step done">1 Audience</span>
+  <span class="step done">2 Message</span>
+  <span class="step done">3 Schedule</span>
+  <span class="step active" aria-current="step">4 Review</span>
 </div>
 <form id="launch-form" method="post" action="/campaigns" class="wizard-form">
 <input type="hidden" name="wizard_state" value="%s">
 <h2>Step 4 — Review &amp; launch</h2>
 %s
-<dl>
-<dt>Campaign name</dt><dd>%s</dd>
-<dt>Recipients</dt><dd>%d eligible</dd>
-<dt>Template</dt><dd>%s</dd>
-<dt>Category</dt><dd>%s</dd>
-<dt>Scheduling</dt><dd>%s</dd>
-<dt>Estimated cost</dt><dd>&#8377;%.2f</dd>
-</dl>
+<div style="display:flex;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:var(--radius)">
+  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Campaign name</span><span class="stt-info-val">%s</span></div>
+  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Recipients</span><span class="stt-info-val">%d eligible</span></div>
+  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Template</span><span class="stt-info-val">%s</span></div>
+  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Category</span><span class="stt-info-val">%s</span></div>
+  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Scheduling</span><span class="stt-info-val">%s</span></div>
+  <div class="stt-info-row" style="padding:12px 16px;border-bottom:none"><span class="stt-info-key">Estimated cost</span><span class="stt-info-val">&#8377;%.2f</span></div>
+</div>
 <div class="wizard-btns">
 <button type="button" class="btn btn-primary"
   onclick="openModal('confirm-launch',this)">Review &amp; launch &#8594;</button>
 <a class="btn btn-secondary" href="/campaigns">Cancel</a>
 </div>
 </form>
+</div>
 </div>
 %s`,
 			html.EscapeString(encodeState(state)),
@@ -669,20 +722,20 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport) templ.C
 <div class="screen-title">%s</div>
 %s
 </div>
-<div class="stat-row">
-<div class="stat-card"><div class="stat-val">%d</div><div class="stat-lbl">Total recipients</div></div>
-<div class="stat-card"><div class="stat-val">%d</div><div class="stat-lbl">Sent</div></div>
-<div class="stat-card"><div class="stat-val">%d</div><div class="stat-lbl">Delivered</div></div>
-<div class="stat-card"><div class="stat-val">%d</div><div class="stat-lbl">Read</div></div>
-<div class="stat-card"><div class="stat-val">%d</div><div class="stat-lbl">Failed</div></div>
-<div class="stat-card"><div class="stat-val">%d</div><div class="stat-lbl">Clicked</div></div>
-<div class="stat-card"><div class="stat-val">₹%.2f</div><div class="stat-lbl">Total cost</div></div>
+<div class="stat-grid stat-grid--report">
+<div class="stat-card"><div class="stat-label">Total recipients</div><div class="stat-value">%d</div></div>
+<div class="stat-card"><div class="stat-label">Sent</div><div class="stat-value">%d</div></div>
+<div class="stat-card"><div class="stat-label">Delivered</div><div class="stat-value">%d</div></div>
+<div class="stat-card"><div class="stat-label">Read</div><div class="stat-value">%d</div></div>
+<div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value">%d</div></div>
+<div class="stat-card"><div class="stat-label">Clicked</div><div class="stat-value">%d</div></div>
+<div class="stat-card"><div class="stat-label">Total cost</div><div class="stat-value">₹%.2f</div></div>
 </div>
-<dl>
-<dt>Template</dt><dd>%s</dd>
-<dt>Category</dt><dd>%s</dd>
-<dt>Scheduled</dt><dd>%s</dd>
-</dl>
+<div class="card-static" style="display:flex;flex-direction:column;gap:0;margin-top:var(--gutter)">
+  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Template</span><span class="stt-info-val">%s</span></div>
+  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Category</span><span class="stt-info-val">%s</span></div>
+  <div class="stt-info-row" style="padding:12px 16px;border-bottom:none"><span class="stt-info-key">Scheduled</span><span class="stt-info-val">%s</span></div>
+</div>
 </div>`,
 			html.EscapeString(report.Name),
 			BadgeHTML(report.Status, report.Status),

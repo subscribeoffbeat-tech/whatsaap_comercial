@@ -7,7 +7,7 @@
 .au-tabs {
   display: flex;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: var(--gutter);
   flex-wrap: wrap;
 }
 .au-tab {
@@ -19,10 +19,10 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast);
 }
 .au-tab:hover { border-color: var(--accent); color: var(--accent); }
-.au-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.au-tab.active { background: var(--accent); color: var(--text-on-fill); border-color: var(--accent); }
 
 /* ── Rules table ─────────────────────────────────────────────────── */
 .au-table {
@@ -106,7 +106,7 @@
   inset: 0;
   background: var(--border);
   border-radius: var(--radius-full);
-  transition: background 0.2s;
+  transition: background var(--duration-base);
 }
 .toggle-sw input:checked + .toggle-track { background: var(--accent); }
 .toggle-thumb {
@@ -115,10 +115,10 @@
   left: 3px;
   width: 18px;
   height: 18px;
-  background: #fff;
+  background: var(--bg-surface-base_default);
   border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  transition: transform 0.2s;
+  box-shadow: var(--shadow-toggle);
+  transition: transform var(--duration-base);
 }
 .toggle-sw input:checked ~ .toggle-thumb { transform: translateX(20px); }
 
@@ -134,7 +134,7 @@
 .back-link:hover { color: var(--text); }
 
 /* ── Responsive ─────────────────────────────────────────────────── */
-@media (max-width: 600px) {
+@media (max-width: 720px) {
   .au-table-wrap, .card-static { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .au-actions { flex-direction: column; gap: 4px; }
 }

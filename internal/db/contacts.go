@@ -42,11 +42,12 @@ type ContactNote struct {
 
 // ListContactsFilter controls which contacts ListContacts returns.
 type ListContactsFilter struct {
-	Search  string // ILIKE match on wa_phone or name; "" = all
-	TagID   *int64 // filter by tag presence
-	OptedIn *bool  // nil = all
-	Limit   int    // 0 → 50
-	Offset  int
+	Search   string // ILIKE match on wa_phone or name; "" = all
+	TagID    *int64 // filter by tag presence
+	OptedIn  *bool  // nil = all
+	Industry string // "" = all
+	Limit    int    // 0 → 50
+	Offset   int
 }
 
 // phoneRE validates E.164: + followed by 8–15 digits, first digit non-zero.
@@ -88,6 +89,10 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 		s := "%" + f.Search + "%"
 		search = &s
 	}
+	var industry *string
+	if f.Industry != "" {
+		industry = &f.Industry
+	}
 
 	// Count query
 	var total int
@@ -99,7 +104,8 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 		        SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag_id = $2
 		      ))
 		  AND ($3::boolean IS NULL OR c.opted_in = $3)
-	`, search, f.TagID, f.OptedIn).Scan(&total)
+		  AND ($4::text IS NULL OR c.industry = $4)
+	`, search, f.TagID, f.OptedIn, industry).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count contacts: %w", err)
 	}
@@ -116,9 +122,10 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 		        SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag_id = $2
 		      ))
 		  AND ($3::boolean IS NULL OR c.opted_in = $3)
+		  AND ($4::text IS NULL OR c.industry = $4)
 		ORDER BY c.created_at DESC
-		LIMIT $4 OFFSET $5
-	`, search, f.TagID, f.OptedIn, limit, f.Offset)
+		LIMIT $5 OFFSET $6
+	`, search, f.TagID, f.OptedIn, industry, limit, f.Offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list contacts: %w", err)
 	}

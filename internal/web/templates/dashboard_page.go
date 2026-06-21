@@ -101,7 +101,7 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 
 		// ── Daily send capacity card ──────────────────────────────────────────────
 		if _, err := fmt.Fprintf(w, `
-<div class="card-static" style="margin-bottom:24px">
+<div class="card-static" style="margin-bottom:var(--gutter)">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
   <div style="font-size:15px;font-weight:600;color:var(--text-strong)">Daily send capacity</div>
   <div style="font-size:13px;color:var(--text-secondary)">%d / %d messages</div>
@@ -120,7 +120,7 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 
 		// ── Two-column layout ─────────────────────────────────────────────────────
 		if _, err := io.WriteString(w, `
-<div style="display:grid;grid-template-columns:1fr 280px;gap:24px;align-items:start">`); err != nil {
+<div class="g-grid g-split-8-4" style="align-items:start">`); err != nil {
 			return err
 		}
 
@@ -183,7 +183,7 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 		}
 
 		// ── Right: Quick actions + Account health ─────────────────────────────────
-		if _, err := io.WriteString(w, `<div style="display:flex;flex-direction:column;gap:16px">`); err != nil {
+		if _, err := io.WriteString(w, `<div style="display:flex;flex-direction:column;gap:var(--gutter)">`); err != nil {
 			return err
 		}
 

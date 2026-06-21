@@ -1,10 +1,296 @@
 /* ============================================================================
    tokens.css — Offbeat ChatFlow v2 design tokens
+
+   THREE-TIER SYSTEM (Glow UI):
+   TIER 1 PRIMITIVE: raw hex, scale+step names, never referenced by components
+   TIER 2 THEME:     abstract semantic names → primitives, no direct component use
+   TIER 3 CONTEXT:   component-consumable, {prefix}-{theme}-{hierarchy}_{modifier}
+
    All CSS files load this first. Screen-specific files may add their own
    custom properties but must never redefine the canonical names here.
    ============================================================================ */
 
 :root {
+  /* =========================================================================
+     TIER 1 — PRIMITIVE COLOR SCALES
+     Raw hex only. 20 Glow UI named scales (step 1=lightest, step 11=darkest)
+     plus custom cflow-* scales for the existing brand palette.
+     ========================================================================= */
+
+  /* Gray */
+  --gray-1: #fcfcfc; --gray-2: #f7f7f7; --gray-3: #f2f2f2; --gray-4: #ededed;
+  --gray-5: #e8e8e8; --gray-6: #e3e3e3; --gray-7: #dbdbdb; --gray-8: #c7c7c7;
+  --gray-9: #858585; --gray-10: #707070; --gray-11: #171717;
+
+  /* Slate */
+  --slate-1: #fcfcfd; --slate-2: #f9fafb; --slate-3: #f0f2f4; --slate-4: #ebedef;
+  --slate-5: #e6e8eb; --slate-6: #e0e3e6; --slate-7: #d7dbdf; --slate-8: #c1c8cd;
+  --slate-9: #7d868c; --slate-10: #697177; --slate-11: #11181c;
+
+  /* Mauve */
+  --mauve-1: #fdfcfd; --mauve-2: #f8f7f8; --mauve-3: #f3f1f3; --mauve-4: #edecee;
+  --mauve-5: #e8e7e9; --mauve-6: #e4e2e4; --mauve-7: #dbdadc; --mauve-8: #c8c7cc;
+  --mauve-9: #87858e; --mauve-10: #6f6e77; --mauve-11: #1a1523;
+
+  /* Sand */
+  --sand-1: #fdfdfc; --sand-2: #f8f8f7; --sand-3: #f3f3f2; --sand-4: #eeeeec;
+  --sand-5: #e9e9e7; --sand-6: #e2e2df; --sand-7: #dbdbd7; --sand-8: #c8c7c1;
+  --sand-9: #878782; --sand-10: #706f6b; --sand-11: #1b1b18;
+
+  /* Olive */
+  --olive-1: #fcfdfc; --olive-2: #f9fbf9; --olive-3: #f1f3f1; --olive-4: #ecefec;
+  --olive-5: #e7e9e7; --olive-6: #e1e5e1; --olive-7: #d7dbd7; --olive-8: #c2c7c1;
+  --olive-9: #828881; --olive-10: #6b716a; --olive-11: #131d11;
+
+  /* Indigo */
+  --indigo-1: #fcfcfd; --indigo-2: #fafbff; --indigo-3: #f0f4ff; --indigo-4: #e7edfe;
+  --indigo-5: #d9e2fc; --indigo-6: #c8d5f9; --indigo-7: #adbff5; --indigo-8: #8fa6ef;
+  --indigo-9: #385bcc; --indigo-10: #3451b2; --indigo-11: #101d47;
+
+  /* Blue */
+  --blue-1: #fafcff; --blue-2: #f5faff; --blue-3: #ebf5ff; --blue-4: #e0f0ff;
+  --blue-5: #cde6fe; --blue-6: #b9daf8; --blue-7: #97c7f2; --blue-8: #5db0ef;
+  --blue-9: #0080f0; --blue-10: #006adb; --blue-11: #00254d;
+
+  /* Cyan */
+  --cyan-1: #fbfdfe; --cyan-2: #f2fcfd; --cyan-3: #e9f9fb; --cyan-4: #daf4f7;
+  --cyan-5: #c3e9ef; --cyan-6: #a8dee6; --cyan-7: #85cedb; --cyan-8: #3fb9cf;
+  --cyan-9: #0895b4; --cyan-10: #0c7792; --cyan-11: #04323e;
+
+  /* Grass */
+  --grass-1: #fbfefb; --grass-2: #f3fcf3; --grass-3: #ebf9eb; --grass-4: #def2de;
+  --grass-5: #cceacd; --grass-6: #b9dfbc; --grass-7: #96cf9b; --grass-8: #64b974;
+  --grass-9: #3d994f; --grass-10: #297a3a; --grass-11: #1b311e;
+
+  /* Green */
+  --green-1: #fbfefc; --green-2: #f3fcf5; --green-3: #ebfaf0; --green-4: #ddf3e4;
+  --green-5: #ccebd7; --green-6: #b4dfc4; --green-7: #92ceac; --green-8: #5bb98b;
+  --green-9: #2a9865; --green-10: #18774c; --green-11: #153226;
+
+  /* Teal */
+  --teal-1: #fbfefd; --teal-2: #f2fcfa; --teal-3: #e7f9f5; --teal-4: #d8f3ed;
+  --teal-5: #c7ebe5; --teal-6: #afdfd7; --teal-7: #8dcec3; --teal-8: #55b9ac;
+  --teal-9: #0e9a8a; --teal-10: #067a6e; --teal-11: #11322d;
+
+  /* Yellow */
+  --yellow-1: #fcfcf7; --yellow-2: #fffce5; --yellow-3: #fffbd1; --yellow-4: #fff8bd;
+  --yellow-5: #fef2a4; --yellow-6: #f9e78b; --yellow-7: #efd26c; --yellow-8: #ebbc00;
+  --yellow-9: #f5cc00; --yellow-10: #946800; --yellow-11: #34280f;
+
+  /* Amber */
+  --amber-1: #fefcfb; --amber-2: #fff8eb; --amber-3: #fff4d6; --amber-4: #ffecbd;
+  --amber-5: #ffe3a3; --amber-6: #ffd285; --amber-7: #f3b962; --amber-8: #ee9d2b;
+  --amber-9: #ff9f19; --amber-10: #ad5700; --amber-11: #4e2009;
+
+  /* Orange */
+  --orange-1: #fefcfb; --orange-2: #fef9f6; --orange-3: #fff0e5; --orange-4: #ffe8d6;
+  --orange-5: #ffdbc2; --orange-6: #ffcca8; --orange-7: #ffb27f; --orange-8: #fa924c;
+  --orange-9: #eb5e00; --orange-10: #bd4b00; --orange-11: #451e11;
+
+  /* Red */
+  --red-1: #fffafa; --red-2: #fffafa; --red-3: #fff0f0; --red-4: #ffe5e5;
+  --red-5: #fdd8d8; --red-6: #f9c8c8; --red-7: #f3afb0; --red-8: #ea8f90;
+  --red-9: #db3d42; --red-10: #ce2c31; --red-11: #391417;
+
+  /* Tomato */
+  --tomato-1: #fffafa; --tomato-2: #fff6f5; --tomato-3: #fff1f0; --tomato-4: #ffe4e0;
+  --tomato-5: #fdd8d3; --tomato-6: #fac6bd; --tomato-7: #f3aea0; --tomato-8: #ea9280;
+  --tomato-9: #db4224; --tomato-10: #cc3314; --tomato-11: #361811;
+
+  /* Crimson */
+  --crimson-1: #fffafc; --crimson-2: #fff5fa; --crimson-3: #fef1f7; --crimson-4: #fce4ef;
+  --crimson-5: #f9d7e6; --crimson-6: #f4c7dc; --crimson-7: #edabc7; --crimson-8: #e58fb2;
+  --crimson-9: #e13378; --crimson-10: #d21e66; --crimson-11: #3f0d1e;
+
+  /* Pink */
+  --pink-1: #fffafd; --pink-2: #fffafd; --pink-3: #feecf7; --pink-4: #fce4f3;
+  --pink-5: #f9d7eb; --pink-6: #f3c4e1; --pink-7: #ecacd3; --pink-8: #e28dc2;
+  --pink-9: #d23297; --pink-10: #cd1d8d; --pink-11: #3d0a2b;
+
+  /* Violet */
+  --violet-1: #fcfbfe; --violet-2: #fbfaff; --violet-3: #f3f0ff; --violet-4: #ebe7fe;
+  --violet-5: #e4defc; --violet-6: #d5cdf9; --violet-7: #c5b9f3; --violet-8: #a898ec;
+  --violet-9: #634ec1; --violet-10: #5746af; --violet-11: #1f1249;
+
+  /* Purple */
+  --purple-1: #fefbfe; --purple-2: #fdfaff; --purple-3: #f9f1fe; --purple-4: #f4e8fc;
+  --purple-5: #eddcf9; --purple-6: #e4cdf4; --purple-7: #d4b5ed; --purple-8: #bf95e4;
+  --purple-9: #8344bb; --purple-10: #793bb0; --purple-11: #2b0e44;
+
+  /* cflow-neutral — existing app neutrals */
+  --cflow-neutral-1:  #FFFFFF;
+  --cflow-neutral-2:  #FAFAFA;
+  --cflow-neutral-3:  #F3F8F5;
+  --cflow-neutral-4:  #EEF7F2;
+  --cflow-neutral-5:  #E6F3EB;
+  --cflow-neutral-6:  #D1E8DA;
+  --cflow-neutral-7:  #B0C9B8;
+  --cflow-neutral-8:  #9CA3AF;
+  --cflow-neutral-9:  #6B7280;
+  --cflow-neutral-10: #374151;
+  --cflow-neutral-11: #1A1D2E;
+
+  /* cflow-brand — existing brand green (Tailwind green family) */
+  --cflow-brand-1:  #F0FDF4;
+  --cflow-brand-2:  #DCFCE7;
+  --cflow-brand-3:  #BBF7D0;
+  --cflow-brand-4:  #86EFAC;
+  --cflow-brand-5:  #4ADE80;
+  --cflow-brand-6:  #22C55E;
+  --cflow-brand-7:  #16A34A;
+  --cflow-brand-8:  #15803D;
+  --cflow-brand-9:  #166534;
+  --cflow-brand-10: #14532D;
+  --cflow-brand-11: #052E16;
+
+  /* =========================================================================
+     TIER 2 — THEME TOKENS
+     Abstract semantic mapping → primitives. No direct component use.
+     ========================================================================= */
+
+  /* base theme (neutral foundation) */
+  --base-50:  var(--cflow-neutral-1);
+  --base-100: var(--cflow-neutral-3);
+  --base-200: var(--cflow-neutral-4);
+  --base-300: var(--cflow-neutral-5);
+  --base-400: var(--cflow-neutral-6);
+  --base-600: var(--cflow-neutral-8);
+  --base-700: var(--cflow-neutral-9);
+  --base-900: var(--cflow-neutral-11);
+
+  /* brand theme */
+  --brand-50:  var(--cflow-brand-1);
+  --brand-100: var(--cflow-brand-2);
+  --brand-500: var(--cflow-brand-6);
+  --brand-600: var(--cflow-brand-7);
+  --brand-700: var(--cflow-brand-8);
+  --brand-800: var(--cflow-brand-9);
+
+  /* success theme (Glow UI green) */
+  --success-t-50:  #E9FAEF;
+  --success-t-100: #C3F0D8;
+  --success-t-500: #17A254;
+  --success-t-600: #14915F;
+  --success-t-700: #0F6B44;
+  --success-t-800: #0A4A2E;
+
+  /* warning theme (Tailwind amber) */
+  --warning-t-50:  #FFFBEB;
+  --warning-t-100: #FEF3C7;
+  --warning-t-500: #F59E0B;
+  --warning-t-600: #D97706;
+
+  /* danger theme (Glow UI red) */
+  --danger-t-50:  #FFEBEE;
+  --danger-t-100: #FFCDD4;
+  --danger-t-300: #F48A9A;
+  --danger-t-500: #D80027;
+  --danger-t-600: #B10021;
+  --danger-t-700: #8C001A;
+
+  /* additional theme (Tailwind indigo/sky) */
+  --additional-t-50:  #E0F2FE;
+  --additional-t-100: #EEF2FF;
+  --additional-t-500: #6366F1;
+  --additional-t-600: #0369A1;
+
+  /* =========================================================================
+     TIER 3 — CONTEXT TOKENS
+     Component-consumable. Named: {prefix}-{theme}-{hierarchy}_{modifier}
+     All components MUST reference these (or compat aliases below).
+     ========================================================================= */
+
+  /* text */
+  --text-base-primary:           var(--base-900);
+  --text-base-secondary:         var(--base-700);
+  --text-base-tertiary:          var(--base-600);
+  --text-brand-primary:          var(--brand-600);
+  --text-success-primary:        var(--success-t-600);
+  --text-success-strong:         var(--success-t-800);
+  --text-warning-primary:        var(--warning-t-600);
+  --text-danger-primary:         var(--danger-t-700);
+  --text-additional-primary:     var(--additional-t-600);
+  --text-on-fill:                white;
+
+  /* text-overlay-w (text on gradient / colored-fill surfaces) */
+  --text-overlay-w-primary:      rgba(255,255,255,0.90);
+  --text-overlay-w-secondary:    rgba(255,255,255,0.78);
+  --text-overlay-w-subtle:       rgba(255,255,255,0.75);
+
+  /* bg-surface (holding surfaces — cards, page canvas, inputs) */
+  --bg-surface-base_default:     var(--base-50);
+  --bg-surface-page:             var(--base-100);
+  --bg-surface-input:            var(--base-200);
+  --bg-surface-brand-subtle:     var(--brand-50);
+  --bg-surface-success-subtle:   var(--success-t-50);
+  --bg-surface-warning-subtle:   var(--warning-t-50);
+  --bg-surface-danger-subtle:    var(--danger-t-50);
+  --bg-surface-additional-subtle:var(--additional-t-50);
+
+  /* bg-fill (interactive solid fills — buttons, active chips, badges) */
+  --bg-fill-brand_default:       var(--brand-500);
+  --bg-fill-brand_hover:         var(--brand-600);
+  --bg-fill-brand-secondary_default: var(--brand-600);
+  --bg-fill-brand-secondary_hover:   var(--brand-700);
+  --bg-fill-danger_default:      var(--danger-t-500);
+  --bg-fill-danger_hover:        var(--danger-t-600);
+  --bg-fill-success_default:     var(--success-t-500);
+  --bg-fill-warning_default:     var(--warning-t-500);
+
+  /* bg-fill-overlay-w (white glass effects on colored/gradient surfaces) */
+  --bg-fill-overlay-w-subtle:    rgba(255,255,255,0.15);
+  --bg-fill-overlay-w-tertiary:  rgba(255,255,255,0.18);
+  --bg-fill-overlay-w-secondary: rgba(255,255,255,0.20);
+  --bg-fill-overlay-w-primary:   rgba(255,255,255,0.25);
+  --bg-fill-overlay-w_hover:     rgba(255,255,255,0.35);
+  --bg-fill-overlay-w-tint:      rgba(255,255,255,0.50);
+  --bg-fill-overlay-w-strong:    rgba(255,255,255,0.85);
+  --bg-fill-overlay-w-fill:      rgba(255,255,255,0.90);
+
+  /* bg-fill-overlay-b (dark hover overlays on light surfaces) */
+  --bg-fill-overlay-b-subtle:    rgba(0,0,0,0.05);
+  --bg-fill-overlay-b-secondary: rgba(0,0,0,0.06);
+  --bg-fill-overlay-b-tertiary:  rgba(0,0,0,0.07);
+  --bg-fill-overlay-b-primary:   rgba(0,0,0,0.08);
+  --bg-fill-overlay-b-strong:    rgba(0,0,0,0.10);
+  --bg-fill-overlay-b-heavy:     rgba(0,0,0,0.12);
+  --bg-fill-overlay-b-deep:      rgba(0,0,0,0.13);
+  --bg-fill-overlay-b-max:       rgba(0,0,0,0.18);
+
+  /* border */
+  --border-base_default:         var(--base-400);
+  --border-base-subtle:          var(--base-300);
+  --border-brand_default:        var(--brand-600);
+  --border-danger_default:       var(--danger-t-300);
+
+  /* border-overlay-w (borders on gradient/colored surfaces) */
+  --border-overlay-w-secondary:  rgba(255,255,255,0.30);
+  --border-overlay-w-primary:    rgba(255,255,255,0.50);
+  --border-overlay-w_hover:      rgba(255,255,255,0.80);
+
+  /* WA-theme bubble */
+  --wa-bubble-in:                var(--cflow-neutral-1);
+
+  /* Shadow utilities */
+  --shadow-brand:                0 2px 8px rgba(22,163,74,0.25);
+  --shadow-brand_hover:          0 4px 12px rgba(22,163,74,0.3);
+  --shadow-bubble:               0 1px 0.5px rgba(0,0,0,0.13);
+  --shadow-panel:                -4px 0 20px rgba(0,0,0,0.08);
+  --shadow-dropdown-neutral:     0 6px 20px rgba(0,0,0,0.12);
+  --shadow-float-neutral:        0 4px 24px rgba(0,0,0,0.18);
+  --shadow-input:                0 1px 3px rgba(0,0,0,0.08);
+  --shadow-input-focus:          0 1px 4px rgba(0,0,0,0.15);
+  --shadow-float-subtle:         0 -4px 16px rgba(0,0,0,0.07);
+  --shadow-float-sm:             0 1px 4px rgba(0,0,0,0.05);
+  --shadow-date-chip:            0 1px 2px rgba(0,0,0,0.10);
+  --shadow-toggle:               0 1px 3px rgba(0,0,0,0.20);
+  --scrollbar-thumb-hover:       rgba(22,163,74,0.28);
+  --shadow-focus:                0 0 0 4px var(--focus-glow);
+
+  /* =========================================================================
+     EXISTING FLAT TOKENS (unchanged — compat layer for progressive migration)
+     ========================================================================= */
+
   /* ── Brand (logo green) ─────────────────────────────────────────────────── */
   --primary:        #22C55E;
   --primary-dark:   #16A34A;
@@ -18,49 +304,54 @@
   --accent-lighter: #F0FDF4;
 
   /* ── Surfaces ───────────────────────────────────────────────────────────── */
-  --bg-page:   #F3F8F5;   /* very light green canvas */
+  --bg-page:   #F0F2F4;
   --bg-card:   #FFFFFF;
   --bg-nav:    #FFFFFF;
-  --bg-input:  #EEF7F2;
+  --bg-input:  #FFFFFF;
 
   /* ── Text ───────────────────────────────────────────────────────────────── */
-  --text:            #1A1D2E;
-  --text-secondary:  #6B7280;
-  --text-muted:      #9CA3AF;
+  --text:            #11181C;
+  --text-secondary:  #697177;
+  --text-muted:      #888F96;
 
   /* ── Borders ────────────────────────────────────────────────────────────── */
-  --border:        #D1E8DA;
-  --border-light:  #E6F3EB;
+  --border:        #E6E8EB;
+  --border-light:  #EBEDEF;
+  --border-strong: #D7DBDF;
 
   /* ── Feedback ───────────────────────────────────────────────────────────── */
-  --success:        #10B981;
-  --success-light:  #D1FAE5;
-  --success-bg:     #F0FDF4;
-  --success-strong: #166534;
+  --success:        #17A254;
+  --success-light:  #E9FAEF;
+  --success-bg:     #E9FAEF;
+  --success-strong: #0A4A2E;
   --warning:        #F59E0B;
   --warning-light:  #FEF3C7;
-  --danger:         #EF4444;
-  --danger-dark:    #DC2626;
-  --danger-light:   #FEE2E2;
+  --danger:         #D80027;
+  --danger-dark:    #B10021;
+  --danger-light:   #FFEBEE;
   --info:           #6366F1;
   --info-light:     #EEF2FF;
   --info-bg:        #E0F2FE;
   --info-text:      #0369A1;
   --bubble-out:     #D9FDD3;
 
-  /* ── Shadows ────────────────────────────────────────────────────────────── */
-  --shadow-sm:   0 1px 3px rgba(22,163,74,0.06);
-  --shadow:      0 2px 8px rgba(22,163,74,0.08);
-  --shadow-card: 0 2px 12px rgba(22,163,74,0.08), 0 0 0 1px rgba(22,163,74,0.05);
-  --shadow-md:   0 4px 16px rgba(22,163,74,0.10);
-  --shadow-lg:   0 8px 32px rgba(22,163,74,0.12);
+  /* ── Shadows (Glow UI layered neutral spec) ─────────────────────────────── */
+  --shadow-xs:   0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm:   0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow:      0 2px 4px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:   0 4px 8px rgba(0,0,0,0.04), 0 12px 24px rgba(0,0,0,0.08);
+  --shadow-lg:   0 8px 16px rgba(0,0,0,0.06), 0 24px 48px rgba(0,0,0,0.12);
+  --shadow-xl:   0 12px 24px rgba(0,0,0,0.06), 0 32px 64px rgba(0,0,0,0.14);
 
   /* ── Shape ──────────────────────────────────────────────────────────────── */
-  --radius-sm:   8px;
+  --radius-sm:   6px;
   --radius:      12px;
   --radius-md:   16px;
   --radius-lg:   20px;
   --radius-xl:   24px;
+  --radius-2xl:  32px;
+  --radius-3xl:  40px;
   --radius-full: 9999px;
 
   /* ── Message status ticks ───────────────────────────────────────────────── */
@@ -76,15 +367,14 @@
   --accent-online: #25D366;
 
   /* ── Campaign funnel chart colours ─────────────────────────────────────── */
-  --funnel-read:   #9333EA;   /* purple — read bar */
-  --funnel-click:  #EA580C;   /* orange — clicked bar */
+  --funnel-read:   #9333EA;
+  --funnel-click:  #EA580C;
 
   /* ── Template variable highlight (violet) ──────────────────────────────── */
   --var-accent: #7C3AED;
 
   /* =========================================================================
      COMPAT ALIASES — old token names still referenced in screen CSS files.
-     These ensure existing CSS compiles without changes during the v2 rollout.
      ========================================================================= */
 
   /* Surfaces */
@@ -98,17 +388,17 @@
   --border-focus: var(--accent);
 
   /* Feedback expanded */
-  --success-fill:   #047857;      /* white-text accessible emerald */
-  --success-text:   #059669;
+  --success-fill:   #0F6B44;
+  --success-text:   #14915F;
   --success-tint:   var(--success-light);
-  --danger-text:    #B91C1C;
+  --danger-text:    #8C001A;
   --danger-tint:    var(--danger-light);
-  --danger-border:  #FCA5A5;
+  --danger-border:  #F48A9A;
   --warning-text:   #D97706;
   --warning-tint:   var(--warning-light);
   --info-hover:     var(--accent-dark);
 
-  /* Old sidebar tokens (kept so sidebar.css remnants don't break) */
+  /* Old sidebar tokens */
   --sidebar-bg:    #1E2D3D;
   --sidebar-text:  #8899AA;
   --sidebar-active:#FFFFFF;
@@ -125,11 +415,74 @@
   --t3:  var(--text-secondary);
   --t4:  var(--text-muted);
 
-  /* Table row hover (campaigns.css uses var(--bg-hover, fallback)) */
   --bg-hover: var(--accent-lighter);
-
-  /* Primary active state */
   --primary-active: var(--primary-dark);
+
+  /* ── Accessible button fill (decoupled from brand identity green) ────────── */
+  /* --primary (#22C55E) kept for focus rings / gradients / decorative use.     */
+  /* These tokens carry the WCAG AA-passing fill for interactive .btn-primary.  */
+  --btn-fill-primary:       var(--brand-700);  /* #15803D — white text 5.01:1 AA */
+  --btn-fill-primary-hover: var(--brand-800);  /* #166534 — darker hover step   */
+
+  /* ── Spacing scale (4px base) ───────────────────────────────────────────── */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+  --space-sm:  16px;
+
+  /* ── Grid (Glow UI) ─────────────────────────────────────────────────────── */
+  --gutter:        24px;
+  --page-margin:   24px;
+  --cols:          12;
+  --cols-mobile:   6;
+  --panel-w:       280px;
+  --preview-w:     340px;
+  --tmpl-editor-w: 360px;
+  --tmpl-fp-w:     320px;
+  --lib-nav-w:     200px;
+
+  /* ── Motion ─────────────────────────────────────────────────────────────── */
+  --duration-fast:  0.12s;
+  --duration-base:  0.18s;
+  --duration-slow:  0.2s;
+  --duration-slide: 0.22s;
+  --easing-slide:   cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-enter:   cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Type scale tokens ───────────────────────────────────────────────────── */
+  --font-size-xs:   12px;
+  --font-size-sm:   14px;
+  --font-size-md:   16px;
+  --font-size-lg:   18px;
+  --font-size-xl:   20px;
+  --font-size-2xl:  24px;
+  --font-size-3xl:  32px;
+
+  /* ── WA-theme colours (inbox + template preview) ─────────────────────── */
+  --wa-surface:     #f0f2f5;
+  --wa-border:      #e9edef;
+  --wa-bg:          #e5ddd5;
+  --wa-link:        #0099cc;
+  --wa-text:        #111b21;
+  --wa-text-muted:  #667781;
+  --wa-text-subtle: #54656f;
+  --wa-placeholder: #8696a0;
+
+  /* ── Shared structural tokens ────────────────────────────────────────── */
+  --avatar-gradient: linear-gradient(135deg, var(--violet-9), var(--purple-9));
+  --avatar-icon:     #667eea;
+  --overlay-bg:      rgba(17, 24, 28, 0.45);
+  --border-subtle:   var(--border-light);
+  --surface-hover:   var(--accent-lighter);
+  --focus-glow:      rgba(22, 163, 74, 0.16);
+  --scrollbar-thumb: rgba(22, 163, 74, 0.18);
 }
 
 /* Global focus ring ──────────────────────────────────────────────────────── */

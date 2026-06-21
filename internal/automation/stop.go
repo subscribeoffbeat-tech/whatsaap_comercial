@@ -1,13 +1,7 @@
 package automation
 
 import (
-	"context"
 	"strings"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"whatsapptool/internal/db"
-	"whatsapptool/internal/whatsapp"
 )
 
 var stopKeywords = []string{
@@ -26,15 +20,6 @@ func IsStopKeyword(text string) bool {
 	return false
 }
 
-const stopConfirmMessage = "You have been unsubscribed and will no longer receive " +
+// StopConfirmMessage is sent to the contact after a successful opt-out.
+const StopConfirmMessage = "You have been unsubscribed and will no longer receive " +
 	"marketing messages from us. Reply START to opt back in."
-
-// HandleStop opts the contact out in the DB and sends the standard confirmation
-// message. It is safe to call in a goroutine.
-func HandleStop(ctx context.Context, pool *pgxpool.Pool, client *whatsapp.Client, phone string) error {
-	if err := db.OptOut(ctx, pool, phone); err != nil {
-		return err
-	}
-	_, err := client.SendText(ctx, phone, stopConfirmMessage)
-	return err
-}

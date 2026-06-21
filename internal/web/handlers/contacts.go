@@ -96,6 +96,7 @@ func (h *ContactsHandler) Table(w http.ResponseWriter, r *http.Request) {
 	case "false":
 		fa := false; f.OptedIn = &fa
 	}
+	f.Industry = q.Get("industry_filter")
 
 	contacts, total, err := db.ListContacts(r.Context(), h.pool, f)
 	if err != nil {
@@ -103,7 +104,7 @@ func (h *ContactsHandler) Table(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	searchActive := q.Get("search") != "" || q.Get("tag") != "" || q.Get("opted_in_filter") != ""
+	searchActive := q.Get("search") != "" || q.Get("tag") != "" || q.Get("opted_in_filter") != "" || q.Get("industry_filter") != ""
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := templates.ContactTable(contacts, total, offset, 50, searchActive).Render(r.Context(), w); err != nil {
 		log.Printf("contact table render: %v", err)

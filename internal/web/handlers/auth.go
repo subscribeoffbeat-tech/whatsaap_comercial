@@ -44,8 +44,12 @@ func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	flash := r.URL.Query().Get("err")
+	next := r.URL.Query().Get("next")
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
+		next = ""
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	templates.LoginPage(flash).Render(r.Context(), w)
+	templates.LoginPage(flash, next).Render(r.Context(), w)
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +77,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mw.SetSessionCookie(w, token)
-	go db.TouchLastActive(context.Background(), h.pool, agent.ID)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("TouchLastActive panic: %v", r)
+			}
+		}()
+		db.TouchLastActive(context.Background(), h.pool, agent.ID)
+	}()
 
 	next := r.FormValue("next")
 	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {

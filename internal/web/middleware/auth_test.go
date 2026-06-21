@@ -73,7 +73,10 @@ func TestRequireRole_Allowed(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := RequireRole("admin", "manager")(inner)
+	forbidden403 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	})
+	handler := RequireRole(forbidden403, "admin", "manager")(inner)
 
 	req := httptest.NewRequest("GET", "/admin", nil)
 	ctx := context.WithValue(req.Context(), ctxAgentKey, &AgentClaims{Role: "manager"})
@@ -87,7 +90,10 @@ func TestRequireRole_Blocked(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := RequireRole("admin")(inner)
+	forbidden403 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	})
+	handler := RequireRole(forbidden403, "admin")(inner)
 
 	req := httptest.NewRequest("GET", "/admin", nil)
 	ctx := context.WithValue(req.Context(), ctxAgentKey, &AgentClaims{Role: "agent"})
@@ -100,7 +106,10 @@ func TestRequireRole_NoContext(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := RequireRole("admin")(inner)
+	forbidden403 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	})
+	handler := RequireRole(forbidden403, "admin")(inner)
 
 	req := httptest.NewRequest("GET", "/admin", nil)
 	rr := httptest.NewRecorder()

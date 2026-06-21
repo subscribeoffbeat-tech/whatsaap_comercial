@@ -110,7 +110,6 @@ func (h *InboxHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contactName := ""
-	contactSub := ""
 	var cName, cPhone, cRole, cCompany string
 	err = h.pool.QueryRow(r.Context(),
 		`SELECT COALESCE(name,''), COALESCE(wa_phone,''),
@@ -124,8 +123,13 @@ func (h *InboxHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	contactName = cName
 	if contactName == "" {
-		contactName = cPhone
+		contactName = cPhone // phone-only contact: show number as name
 	}
+	if contactName == "" {
+		contactName = "Unknown contact"
+	}
+	// Subtitle: role + company only — cPhone is intentionally excluded here so
+	// it never duplicates when it was already used as the display name above.
 	var parts []string
 	if cRole != "" {
 		parts = append(parts, cRole)
@@ -133,8 +137,7 @@ func (h *InboxHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 	if cCompany != "" {
 		parts = append(parts, "at "+cCompany)
 	}
-	contactSub = strings.Join(parts, " ")
-
+	contactSub := strings.Join(parts, " ")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := templates.MessageThread(conv, msgs, contactName, contactSub).Render(r.Context(), w); err != nil {
 		log.Printf("message thread render: %v", err)
@@ -279,20 +282,37 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 		return
 	}
 
-	// STOP/UNSUBSCRIBE: opt out instantly and send confirmation.
+	// STOP/UNSUBSCRIBE: opt-out write is SYNCHRONOUS. context.WithoutCancel ensures
+	// a Meta disconnect cannot abort the write; the 5s timeout prevents a stalled
+	// DB from hanging the webhook worker.
 	if msg.Text != nil && automation.IsStopKeyword(msg.Text.Body) {
 		phone := msg.From
 		if !strings.HasPrefix(phone, "+") {
 			phone = "+" + phone
 		}
+		optCtx, optCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		if err := db.OptOut(optCtx, h.pool, phone); err != nil {
+			log.Printf("OPT-OUT WRITE FAILED phone=%s: %v", phone, err)
+		}
+		optCancel()
 		go func() {
-			if err := automation.HandleStop(context.Background(), h.pool, h.waClient, phone); err != nil {
-				log.Printf("handle stop %s: %v", phone, err)
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("STOP CONFIRMATION PANIC phone=%s: %v", phone, r)
+				}
+			}()
+			if _, err := h.waClient.SendText(context.Background(), phone, automation.StopConfirmMessage); err != nil {
+				log.Printf("stop confirm send %s: %v", phone, err)
 			}
 		}()
 	} else {
 		// Run other automation rules (keyword, welcome, away).
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("RunRules panic: %v", r)
+				}
+			}()
 			if _, err := automation.RunRules(context.Background(), h.pool, h.waClient, msg, contactID, conv.ID, isNewContact); err != nil {
 				log.Printf("automation rules for %s: %v", msg.From, err)
 			}
@@ -301,7 +321,14 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 
 	// Download media immediately — Meta URLs expire in ~5 minutes.
 	if mediaID := msg.MediaID(); mediaID != "" {
-		go h.downloadMedia(dbMsg.ID, mediaID)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("downloadMedia panic: %v", r)
+				}
+			}()
+			h.downloadMedia(dbMsg.ID, mediaID)
+		}()
 	}
 
 	// Round-robin assign if still unassigned

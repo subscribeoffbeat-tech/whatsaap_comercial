@@ -271,7 +271,7 @@ func GetAudienceContacts(ctx context.Context, pool *pgxpool.Pool, segmentTags, e
 		))
 	}
 
-	q := `SELECT c.id::text, c.wa_phone, c.name, c.email, c.custom_fields::text,
+	q := `SELECT c.id::text, c.wa_phone, c.name, c.email, c.industry, c.custom_fields::text,
 		         c.opted_in, c.opt_in_source, c.opt_in_at, c.opt_out_at, c.is_blocked,
 		         c.created_at, c.updated_at
 		  FROM contacts c

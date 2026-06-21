@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -117,13 +118,13 @@ func RequireAuth(secret []byte) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie(sessionCookie)
 			if err != nil {
-				http.Redirect(w, r, "/login?next="+r.URL.Path, http.StatusSeeOther)
+				http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 				return
 			}
 			claims, err := parseToken(secret, cookie.Value)
 			if err != nil {
 				ClearSessionCookie(w)
-				http.Redirect(w, r, "/login?next="+r.URL.Path, http.StatusSeeOther)
+				http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 				return
 			}
 			ctx := context.WithValue(r.Context(), ctxAgentKey, claims)

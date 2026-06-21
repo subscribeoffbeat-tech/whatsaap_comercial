@@ -100,7 +100,7 @@ func avatarDropdownHTML(agent *mw.AgentClaims) string {
 	initials := avatarInitials(name)
 	return fmt.Sprintf(`<div class="dropdown" x-data="{open:false}">
   <button class="topnav-avatar" aria-label="%s" aria-haspopup="true" @click="open=!open" @click.outside="open=false">%s</button>
-  <div class="dropdown-menu" x-show="open" x-cloak style="min-width:180px">
+  <div class="dropdown-menu" x-show="open" x-cloak x-transition style="min-width:180px">
     <span class="dropdown-item" style="font-size:12px;color:var(--text-muted);cursor:default;line-height:1.4">
       <strong>%s</strong><br>%s
     </span>
@@ -129,7 +129,7 @@ func ShellOpen(agent *mw.AgentClaims, activePath, pageTitle, qualityRating strin
 <title>%s — Offbeat ChatFlow</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"/>
 <link rel="stylesheet" href="/static/tokens.css"/>
 <link rel="stylesheet" href="/static/app.css"/>
 <link rel="stylesheet" href="/static/inbox.css"/>
@@ -156,7 +156,11 @@ func ShellOpen(agent *mw.AgentClaims, activePath, pageTitle, qualityRating strin
       '<button class="x" type="button" aria-label="Dismiss" onclick="this.closest(\'.toast\').remove()">&#215;</button>';
     region.prepend(d);
     if (kind === 'success' || kind === 'info') {
-      setTimeout(function(){ d.remove(); }, 5000);
+      setTimeout(function(){
+        if (!d.isConnected) return;
+        d.classList.add('toast--exit');
+        d.addEventListener('animationend', function(){ d.remove(); }, {once: true});
+      }, 5000);
     }
   }
   window.__showToast = showToast;
