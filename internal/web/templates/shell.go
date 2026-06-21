@@ -198,9 +198,14 @@ func ShellOpen(agent *mw.AgentClaims, activePath, pageTitle, qualityRating strin
 </script>
 <div class="app-layout">
 <nav class="topnav">
-  <a class="topnav-logo" href="/">
-    <img src="/static/logo.png" class="topnav-logo-img" alt="Offbeat ChatFlow">
-    <span class="topnav-logo-text">Offbeat ChatFlow</span>
+  <a class="topnav-logo" href="/" aria-label="Offbeat ChatFlow">
+    <div class="nav-logo">
+      <div class="nav-logo-wordmark">
+        <span class="nav-logo-top">Offbeat</span>
+        <span class="nav-logo-bottom"><span class="nav-logo-chat">Chat</span><span class="nav-logo-flow">Flow</span></span>
+      </div>
+      <div class="nav-logo-rule"></div>
+    </div>
   </a>
   <div class="topnav-pills">
     %s

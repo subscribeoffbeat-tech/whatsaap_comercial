@@ -51,7 +51,6 @@ a { color: inherit; text-decoration: none; }
 .topnav-logo {
   display: flex;
   align-items: center;
-  gap: 2px;
   margin-right: 8px;
   text-decoration: none;
 }
@@ -64,6 +63,15 @@ a { color: inherit; text-decoration: none; }
   /* pull in the white padding baked into the PNG so the icon sits flush */
   margin: -14px -6px -14px -12px;
 }
+/* nav wordmark (matches auth-logo but scaled for the topnav) */
+.nav-logo { display: flex; flex-direction: column; justify-content: center; }
+.nav-logo-wordmark { display: flex; flex-direction: column; line-height: 1; }
+.nav-logo-top  { font-size: 8px; font-weight: 400; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 2px; }
+.nav-logo-bottom { font-size: 17px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+.nav-logo-chat { color: var(--brand-600); }
+.nav-logo-flow { color: var(--brand-700); }
+.nav-logo-rule { width: 20px; height: 2px; background: var(--brand-500); border-radius: 2px; margin-top: 4px; }
+
 .topnav-logo-text {
   font-weight: 700;
   font-size: 17px;
@@ -1122,7 +1130,6 @@ code {
 }
 @media (max-width: 600px) {
   .topnav { padding: 0 14px; gap: 10px; }
-  .topnav-logo-text { display: none; }
   .page-hd { flex-direction: column; align-items: flex-start; }
   .tbl { display: block; overflow-x: auto; }
 }
