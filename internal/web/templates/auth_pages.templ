@@ -16,108 +16,162 @@ templ LoginPage(flash string, next string) {
 			<script src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js" defer></script>
 		</head>
 		<body class="auth-page">
-			<div class="auth-card">
-				<div class="auth-logo">
-					<img src="/static/logo.png" alt="Offbeat ChatFlow" height="36"/>
-				</div>
-				<h1 class="auth-title">Sign in</h1>
-				if flash != "" {
-					<div id="login-err" class="callout callout--danger" role="alert" aria-live="assertive">
-						<span aria-hidden="true">⚠</span>
-						{ " " }{ flash }
+			<div class="auth-shell">
+				<div class="auth-left">
+					<div class="auth-brand">
+						<img src="/static/logo.png" alt="Offbeat ChatFlow" height="36"/>
 					</div>
-				}
-				<form
-					method="post"
-					action="/login"
-					class="auth-form"
-					x-data="{ showPwd: false, capslock: false, submitting: false }"
-					x-on:submit="submitting = true"
-				>
-					<input type="hidden" name="next" value={ next }/>
-					<label class="field" for="login-email">
-						<span>Email</span>
-						if flash != "" {
-							<input
-								id="login-email"
-								type="email"
-								name="email"
-								required
-								autofocus
-								autocomplete="email"
-								aria-describedby="login-err"
-							/>
-						} else {
-							<input
-								id="login-email"
-								type="email"
-								name="email"
-								required
-								autofocus
-								autocomplete="email"
-							/>
-						}
-					</label>
-					<label class="field" for="login-pwd">
-						<span>Password</span>
-						<div class="auth-pwd-wrapper">
-							if flash != "" {
-								<input
-									id="login-pwd"
-									type="password"
-									x-bind:type="showPwd ? 'text' : 'password'"
-									name="password"
-									required
-									autocomplete="current-password"
-									x-on:keyup="capslock = $event.getModifierState('CapsLock')"
-									x-on:keydown="capslock = $event.getModifierState('CapsLock')"
-									aria-describedby="login-err"
-								/>
-							} else {
-								<input
-									id="login-pwd"
-									type="password"
-									x-bind:type="showPwd ? 'text' : 'password'"
-									name="password"
-									required
-									autocomplete="current-password"
-									x-on:keyup="capslock = $event.getModifierState('CapsLock')"
-									x-on:keydown="capslock = $event.getModifierState('CapsLock')"
-								/>
-							}
-							<button
-								type="button"
-								class="auth-pwd-toggle"
-								x-on:click="showPwd = !showPwd"
-								x-bind:aria-pressed="showPwd.toString()"
-								x-bind:aria-label="showPwd ? 'Hide password' : 'Show password'"
-							>
-								<svg x-show="!showPwd" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" aria-hidden="true">
-									<path d="M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"></path>
-									<circle cx="10" cy="10" r="3"></circle>
-								</svg>
-								<svg x-show="showPwd" x-cloak viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" aria-hidden="true">
-									<path d="M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"></path>
-									<circle cx="10" cy="10" r="3"></circle>
-									<line x1="2" y1="2" x2="18" y2="18" stroke-linecap="round"></line>
-								</svg>
-							</button>
+					<div class="auth-form-wrap">
+						<div class="auth-form-head">
+							<h1>Welcome back</h1>
+							<p>Enter your email and password to access your account.</p>
 						</div>
-						<span class="auth-caps-hint" x-show="capslock" x-cloak aria-live="polite">⇪ Caps Lock is on</span>
-					</label>
-					<button
-						class="btn btn-primary"
-						type="submit"
-						x-bind:disabled="submitting"
-						x-bind:aria-busy="submitting.toString()"
-					>
-						<span x-show="!submitting">Sign in</span>
-						<span x-show="submitting" x-cloak aria-hidden="true">Signing in…</span>
-					</button>
-				</form>
-				<div class="auth-footer">
-					<span class="auth-forgot">Forgot your password?</span>
-					<span class="auth-help">Contact your administrator to reset it.</span>
+						if flash != "" {
+							<div id="login-err" class="callout callout--danger" role="alert" aria-live="assertive">
+								<span aria-hidden="true">⚠</span>
+								{ " " }{ flash }
+							</div>
+						}
+						<form
+							method="post"
+							action="/login"
+							class="auth-form"
+							x-data="{ showPwd: false, capslock: false, submitting: false }"
+							x-on:submit="submitting = true"
+						>
+							<input type="hidden" name="next" value={ next }/>
+							<label class="field" for="login-email">
+								<span>Email</span>
+								if flash != "" {
+									<input
+										id="login-email"
+										type="email"
+										name="email"
+										required
+										autofocus
+										autocomplete="email"
+										aria-describedby="login-err"
+									/>
+								} else {
+									<input
+										id="login-email"
+										type="email"
+										name="email"
+										required
+										autofocus
+										autocomplete="email"
+									/>
+								}
+							</label>
+							<label class="field" for="login-pwd">
+								<span>Password</span>
+								<div class="auth-pwd-wrapper">
+									if flash != "" {
+										<input
+											id="login-pwd"
+											type="password"
+											x-bind:type="showPwd ? 'text' : 'password'"
+											name="password"
+											required
+											autocomplete="current-password"
+											x-on:keyup="capslock = $event.getModifierState('CapsLock')"
+											x-on:keydown="capslock = $event.getModifierState('CapsLock')"
+											aria-describedby="login-err"
+										/>
+									} else {
+										<input
+											id="login-pwd"
+											type="password"
+											x-bind:type="showPwd ? 'text' : 'password'"
+											name="password"
+											required
+											autocomplete="current-password"
+											x-on:keyup="capslock = $event.getModifierState('CapsLock')"
+											x-on:keydown="capslock = $event.getModifierState('CapsLock')"
+										/>
+									}
+									<button
+										type="button"
+										class="auth-pwd-toggle"
+										x-on:click="showPwd = !showPwd"
+										x-bind:aria-pressed="showPwd.toString()"
+										x-bind:aria-label="showPwd ? 'Hide password' : 'Show password'"
+									>
+										<svg x-show="!showPwd" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" aria-hidden="true">
+											<path d="M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"></path>
+											<circle cx="10" cy="10" r="3"></circle>
+										</svg>
+										<svg x-show="showPwd" x-cloak viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" aria-hidden="true">
+											<path d="M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"></path>
+											<circle cx="10" cy="10" r="3"></circle>
+											<line x1="2" y1="2" x2="18" y2="18" stroke-linecap="round"></line>
+										</svg>
+									</button>
+								</div>
+								<span class="auth-caps-hint" x-show="capslock" x-cloak aria-live="polite">⇪ Caps Lock is on</span>
+							</label>
+							<button
+								class="btn btn-primary"
+								type="submit"
+								x-bind:disabled="submitting"
+								x-bind:aria-busy="submitting.toString()"
+							>
+								<span x-show="!submitting">Sign in</span>
+								<span x-show="submitting" x-cloak aria-hidden="true">Signing in…</span>
+							</button>
+						</form>
+						<div class="auth-footer">
+							<span class="auth-forgot">Forgot your password?</span>
+							<span class="auth-help">Contact your administrator to reset it.</span>
+						</div>
+					</div>
+				</div>
+				<div class="auth-right" aria-hidden="true">
+					<div class="auth-showcase-head">
+						<h2>Manage WhatsApp conversations with ease.</h2>
+						<p>Keep your team connected and respond to customers instantly. All conversations in one secure workspace.</p>
+					</div>
+					<div class="auth-mockup">
+						<div class="auth-chat-window">
+							<div class="auth-chat-header">
+								<div class="auth-chat-av">PS</div>
+								<div>
+									<div class="auth-chat-name">Priya Sharma</div>
+									<div class="auth-chat-status">Active now</div>
+								</div>
+							</div>
+							<div class="auth-messages">
+								<div class="auth-msg in">
+									<div class="auth-bubble">Hi! I'm interested in the new collection for Diwali 🪔</div>
+								</div>
+								<div class="auth-msg in">
+									<div class="auth-bubble">Are the items in stock?</div>
+								</div>
+								<div class="auth-timestamp">Today 2:34 PM</div>
+								<div class="auth-msg out">
+									<div class="auth-bubble">Hello! Thanks for reaching out. Yes, we have all items in stock! 🎉</div>
+								</div>
+								<div class="auth-msg out">
+									<div class="auth-bubble">I can help you place an order right away.</div>
+								</div>
+								<div class="auth-timestamp">Today 2:36 PM</div>
+								<div class="auth-msg in">
+									<div class="auth-bubble">Great! Can I get more details on shipping?</div>
+								</div>
+								<div class="auth-msg out">
+									<div class="auth-bubble">Of course! We offer free shipping on orders over ₹1,000.</div>
+								</div>
+							</div>
+							<div class="auth-composer">
+								<input class="auth-composer-input" type="text" placeholder="Type a message..." tabindex="-1"/>
+								<button class="auth-composer-btn" type="button" tabindex="-1">
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+										<path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path>
+									</svg>
+								</button>
+							</div>
+						</div>
+					</div>
 				</div>
 			</div>
 		</body>

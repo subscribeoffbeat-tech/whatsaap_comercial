@@ -29,7 +29,7 @@ func LoginPage(flash string, next string) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex,nofollow\"><title>Sign in — Offbeat ChatFlow</title><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"\"><link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\"><link rel=\"stylesheet\" href=\"/static/tokens.css\"><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js\" defer></script></head><body class=\"auth-page\"><div class=\"auth-card\"><div class=\"auth-logo\"><img src=\"/static/logo.png\" alt=\"Offbeat ChatFlow\" height=\"36\"></div><h1 class=\"auth-title\">Sign in</h1>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex,nofollow\"><title>Sign in — Offbeat ChatFlow</title><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"\"><link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\"><link rel=\"stylesheet\" href=\"/static/tokens.css\"><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js\" defer></script></head><body class=\"auth-page\"><div class=\"auth-shell\"><div class=\"auth-left\"><div class=\"auth-brand\"><img src=\"/static/logo.png\" alt=\"Offbeat ChatFlow\" height=\"36\"></div><div class=\"auth-form-wrap\"><div class=\"auth-form-head\"><h1>Welcome back</h1><p>Enter your email and password to access your account.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -41,7 +41,7 @@ func LoginPage(flash string, next string) templ.Component {
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 27, Col: 11}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 32, Col: 13}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 			if templ_7745c5c3_Err != nil {
@@ -50,7 +50,7 @@ func LoginPage(flash string, next string) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(flash)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 27, Col: 20}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 32, Col: 22}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -68,7 +68,7 @@ func LoginPage(flash string, next string) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(next)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 37, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/auth_pages.templ`, Line: 42, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 		if templ_7745c5c3_Err != nil {
@@ -104,7 +104,7 @@ func LoginPage(flash string, next string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<button type=\"button\" class=\"auth-pwd-toggle\" x-on:click=\"showPwd = !showPwd\" x-bind:aria-pressed=\"showPwd.toString()\" x-bind:aria-label=\"showPwd ? 'Hide password' : 'Show password'\"><svg x-show=\"!showPwd\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle></svg> <svg x-show=\"showPwd\" x-cloak viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle> <line x1=\"2\" y1=\"2\" x2=\"18\" y2=\"18\" stroke-linecap=\"round\"></line></svg></button></div><span class=\"auth-caps-hint\" x-show=\"capslock\" x-cloak aria-live=\"polite\">⇪ Caps Lock is on</span></label> <button class=\"btn btn-primary\" type=\"submit\" x-bind:disabled=\"submitting\" x-bind:aria-busy=\"submitting.toString()\"><span x-show=\"!submitting\">Sign in</span> <span x-show=\"submitting\" x-cloak aria-hidden=\"true\">Signing in…</span></button></form><div class=\"auth-footer\"><span class=\"auth-forgot\">Forgot your password?</span> <span class=\"auth-help\">Contact your administrator to reset it.</span></div></div></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<button type=\"button\" class=\"auth-pwd-toggle\" x-on:click=\"showPwd = !showPwd\" x-bind:aria-pressed=\"showPwd.toString()\" x-bind:aria-label=\"showPwd ? 'Hide password' : 'Show password'\"><svg x-show=\"!showPwd\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle></svg> <svg x-show=\"showPwd\" x-cloak viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path d=\"M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z\"></path> <circle cx=\"10\" cy=\"10\" r=\"3\"></circle> <line x1=\"2\" y1=\"2\" x2=\"18\" y2=\"18\" stroke-linecap=\"round\"></line></svg></button></div><span class=\"auth-caps-hint\" x-show=\"capslock\" x-cloak aria-live=\"polite\">⇪ Caps Lock is on</span></label> <button class=\"btn btn-primary\" type=\"submit\" x-bind:disabled=\"submitting\" x-bind:aria-busy=\"submitting.toString()\"><span x-show=\"!submitting\">Sign in</span> <span x-show=\"submitting\" x-cloak aria-hidden=\"true\">Signing in…</span></button></form><div class=\"auth-footer\"><span class=\"auth-forgot\">Forgot your password?</span> <span class=\"auth-help\">Contact your administrator to reset it.</span></div></div></div><div class=\"auth-right\" aria-hidden=\"true\"><div class=\"auth-showcase-head\"><h2>Manage WhatsApp conversations with ease.</h2><p>Keep your team connected and respond to customers instantly. All conversations in one secure workspace.</p></div><div class=\"auth-mockup\"><div class=\"auth-chat-window\"><div class=\"auth-chat-header\"><div class=\"auth-chat-av\">PS</div><div><div class=\"auth-chat-name\">Priya Sharma</div><div class=\"auth-chat-status\">Active now</div></div></div><div class=\"auth-messages\"><div class=\"auth-msg in\"><div class=\"auth-bubble\">Hi! I'm interested in the new collection for Diwali 🪔</div></div><div class=\"auth-msg in\"><div class=\"auth-bubble\">Are the items in stock?</div></div><div class=\"auth-timestamp\">Today 2:34 PM</div><div class=\"auth-msg out\"><div class=\"auth-bubble\">Hello! Thanks for reaching out. Yes, we have all items in stock! 🎉</div></div><div class=\"auth-msg out\"><div class=\"auth-bubble\">I can help you place an order right away.</div></div><div class=\"auth-timestamp\">Today 2:36 PM</div><div class=\"auth-msg in\"><div class=\"auth-bubble\">Great! Can I get more details on shipping?</div></div><div class=\"auth-msg out\"><div class=\"auth-bubble\">Of course! We offer free shipping on orders over ₹1,000.</div></div></div><div class=\"auth-composer\"><input class=\"auth-composer-input\" type=\"text\" placeholder=\"Type a message...\" tabindex=\"-1\"> <button class=\"auth-composer-btn\" type=\"button\" tabindex=\"-1\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z\"></path></svg></button></div></div></div></div></div></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
