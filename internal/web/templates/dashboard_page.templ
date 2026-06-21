@@ -1,0 +1,193 @@
+package templates
+
+import (
+	"fmt"
+	"strconv"
+
+	"whatsapptool/internal/db"
+	mw "whatsapptool/internal/web/middleware"
+)
+
+// DashboardPage pre-computes display values and delegates to the inner templ component.
+// Signature matches the former ComponentFunc wrapper — dashboard.go is unchanged.
+func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.Campaign) templ.Component {
+	dotClass, qualityLabel, qualityUnknown := dashQualityAttrs(stats.QualityRating)
+	capPct, fillClass := dashCapPct(stats.CapUsedToday, stats.DailyCap)
+	isAgent := agent != nil && agent.Role == "agent"
+	return dashboardPageInner(agent, stats, recent, dotClass, qualityLabel, qualityUnknown, capPct, fillClass, isAgent)
+}
+
+func dashQualityAttrs(qr string) (dotClass, label string, unknown bool) {
+	switch qr {
+	case "yellow":
+		return "quality-yellow", "Medium", false
+	case "red":
+		return "quality-red", "Low", false
+	case "unknown":
+		return "", "Unknown", true
+	default:
+		return "quality-green", "High", false
+	}
+}
+
+func dashCapPct(used, cap int64) (pct int, fillClass string) {
+	if cap > 0 {
+		pct = int(used * 100 / cap)
+		if pct > 100 {
+			pct = 100
+		}
+	}
+	fillClass = "tier-bar-fill"
+	if pct >= 90 {
+		fillClass = "tier-bar-fill tier-bar-fill--warn"
+	}
+	return pct, fillClass
+}
+
+templ dashboardPageInner(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.Campaign, qualityDotClass string, qualityLabel string, qualityUnknown bool, capPct int, fillClass string, isAgent bool) {
+	@templ.Raw(ShellOpen(agent, "/", "Dashboard", ""))
+	<div class="page-wrap">
+		<div class="page-hd">
+			<div>
+				<h1 class="screen-title">Dashboard</h1>
+				<p class="screen-subtitle">Overview of your WhatsApp channel</p>
+			</div>
+			<div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+				<a class="btn btn-secondary btn-sm" href="/contacts/import">Import contacts</a>
+				<a class="btn btn-primary btn-sm" href="/campaigns/new">+ New campaign</a>
+			</div>
+		</div>
+		if stats.QualityRating == "red" {
+			@templ.Raw(CalloutHTML("danger", "Your WhatsApp phone quality is low. Sending may be restricted by Meta."))
+		} else if stats.QualityRating == "yellow" {
+			@templ.Raw(CalloutHTML("warning", "Your WhatsApp phone quality has dropped. Review your messaging to avoid sending restrictions."))
+		}
+		<div class="stat-grid">
+			<div class="stat-card">
+				<div class="stat-label">Sent today</div>
+				<div class="stat-value">{ strconv.FormatInt(stats.SentToday, 10) }</div>
+				<div class="stat-sub">messages dispatched</div>
+			</div>
+			<div class="stat-card">
+				<div class="stat-label">Delivered</div>
+				<div class="stat-value">{ strconv.FormatInt(stats.DeliveredToday, 10) }</div>
+				<div class="stat-sub">confirmed by Meta</div>
+			</div>
+			<a href="/inbox" class="stat-card stat-card--link">
+				<div class="stat-label">Chats waiting</div>
+				<div class="stat-value">{ strconv.FormatInt(stats.ChatsWaiting, 10) }</div>
+				<div class="stat-sub">open conversations</div>
+			</a>
+			if !isAgent {
+				<div class="stat-card">
+					<div class="stat-label">Cost this month</div>
+					<div class="stat-value">&#8377;{ fmt.Sprintf("%.2f", stats.CostThisMonth) }</div>
+					<div class="stat-sub">incl. 18% GST</div>
+				</div>
+			}
+			<div class="stat-card">
+				<div class="stat-label">Quality</div>
+				<div class="stat-value" style="font-size:1.5rem;display:flex;align-items:center;gap:0.4rem">
+					if !qualityUnknown {
+						<span class={ "quality-dot " + qualityDotClass }></span>
+					}
+					{ qualityLabel }
+				</div>
+				<div class="stat-sub">Meta phone quality</div>
+			</div>
+		</div>
+		<div class="card-static" style="margin-bottom:var(--gutter)">
+			<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+				<div style="font-size:15px;font-weight:600;color:var(--text-strong)">Daily send capacity</div>
+				<div style="font-size:13px;color:var(--text-secondary)">{ strconv.FormatInt(stats.CapUsedToday, 10) } / { strconv.FormatInt(stats.DailyCap, 10) } messages</div>
+			</div>
+			<div
+				class="tier-bar-wrap"
+				role="progressbar"
+				aria-valuenow={ strconv.FormatInt(stats.CapUsedToday, 10) }
+				aria-valuemin="0"
+				aria-valuemax={ strconv.FormatInt(stats.DailyCap, 10) }
+				aria-label={ fmt.Sprintf("Daily send capacity: %d of %d messages used", stats.CapUsedToday, stats.DailyCap) }
+			>
+				<div class={ fillClass } style={ fmt.Sprintf("width:%d%%", capPct) }></div>
+			</div>
+			<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-top:6px">
+				<span>{ strconv.FormatInt(stats.CapUsedToday, 10) }</span><span>{ fmt.Sprintf("%d%%", capPct) } used</span><span>{ strconv.FormatInt(stats.DailyCap, 10) }</span>
+			</div>
+		</div>
+		<div class="g-grid g-split-8-4" style="align-items:start">
+			<div class="card-static">
+				<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+					<h2 style="margin:0;font-size:15px;font-weight:600;color:var(--text-strong)">Recent campaigns</h2>
+					<a class="btn btn-secondary btn-sm" href="/campaigns">View all</a>
+				</div>
+				if len(recent) == 0 {
+					@templ.Raw(EmptyStateHTML(EmptyIconCampaigns, "No campaigns yet", "Launch your first broadcast to get started.", []EmptyAction{{Label: "New campaign", Primary: true, HREF: "/campaigns/new"}}))
+				} else {
+					<table class="an-table tbl">
+						<thead>
+							<tr>
+								<th scope="col">CAMPAIGN</th>
+								<th scope="col">STATUS</th>
+								<th scope="col">SENT</th>
+								<th scope="col">DELIVERED</th>
+								<th scope="col">FAILED</th>
+								if !isAgent {
+									<th scope="col">COST</th>
+								}
+							</tr>
+						</thead>
+						<tbody>
+							for _, c := range recent {
+								<tr>
+									<td><a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/report", c.ID)) } style="font-weight:500">{ c.Name }</a></td>
+									<td>@templ.Raw(BadgeHTML(c.Status, c.Status))</td>
+									<td>{ strconv.Itoa(c.SentCount) }</td>
+									<td>{ strconv.Itoa(c.DeliveredCount) }</td>
+									<td>{ strconv.Itoa(c.FailedCount) }</td>
+									if !isAgent {
+										<td>&#8377;{ fmt.Sprintf("%.2f", c.CostTotalINR) }</td>
+									}
+								</tr>
+							}
+						</tbody>
+					</table>
+				}
+			</div>
+			<div style="display:flex;flex-direction:column;gap:var(--gutter)">
+				<div class="card-static">
+					<h2 style="margin:0 0 14px;font-size:15px;font-weight:600;color:var(--text-strong)">Quick actions</h2>
+					<div style="display:flex;flex-direction:column;gap:8px">
+						<a class="btn btn-primary" href="/campaigns/new" style="text-align:center">+ New campaign</a>
+						<a class="btn btn-secondary btn-sm" href="/inbox" style="text-align:center">Open inbox</a>
+						<a class="btn btn-secondary btn-sm" href="/contacts/import" style="text-align:center">Import contacts</a>
+						<a class="btn btn-secondary btn-sm" href="/templates" style="text-align:center">New template</a>
+					</div>
+				</div>
+				<div class="card-static">
+					<h2 style="margin:0 0 14px;font-size:15px;font-weight:600;color:var(--text-strong)">Account health</h2>
+					<dl style="margin:0;display:flex;flex-direction:column;gap:8px">
+						<div style="display:flex;justify-content:space-between;font-size:13px">
+							<dt style="color:var(--text-secondary)">Quality</dt>
+							<dd style="margin:0;display:flex;align-items:center;gap:4px;font-weight:500">
+								if !qualityUnknown {
+									<span class={ "quality-dot " + qualityDotClass }></span>
+								}
+								{ qualityLabel }
+							</dd>
+						</div>
+						<div style="display:flex;justify-content:space-between;font-size:13px">
+							<dt style="color:var(--text-secondary)">Daily cap</dt>
+							<dd style="margin:0;font-weight:500">{ strconv.FormatInt(stats.DailyCap, 10) } messages</dd>
+						</div>
+						<div style="display:flex;justify-content:space-between;font-size:13px">
+							<dt style="color:var(--text-secondary)">Sent today</dt>
+							<dd style="margin:0;font-weight:500">{ strconv.FormatInt(stats.SentToday, 10) }</dd>
+						</div>
+					</dl>
+				</div>
+			</div>
+		</div>
+	</div>
+	@templ.Raw(ShellClose())
+}
