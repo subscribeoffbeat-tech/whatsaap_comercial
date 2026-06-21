@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -189,26 +191,29 @@ func GetQualityInfo(ctx context.Context, pool *pgxpool.Pool) (QualityInfo, error
 	sent, _ := DailyMessagesSent(ctx, pool)
 	q.SentToday = sent
 
-	// Read quality_rating if stored; otherwise infer from usage ratio.
-	if v, err := GetConfigFloat(ctx, pool, "quality_rating"); err == nil {
-		switch {
-		case v >= 2:
-			q.QualityRating = "green"
-		case v >= 1:
-			q.QualityRating = "yellow"
-		default:
-			q.QualityRating = "red"
+	// Read quality_rating as a string from app_config.
+	// Meta sets this via the phone_number_quality_update webhook ("green"/"yellow"/"red").
+	// Never infer from usage — that is not Meta's signal.
+	var rawQ json.RawMessage
+	if err2 := pool.QueryRow(ctx,
+		`SELECT value FROM app_config WHERE key = 'quality_rating'`,
+	).Scan(&rawQ); err2 == nil {
+		var qs string
+		if json.Unmarshal(rawQ, &qs) == nil {
+			switch qs {
+			case "green", "yellow", "red":
+				q.QualityRating = qs
+			default:
+				log.Printf("dashboard: quality_rating unexpected value %q — showing Unknown", qs)
+				q.QualityRating = "unknown"
+			}
+		} else {
+			log.Printf("dashboard: quality_rating value is not a string — showing Unknown")
+			q.QualityRating = "unknown"
 		}
 	} else {
-		ratio := float64(sent) / float64(max64(q.DailyCap, 1))
-		switch {
-		case ratio < 0.7:
-			q.QualityRating = "green"
-		case ratio < 0.9:
-			q.QualityRating = "yellow"
-		default:
-			q.QualityRating = "red"
-		}
+		log.Printf("dashboard: quality_rating key missing from app_config — showing Unknown; update via Meta phone_number_quality_update webhook")
+		q.QualityRating = "unknown"
 	}
 	return q, nil
 }
@@ -269,6 +274,7 @@ type DashboardStats struct {
 	CostThisMonth  float64
 	QualityRating  string
 	DailyCap       int64   // 90%-of-tier cap — same source as WizardAudience and LimitGuardCheck
+	CapUsedToday   int64   // ALL outbound today regardless of status — matches enforcement counter
 }
 
 // GetDashboardStats returns the quick-stat numbers for the dashboard.
@@ -312,6 +318,7 @@ func GetDashboardStats(ctx context.Context, pool *pgxpool.Pool) (DashboardStats,
 	qi, _ := GetQualityInfo(ctx, pool)
 	s.QualityRating = qi.QualityRating
 	s.DailyCap = qi.DailyCap
+	s.CapUsedToday = qi.SentToday // reuse count already fetched by GetQualityInfo
 
 	return s, nil
 }

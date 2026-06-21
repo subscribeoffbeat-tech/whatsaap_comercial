@@ -138,6 +138,38 @@ func ListCampaigns(ctx context.Context, pool *pgxpool.Pool) ([]Campaign, error) 
 	return cs, rows.Err()
 }
 
+// ListRecentCampaigns returns the n most recent campaigns. Use this for
+// dashboard snippets where fetching all 200 rows would waste DB bandwidth.
+// ListCampaigns (LIMIT 200) is unchanged and used by the campaigns list page.
+func ListRecentCampaigns(ctx context.Context, pool *pgxpool.Pool, n int) ([]Campaign, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT c.id::text, c.name, c.template_id::text, t.name, t.language, t.category,
+		       c.template_variables, c.segment_tags, c.exclude_tags,
+		       c.status,
+		       c.scheduled_at, c.started_at, c.completed_at,
+		       c.total_recipients, c.sent_count, c.delivered_count,
+		       c.read_count, c.failed_count, c.skipped_count,
+		       c.cost_total_inr, c.created_at
+		FROM campaigns c
+		JOIN templates t ON t.id = c.template_id
+		ORDER BY c.created_at DESC
+		LIMIT $1
+	`, n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var cs []Campaign
+	for rows.Next() {
+		c, err := scanCampaign(rows)
+		if err != nil {
+			return nil, err
+		}
+		cs = append(cs, *c)
+	}
+	return cs, rows.Err()
+}
+
 // UpdateCampaignStatus updates status and timestamps accordingly.
 func UpdateCampaignStatus(ctx context.Context, pool *pgxpool.Pool, id, status string) error {
 	_, err := pool.Exec(ctx, `

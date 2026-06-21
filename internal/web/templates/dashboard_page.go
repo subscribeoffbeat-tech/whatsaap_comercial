@@ -15,17 +15,21 @@ import (
 func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.Campaign) templ.Component {
 	qualityDotClass := "quality-green"
 	qualityLabel := "High"
+	qualityUnknown := false
 	if stats.QualityRating == "yellow" {
 		qualityDotClass = "quality-yellow"
 		qualityLabel = "Medium"
 	} else if stats.QualityRating == "red" {
 		qualityDotClass = "quality-red"
 		qualityLabel = "Low"
+	} else if stats.QualityRating == "unknown" {
+		qualityUnknown = true
+		qualityLabel = "Unknown"
 	}
 
 	var capPct int
 	if stats.DailyCap > 0 {
-		capPct = int(stats.SentToday * 100 / stats.DailyCap)
+		capPct = int(stats.CapUsedToday * 100 / stats.DailyCap)
 		if capPct > 100 {
 			capPct = 100
 		}
@@ -102,11 +106,19 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 				return err
 			}
 		}
-		if _, err := fmt.Fprintf(w,
-			`<div class="stat-card"><div class="stat-label">Quality</div><div class="stat-value" style="font-size:1.5rem;display:flex;align-items:center;gap:0.4rem"><span class="quality-dot %s"></span>%s</div><div class="stat-sub">Meta phone quality</div></div>`,
-			qualityDotClass, html.EscapeString(qualityLabel),
-		); err != nil {
-			return err
+		{
+			var qualityInner string
+			if qualityUnknown {
+				qualityInner = html.EscapeString(qualityLabel)
+			} else {
+				qualityInner = `<span class="quality-dot ` + qualityDotClass + `"></span>` + html.EscapeString(qualityLabel)
+			}
+			if _, err := fmt.Fprintf(w,
+				`<div class="stat-card"><div class="stat-label">Quality</div><div class="stat-value" style="font-size:1.5rem;display:flex;align-items:center;gap:0.4rem">%s</div><div class="stat-sub">Meta phone quality</div></div>`,
+				qualityInner,
+			); err != nil {
+				return err
+			}
 		}
 		if _, err := io.WriteString(w, `</div>`); err != nil {
 			return err
@@ -124,10 +136,10 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
   <span>%d</span><span>%d%% used</span><span>%d</span>
 </div>
 </div>`,
-			stats.SentToday, stats.DailyCap,
-			stats.SentToday, stats.DailyCap, stats.SentToday, stats.DailyCap,
+			stats.CapUsedToday, stats.DailyCap,
+			stats.CapUsedToday, stats.DailyCap, stats.CapUsedToday, stats.DailyCap,
 			fillClass, capPct,
-			stats.SentToday, capPct, stats.DailyCap,
+			stats.CapUsedToday, capPct, stats.DailyCap,
 		); err != nil {
 			return err
 		}
@@ -216,14 +228,21 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 		}
 
 		// Account health card
-		if _, err := fmt.Fprintf(w, `
+		{
+			var healthQuality string
+			if qualityUnknown {
+				healthQuality = html.EscapeString(qualityLabel)
+			} else {
+				healthQuality = `<span class="quality-dot ` + qualityDotClass + `"></span>` + html.EscapeString(qualityLabel)
+			}
+			if _, err := fmt.Fprintf(w, `
 <div class="card-static">
 <h2 style="margin:0 0 14px;font-size:15px;font-weight:600;color:var(--text-strong)">Account health</h2>
 <dl style="margin:0;display:flex;flex-direction:column;gap:8px">
 <div style="display:flex;justify-content:space-between;font-size:13px">
   <dt style="color:var(--text-secondary)">Quality</dt>
   <dd style="margin:0;display:flex;align-items:center;gap:4px;font-weight:500">
-    <span class="quality-dot %s"></span>%s
+    %s
   </dd>
 </div>
 <div style="display:flex;justify-content:space-between;font-size:13px">
@@ -236,10 +255,11 @@ func DashboardPage(agent *mw.AgentClaims, stats db.DashboardStats, recent []db.C
 </div>
 </dl>
 </div>`,
-			qualityDotClass, html.EscapeString(qualityLabel),
-			stats.DailyCap, stats.SentToday,
-		); err != nil {
-			return err
+				healthQuality,
+				stats.DailyCap, stats.SentToday,
+			); err != nil {
+				return err
+			}
 		}
 
 		// close right column + two-column grid + page-wrap

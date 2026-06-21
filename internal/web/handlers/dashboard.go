@@ -25,12 +25,9 @@ func (h *DashboardHandler) Page(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("dashboard stats: %v", err)
 	}
-	recent, err := db.ListCampaigns(r.Context(), h.pool)
+	recent, err := db.ListRecentCampaigns(r.Context(), h.pool, 5)
 	if err != nil {
 		log.Printf("dashboard campaigns: %v", err)
-	}
-	if len(recent) > 5 {
-		recent = recent[:5]
 	}
 	agent := mw.AgentFromCtx(r.Context())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
