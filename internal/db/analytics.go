@@ -184,22 +184,45 @@ type QualityInfo struct {
 // GetQualityInfo loads tier + usage + quality rating.
 func GetQualityInfo(ctx context.Context, pool *pgxpool.Pool) (QualityInfo, error) {
 	var q QualityInfo
-	if v, err := GetConfigInt(ctx, pool, "meta_tier"); err == nil {
-		q.Tier = v
-	}
-	q.DailyCap = DailyCap(ctx, pool)
-	sent, _ := DailyMessagesSent(ctx, pool)
-	q.SentToday = sent
 
-	// Read quality_rating as a string from app_config.
-	// Meta sets this via the phone_number_quality_update webhook ("green"/"yellow"/"red").
-	// Never infer from usage — that is not Meta's signal.
-	var rawQ json.RawMessage
-	if err2 := pool.QueryRow(ctx,
-		`SELECT value FROM app_config WHERE key = 'quality_rating'`,
-	).Scan(&rawQ); err2 == nil {
+	// Single round-trip: fetch all three config keys at once.
+	cfg := make(map[string]json.RawMessage)
+	cfgRows, cfgErr := pool.Query(ctx,
+		`SELECT key, value FROM app_config
+		  WHERE key IN ('meta_tier', 'daily_message_cap', 'quality_rating')`,
+	)
+	if cfgErr == nil {
+		for cfgRows.Next() {
+			var k string
+			var v json.RawMessage
+			if cfgRows.Scan(&k, &v) == nil {
+				cfg[k] = v
+			}
+		}
+		cfgRows.Close()
+	}
+
+	// meta_tier
+	if raw, ok := cfg["meta_tier"]; ok {
+		var n int64
+		if json.Unmarshal(raw, &n) == nil {
+			q.Tier = n
+		}
+	}
+
+	// daily_message_cap — same fallback as DailyCap() (900 = 90% of tier-1000)
+	q.DailyCap = 900
+	if raw, ok := cfg["daily_message_cap"]; ok {
+		var n int64
+		if json.Unmarshal(raw, &n) == nil {
+			q.DailyCap = n
+		}
+	}
+
+	// quality_rating — must be a Meta-supplied string; never infer from usage
+	if raw, ok := cfg["quality_rating"]; ok {
 		var qs string
-		if json.Unmarshal(rawQ, &qs) == nil {
+		if json.Unmarshal(raw, &qs) == nil {
 			switch qs {
 			case "green", "yellow", "red":
 				q.QualityRating = qs
@@ -215,6 +238,10 @@ func GetQualityInfo(ctx context.Context, pool *pgxpool.Pool) (QualityInfo, error
 		log.Printf("dashboard: quality_rating key missing from app_config — showing Unknown; update via Meta phone_number_quality_update webhook")
 		q.QualityRating = "unknown"
 	}
+
+	sent, _ := DailyMessagesSent(ctx, pool)
+	q.SentToday = sent
+
 	return q, nil
 }
 
