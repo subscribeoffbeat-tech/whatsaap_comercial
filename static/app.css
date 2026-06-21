@@ -802,6 +802,14 @@ dialog {
   overflow-y: auto;
 }
 .auth-brand { display: flex; align-items: center; margin-bottom: var(--sp-4); }
+/* logo wordmark */
+.auth-logo { margin-bottom: var(--sp-8); }
+.auth-logo-wordmark { display: flex; flex-direction: column; line-height: 1; }
+.auth-logo-top  { font-size: 11px; font-weight: 400; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 3px; }
+.auth-logo-bottom { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+.auth-logo-chat { color: var(--brand-600); }
+.auth-logo-flow { color: var(--brand-700); }
+.auth-logo-rule { width: 32px; height: 3px; background: var(--brand-500); border-radius: 2px; margin-top: var(--sp-2); }
 .auth-form-wrap {
   flex: 1;
   display: flex;
