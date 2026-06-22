@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -15,6 +19,38 @@ import (
 	"whatsapptool/internal/db"
 	mw "whatsapptool/internal/web/middleware"
 )
+
+var varPlaceholderRe = regexp.MustCompile(`\{\{(\d+)\}\}`)
+
+// TemplateBodyText returns the body text from the template's components array.
+func TemplateBodyText(tmpl db.Template) string {
+	for _, comp := range tmpl.Components {
+		t, _ := comp["type"].(string)
+		if strings.EqualFold(t, "BODY") {
+			text, _ := comp["text"].(string)
+			return text
+		}
+	}
+	return ""
+}
+
+// ExtractVarNames returns sorted unique variable indices found in body text, e.g. ["1","2"].
+func ExtractVarNames(body string) []string {
+	seen := map[string]bool{}
+	for _, m := range varPlaceholderRe.FindAllStringSubmatch(body, -1) {
+		seen[m[1]] = true
+	}
+	out := make([]string, 0, len(seen))
+	for k := range seen {
+		out = append(out, k)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, _ := strconv.Atoi(out[i])
+		b, _ := strconv.Atoi(out[j])
+		return a < b
+	})
+	return out
+}
 
 // WizardState carries campaign-creation state across wizard steps via a hidden
 // form field. Serialised as base64-encoded JSON by encodeState/DecodeState.
@@ -336,6 +372,86 @@ func WizardStep2Page(agent *mw.AgentClaims, state WizardState, tmpls []db.Templa
 			return err
 		}
 		_, err := io.WriteString(w, ShellClose())
+		return err
+	})
+}
+
+func WizardStep2VarsPage(agent *mw.AgentClaims, state WizardState, tmpl db.Template, varNames []string) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
+			return err
+		}
+		if err := WizardStep2Vars(state, tmpl, varNames).Render(ctx, w); err != nil {
+			return err
+		}
+		_, err := io.WriteString(w, ShellClose())
+		return err
+	})
+}
+
+func WizardStep2Vars(state WizardState, tmpl db.Template, varNames []string) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		bodyText := TemplateBodyText(tmpl)
+		// Highlight {{N}} placeholders in the preview.
+		highlighted := varPlaceholderRe.ReplaceAllStringFunc(html.EscapeString(bodyText), func(m string) string {
+			return `<mark class="var-highlight">` + m + `</mark>`
+		})
+
+		_, err := fmt.Fprintf(w, `
+<div class="page-wrap">
+<div class="wizard">
+<div class="wizard-steps">
+  <span class="step done">1 Audience</span>
+  <span class="step active" aria-current="step">2 Message</span>
+  <span class="step">3 Schedule</span>
+  <span class="step">4 Review</span>
+</div>
+<form method="post" action="/campaigns/wizard/message" class="wizard-form">
+<input type="hidden" name="wizard_state" value="%s">
+<input type="hidden" name="template_id" value="%s">
+<input type="hidden" name="vars_confirmed" value="1">
+<h2>Step 2 — Map variables</h2>
+<p style="font-size:13px;color:var(--text-secondary);margin:0 0 8px">Template: <strong style="color:var(--text)">%s</strong></p>
+<div class="var-preview">%s</div>
+<div class="var-map-table">`,
+			html.EscapeString(encodeState(state)),
+			html.EscapeString(tmpl.ID),
+			html.EscapeString(tmpl.Name),
+			highlighted)
+		if err != nil {
+			return err
+		}
+
+		for _, n := range varNames {
+			if _, err := fmt.Fprintf(w, `
+<div class="var-row" x-data="{sel:'name',custom:''}">
+  <span class="var-label">{{%s}}</span>
+  <select x-model="sel" class="form-input var-select">
+    <option value="name">Contact name</option>
+    <option value="wa_phone">WhatsApp phone</option>
+    <option value="email">Email</option>
+    <option value="_custom">Custom field…</option>
+  </select>
+  <input x-show="sel==='_custom'" x-cloak type="text" x-model="custom" placeholder="field key, e.g. order_id" class="form-input var-custom">
+  <input type="hidden" name="var_%s" :value="sel==='_custom' ? (custom ? 'custom_fields.'+custom : '') : sel">
+  <input type="text" name="fallback_%s" class="form-input var-fallback" placeholder="Fallback (used when field is empty)">
+</div>`, n, n, n); err != nil {
+				return err
+			}
+		}
+
+		_, err = fmt.Fprintf(w, `
+</div>
+<div class="wizard-btns">
+<button class="btn btn-primary" type="submit">Next: schedule &#8594;</button>
+<a class="btn btn-secondary" href="/campaigns">Cancel</a>
+</div>
+</form>
+</div>
+</div>`)
 		return err
 	})
 }

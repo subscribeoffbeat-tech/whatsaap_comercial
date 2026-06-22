@@ -1067,6 +1067,12 @@ dialog {
 .wizard-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
 .wiz-back-link { display:block; margin-bottom:12px; font-size:var(--font-size-sm); color:var(--text-muted); text-decoration:none; }
 .wiz-back-link:hover { color:var(--text); }
+.var-preview { background:var(--bg-subtle,#f8f9fa); border:1px solid var(--border); border-radius:var(--radius); padding:12px 16px; font-size:14px; line-height:1.7; margin-bottom:1.25rem; white-space:pre-wrap; word-break:break-word; }
+mark.var-highlight { background:var(--accent-lighter); color:var(--accent); border-radius:3px; padding:0 3px; font-weight:600; font-style:normal; }
+.var-map-table { display:flex; flex-direction:column; gap:10px; margin-bottom:1.5rem; }
+.var-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.var-label { font-weight:700; font-family:monospace; font-size:14px; color:var(--accent); min-width:40px; }
+.var-select { max-width:200px; } .var-custom { max-width:160px; } .var-fallback { max-width:200px; }
 
 /* ── Message bubble aliases (inbox) ─────────────────────────────────────────── */
 .bubble     { max-width: 65%; padding: 10px 16px; border-radius: 16px; font-size: 14px; line-height: 1.5; }

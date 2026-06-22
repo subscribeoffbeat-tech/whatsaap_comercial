@@ -126,6 +126,24 @@ func (h *CampaignHandler) WizardMessage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Load the selected template to inspect its body variables.
+	tmpl, err := db.GetTemplate(r.Context(), h.pool, templateID)
+	if err != nil {
+		http.Error(w, "load template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Show variable mapping step when the template has {{N}} placeholders and
+	// the user hasn't confirmed the mapping yet.
+	if r.FormValue("vars_confirmed") == "" {
+		varNames := templates.ExtractVarNames(templates.TemplateBodyText(*tmpl))
+		if len(varNames) > 0 {
+			state.TemplateID = templateID
+			templates.WizardStep2VarsPage(agent, state, *tmpl, varNames).Render(r.Context(), w)
+			return
+		}
+	}
+
 	varMap := map[string]string{}
 	fallbacks := map[string]string{}
 	for k, vs := range r.Form {
