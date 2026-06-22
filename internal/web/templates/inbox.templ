@@ -14,7 +14,8 @@ templ InboxPage(agent *mw.AgentClaims) {
 	<div class="ibx-wrap" x-data="inboxApp()" x-init="init()">
 		<aside class="ibx-list">
 			<div class="ibx-panel-hd">
-				<h2 class="ibx-panel-title">Inbox</h2>
+				<div class="screen-title">Inbox</div>
+				<div class="screen-subtitle">Your shared team inbox</div>
 			</div>
 			<div class="ibx-search">
 				<input type="search" placeholder="Search…" class="search-input"/>
@@ -112,6 +113,15 @@ templ InboxPage(agent *mw.AgentClaims) {
 	  document.querySelectorAll('.ibx-filters .chip').forEach(function(b) { b.classList.remove('sel'); });
 	  btn.classList.add('sel');
 	}
+	// Auto-open first conversation on initial inbox page load only
+	var _inboxFirstLoad = true;
+	document.body.addEventListener('htmx:afterSwap', function(e) {
+	  if (e.detail.target.id === 'conv-list' && _inboxFirstLoad) {
+	    _inboxFirstLoad = false;
+	    var first = e.detail.target.querySelector('.conv[data-conv-id]');
+	    if (first) first.click();
+	  }
+	});
 	function msgStatusSVG(s) {
 	  const SVG1 = '<svg width="18" height="16" viewBox="0 0 18 16"><path class="tick" d="M3 8.5l3.5 3.5L14 4"/></svg>';
 	  const SVG2 = '<svg width="22" height="16" viewBox="0 0 22 16"><path class="tick" d="M2 8.5l3.5 3.5L13 4"/><path class="tick" d="M8 8.5l3.5 3.5L19 4"/></svg>';
