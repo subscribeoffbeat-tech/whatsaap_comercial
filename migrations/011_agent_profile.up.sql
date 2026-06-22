@@ -1,0 +1,4 @@
+ALTER TABLE agents
+    ADD COLUMN IF NOT EXISTS phone       TEXT,
+    ADD COLUMN IF NOT EXISTS timezone    TEXT NOT NULL DEFAULT 'Asia/Kolkata',
+    ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}';

@@ -1,0 +1,4 @@
+ALTER TABLE agents
+    DROP COLUMN IF EXISTS phone,
+    DROP COLUMN IF EXISTS timezone,
+    DROP COLUMN IF EXISTS preferences;
