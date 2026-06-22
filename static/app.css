@@ -1328,6 +1328,183 @@ code {
   .tbl { display: block; overflow-x: auto; }
 }
 
+/* ── Team page ──────────────────────────────────────────────────────────── */
+.team-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: var(--gutter);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .team-layout { grid-template-columns: 1fr; }
+}
+
+.team-av {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  color: #fff;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+
+.team-member-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.team-member-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.team-member-email {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+.team-self {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.team-joined {
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.team-action-cell { text-align: right; }
+
+.team-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.team-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.team-dot--active   { background: var(--success); }
+.team-dot--pending  { background: var(--warning); }
+.team-dot--inactive { background: var(--text-muted); }
+.team-status--active   { color: var(--success); }
+.team-status--pending  { color: var(--warning); }
+.team-status--inactive { color: var(--text-muted); }
+
+.team-role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+.team-role-badge--admin {
+  background: var(--success-light);
+  color: var(--success);
+  border: 1px solid transparent;
+}
+.team-role-badge--manager {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+.team-role-badge--agent {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.team-edit-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+.team-edit-btn:hover { color: var(--primary); }
+
+/* Recent activity sidebar */
+.team-activity {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.team-act-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 16px;
+}
+.team-act-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.team-act-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.team-act-av {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+.team-act-body {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.team-act-name { font-weight: 600; color: var(--text-primary); }
+.team-act-desc { color: var(--text-secondary); }
+.team-act-time {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+.team-act-empty { color: var(--text-muted); font-size: 13px; }
+
+/* Edit member modal */
+.team-edit-hd {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.team-edit-section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.team-edit-danger {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
 /* ── prefers-reduced-motion — site-wide override ───────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
