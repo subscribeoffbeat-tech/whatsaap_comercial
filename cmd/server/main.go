@@ -89,7 +89,7 @@ func main() {
 	}
 	authH       := handlers.NewAuthHandler(pool, jwtSecret, cfg.BaseURL, mailer)
 	teamH       := handlers.NewTeamHandler(pool, jwtSecret, cfg.BaseURL)
-	settingsH   := handlers.NewSettingsHandler(pool)
+	settingsH   := handlers.NewSettingsHandler(pool, cfg.WA)
 	onboardingH := handlers.NewOnboardingHandler(pool, jwtSecret, cfg.WA.PhoneNumberID, cfg.WA.AccessToken)
 
 	r := chi.NewRouter()

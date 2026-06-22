@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"whatsapptool/internal/config"
 	"whatsapptool/internal/db"
 	mw "whatsapptool/internal/web/middleware"
 	"whatsapptool/internal/web/templates"
@@ -15,10 +18,11 @@ import (
 // SettingsHandler manages /settings routes (admin only).
 type SettingsHandler struct {
 	pool *pgxpool.Pool
+	wa   config.WAConfig
 }
 
-func NewSettingsHandler(pool *pgxpool.Pool) *SettingsHandler {
-	return &SettingsHandler{pool: pool}
+func NewSettingsHandler(pool *pgxpool.Pool, wa config.WAConfig) *SettingsHandler {
+	return &SettingsHandler{pool: pool, wa: wa}
 }
 
 func (h *SettingsHandler) Mount(r chi.Router) {
@@ -26,7 +30,12 @@ func (h *SettingsHandler) Mount(r chi.Router) {
 	r.Post("/sending", h.UpdateSending)
 	r.Post("/costs", h.UpdateCosts)
 	r.Post("/retention", h.UpdateRetention)
+	r.Post("/profile", h.UpdateProfile)
+	r.Post("/keywords", h.AddKeyword)
+	r.Post("/keywords/remove", h.RemoveKeyword)
 }
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 func (h *SettingsHandler) Page(w http.ResponseWriter, r *http.Request) {
 	d := h.loadSettings(r)
@@ -35,6 +44,8 @@ func (h *SettingsHandler) Page(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	templates.SettingsPage(d, actor, saved).Render(r.Context(), w)
 }
+
+// ── Sending rules ─────────────────────────────────────────────────────────────
 
 func (h *SettingsHandler) UpdateSending(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -59,8 +70,10 @@ func (h *SettingsHandler) UpdateSending(w http.ResponseWriter, r *http.Request) 
 	db.Log(ctx, h.pool, actor.ID, "settings_updated", "config", "sending_rules",
 		map[string]any{"quiet_start": r.FormValue("quiet_start"), "quiet_end": r.FormValue("quiet_end"),
 			"freq_cap_hours": r.FormValue("freq_cap_hours")})
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings?tab=quiet-hours&saved=1", http.StatusSeeOther)
 }
+
+// ── Costs ─────────────────────────────────────────────────────────────────────
 
 func (h *SettingsHandler) UpdateCosts(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -84,8 +97,10 @@ func (h *SettingsHandler) UpdateCosts(w http.ResponseWriter, r *http.Request) {
 	db.Log(ctx, h.pool, actor.ID, "settings_updated", "config", "cost_rates",
 		map[string]any{"marketing": r.FormValue("marketing"), "utility": r.FormValue("utility"),
 			"auth": r.FormValue("auth"), "gst_rate": r.FormValue("gst_rate")})
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings?tab=rates&saved=1", http.StatusSeeOther)
 }
+
+// ── Data retention ────────────────────────────────────────────────────────────
 
 func (h *SettingsHandler) UpdateRetention(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -101,7 +116,100 @@ func (h *SettingsHandler) UpdateRetention(w http.ResponseWriter, r *http.Request
 	}
 	db.Log(ctx, h.pool, actor.ID, "settings_updated", "config", "data_retention",
 		map[string]any{"retention_months": r.FormValue("retention_months")})
-	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings?tab=connection&saved=1", http.StatusSeeOther)
+}
+
+// ── Business profile ──────────────────────────────────────────────────────────
+
+func (h *SettingsHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	actor := mw.AgentFromCtx(ctx)
+	for _, kv := range []struct{ key, form string }{
+		{"biz_name", "biz_name"},
+		{"biz_about", "biz_about"},
+		{"biz_address", "biz_address"},
+		{"biz_industry", "biz_industry"},
+	} {
+		db.SetConfig(ctx, h.pool, kv.key, r.FormValue(kv.form)) //nolint:errcheck
+	}
+	db.Log(ctx, h.pool, actor.ID, "settings_updated", "config", "business_profile", nil)
+	http.Redirect(w, r, "/settings?tab=profile&saved=1", http.StatusSeeOther)
+}
+
+// ── Opt-out keywords ──────────────────────────────────────────────────────────
+
+func (h *SettingsHandler) AddKeyword(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	kw := strings.ToUpper(strings.TrimSpace(r.FormValue("keyword")))
+	if kw != "" {
+		kws := loadStopKeywords(r, h.pool)
+		if !containsKeyword(kws, kw) {
+			kws = append(kws, kw)
+			saveStopKeywords(r, h.pool, kws)
+		}
+	}
+	http.Redirect(w, r, "/settings?tab=opt-out&saved=1", http.StatusSeeOther)
+}
+
+func (h *SettingsHandler) RemoveKeyword(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	kw := strings.ToUpper(strings.TrimSpace(r.FormValue("keyword")))
+	// STOP and UNSUBSCRIBE are mandated by Meta — cannot remove them.
+	if kw == "STOP" || kw == "UNSUBSCRIBE" {
+		http.Redirect(w, r, "/settings?tab=opt-out", http.StatusSeeOther)
+		return
+	}
+	kws := loadStopKeywords(r, h.pool)
+	var filtered []string
+	for _, k := range kws {
+		if k != kw {
+			filtered = append(filtered, k)
+		}
+	}
+	saveStopKeywords(r, h.pool, filtered)
+	http.Redirect(w, r, "/settings?tab=opt-out&saved=1", http.StatusSeeOther)
+}
+
+// ── Load helpers ──────────────────────────────────────────────────────────────
+
+var defaultStopKeywords = []string{"STOP", "UNSUBSCRIBE", "OPT OUT", "OPTOUT", "OPT-OUT", "QUIT", "CANCEL", "END"}
+
+func loadStopKeywords(r *http.Request, pool *pgxpool.Pool) []string {
+	var raw string
+	pool.QueryRow(r.Context(), `SELECT value#>>'{}' FROM app_config WHERE key='stop_keywords'`).Scan(&raw) //nolint:errcheck
+	if raw == "" {
+		return defaultStopKeywords
+	}
+	var kws []string
+	if err := json.Unmarshal([]byte(raw), &kws); err != nil {
+		return defaultStopKeywords
+	}
+	return kws
+}
+
+func saveStopKeywords(r *http.Request, pool *pgxpool.Pool, kws []string) {
+	b, _ := json.Marshal(kws)
+	pool.QueryRow(r.Context(), `INSERT INTO app_config (key,value) VALUES ('stop_keywords',$1::jsonb)
+		ON CONFLICT (key) DO UPDATE SET value=$1::jsonb, updated_at=NOW()`, string(b)).Scan() //nolint:errcheck
+}
+
+func containsKeyword(kws []string, kw string) bool {
+	for _, k := range kws {
+		if k == kw {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *SettingsHandler) loadSettings(r *http.Request) templates.SettingsViewData {
@@ -115,6 +223,9 @@ func (h *SettingsHandler) loadSettings(r *http.Request) templates.SettingsViewDa
 		UtilityCost:     0.115,
 		AuthCost:        0.115,
 		GSTRate:         0.18,
+		WAWABAId:        h.wa.WABAID,
+		WAAPIVersion:    "v23.0",
+		StopKeywords:    defaultStopKeywords,
 	}
 	if v, err := db.GetConfigFloat(ctx, h.pool, "marketing_cost_inr"); err == nil {
 		d.MarketingCost = v
@@ -140,7 +251,6 @@ func (h *SettingsHandler) loadSettings(r *http.Request) templates.SettingsViewDa
 	qi, _ := db.GetQualityInfo(ctx, h.pool)
 	d.QualityRating = qi.QualityRating
 
-	// Quiet hours stored as quoted JSON strings — read raw.
 	tryStr := func(key string) string {
 		var s string
 		h.pool.QueryRow(ctx, `SELECT value#>>'{}' FROM app_config WHERE key=$1`, key).Scan(&s) //nolint:errcheck
@@ -152,8 +262,24 @@ func (h *SettingsHandler) loadSettings(r *http.Request) templates.SettingsViewDa
 	if v := tryStr("quiet_hours_end_ist"); v != "" {
 		d.QuietHoursEnd = v
 	}
-	var displayName string
-	h.pool.QueryRow(ctx, `SELECT value#>>'{}' FROM app_config WHERE key='wa_display_name'`).Scan(&displayName) //nolint:errcheck
-	d.WADisplayName = displayName
+	d.WADisplayName = tryStr("wa_display_name")
+	d.WADisplayPhone = tryStr("wa_display_phone")
+	d.BizName = tryStr("biz_name")
+	d.BizAbout = tryStr("biz_about")
+	d.BizAddress = tryStr("biz_address")
+	d.BizIndustry = tryStr("biz_industry")
+
+	// Stop keywords from DB
+	if raw := tryStr("stop_keywords"); raw != "" {
+		var kws []string
+		if err := json.Unmarshal([]byte(raw), &kws); err == nil && len(kws) > 0 {
+			d.StopKeywords = kws
+		}
+	}
+
+	d.ActiveTab = r.URL.Query().Get("tab")
+	if d.ActiveTab == "" {
+		d.ActiveTab = "connection"
+	}
 	return d
 }
