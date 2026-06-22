@@ -12,21 +12,29 @@ import (
 	mw "whatsapptool/internal/web/middleware"
 )
 
-func TemplatesPage(agent *mw.AgentClaims) templ.Component {
+func TemplatesPage(agent *mw.AgentClaims, flash string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/templates", "Templates", "")); err != nil {
 			return err
 		}
-		_, err := io.WriteString(w, `
+		flashScript := ""
+		if flash != "" {
+			flashScript = FlashScript(ToastSuccess, flash)
+		}
+		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
+%s
 <div class="page-hd">
 <div>
 <h1 class="screen-title">WhatsApp Templates</h1>
 <p class="screen-subtitle">Browse approved templates and the sample library.</p>
 </div>
-<button class="btn btn-primary btn-sm"
-  onclick="openModal('new-tmpl-modal',this)">+ New template</button>
-</div>
+<a class="btn btn-primary btn-sm" href="/templates/new">+ New template</a>
+</div>`, flashScript)
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(w, `
 
 <div class="tmpl-tabs" role="tablist" x-data="{tab:'all'}">
   <button class="tmpl-tab" role="tab" type="button" :class="{'active':tab==='all'}" :aria-selected="tab==='all'"

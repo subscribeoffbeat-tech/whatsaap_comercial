@@ -31,6 +31,8 @@ func (h *TemplatesHandler) Mount(r chi.Router) {
 	r.Get("/", h.Page)
 	r.Get("/gallery", h.Gallery)
 	r.Get("/library", h.Library)
+	r.Get("/new", h.NewForm)
+	r.Post("/new", h.CreateFromForm)
 	r.Post("/", h.Create)
 	r.Get("/{id}", h.EditForm)
 	r.Put("/{id}", h.Update)
@@ -42,10 +44,173 @@ func (h *TemplatesHandler) Mount(r chi.Router) {
 
 func (h *TemplatesHandler) Page(w http.ResponseWriter, r *http.Request) {
 	agent := mw.AgentFromCtx(r.Context())
+	flash := r.URL.Query().Get("flash")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.TemplatesPage(agent).Render(r.Context(), w); err != nil {
+	if err := templates.TemplatesPage(agent, flash).Render(r.Context(), w); err != nil {
 		log.Printf("templates page render: %v", err)
 	}
+}
+
+// ── New form (full page) ──────────────────────────────────────────────────────
+
+func (h *TemplatesHandler) NewForm(w http.ResponseWriter, r *http.Request) {
+	agent := mw.AgentFromCtx(r.Context())
+	name := r.URL.Query().Get("name")
+	category := r.URL.Query().Get("category")
+	language := r.URL.Query().Get("language")
+	body := r.URL.Query().Get("body")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := templates.TemplateNewPage(agent, name, category, language, body, "").Render(r.Context(), w); err != nil {
+		log.Printf("template new page render: %v", err)
+	}
+}
+
+func (h *TemplatesHandler) CreateFromForm(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	rawName := strings.TrimSpace(r.FormValue("name"))
+	category := r.FormValue("category")
+	language := r.FormValue("language")
+	body := strings.TrimSpace(r.FormValue("body"))
+	footer := strings.TrimSpace(r.FormValue("footer"))
+	headerType := r.FormValue("header_type")
+	headerText := strings.TrimSpace(r.FormValue("header_text"))
+	action := r.FormValue("action")
+
+	slug := tmplSlugify(rawName)
+
+	agent := mw.AgentFromCtx(r.Context())
+
+	renderErr := func(msg string) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = templates.TemplateNewPage(agent, rawName, category, language, body, msg).Render(r.Context(), w)
+	}
+
+	if slug == "" {
+		renderErr("Template name is required.")
+		return
+	}
+	if body == "" {
+		renderErr("Body text is required.")
+		return
+	}
+	switch category {
+	case "marketing", "utility", "authentication":
+	default:
+		category = "marketing"
+	}
+	if language == "" {
+		language = "en"
+	}
+
+	var components []map[string]any
+	switch headerType {
+	case "text":
+		if headerText != "" {
+			components = append(components, map[string]any{"type": "HEADER", "format": "TEXT", "text": headerText})
+		}
+	case "image":
+		components = append(components, map[string]any{"type": "HEADER", "format": "IMAGE"})
+	case "video":
+		components = append(components, map[string]any{"type": "HEADER", "format": "VIDEO"})
+	case "document":
+		components = append(components, map[string]any{"type": "HEADER", "format": "DOCUMENT"})
+	}
+
+	components = append(components, map[string]any{"type": "BODY", "text": body})
+	if footer != "" {
+		components = append(components, map[string]any{"type": "FOOTER", "text": footer})
+	}
+
+	var btns []map[string]any
+	for i := 0; i < 3; i++ {
+		btype := r.FormValue(fmt.Sprintf("btn_type_%d", i))
+		blabel := strings.TrimSpace(r.FormValue(fmt.Sprintf("btn_label_%d", i)))
+		if blabel == "" {
+			continue
+		}
+		if btype == "" {
+			btype = "QUICK_REPLY"
+		}
+		btn := map[string]any{"type": btype, "text": blabel}
+		if btype == "URL" {
+			if u := strings.TrimSpace(r.FormValue(fmt.Sprintf("btn_url_%d", i))); u != "" {
+				btn["url"] = u
+			}
+		} else if btype == "PHONE_NUMBER" {
+			if p := strings.TrimSpace(r.FormValue(fmt.Sprintf("btn_phone_%d", i))); p != "" {
+				btn["phone_number"] = p
+			}
+		}
+		btns = append(btns, btn)
+	}
+	if len(btns) > 0 {
+		components = append(components, map[string]any{"type": "BUTTONS", "buttons": btns})
+	}
+
+	agentID := ""
+	if agent != nil {
+		agentID = agent.ID
+	}
+	t := &db.Template{
+		Name:       slug,
+		Language:   language,
+		Category:   category,
+		Components: components,
+		CreatedBy:  &agentID,
+	}
+
+	if err := db.CreateTemplate(r.Context(), h.pool, t); err != nil {
+		log.Printf("create template from form: %v", err)
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			renderErr(fmt.Sprintf("A template named %q already exists in this language.", slug))
+		} else {
+			renderErr("Failed to save template. Please try again.")
+		}
+		return
+	}
+
+	if action == "submit" {
+		req := whatsapp.SubmitTemplateRequest{
+			Name:       t.Name,
+			Language:   t.Language,
+			Category:   strings.ToUpper(t.Category),
+			Components: t.Components,
+		}
+		waID, err := h.waClient.SubmitTemplate(r.Context(), req)
+		if err != nil {
+			log.Printf("submit template to Meta: %v", err)
+			http.Redirect(w, r, "/templates?flash=Template+saved+as+draft.+Meta+submission+failed.", http.StatusSeeOther)
+			return
+		}
+		if err := db.SetTemplateWAID(r.Context(), h.pool, t.ID, waID); err != nil {
+			log.Printf("set template wa_id: %v", err)
+		}
+		http.Redirect(w, r, "/templates?flash=Template+submitted+for+Meta+approval.", http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/templates?flash=Template+saved+as+draft.", http.StatusSeeOther)
+}
+
+func tmplSlugify(s string) string {
+	s = strings.ToLower(s)
+	var b strings.Builder
+	prevUnderscore := false
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			prevUnderscore = false
+		} else if !prevUnderscore && b.Len() > 0 {
+			b.WriteRune('_')
+			prevUnderscore = true
+		}
+	}
+	return strings.TrimRight(b.String(), "_")
 }
 
 // ── Gallery partial ───────────────────────────────────────────────────────────
