@@ -795,6 +795,18 @@ dialog::backdrop { background: var(--overlay-bg); backdrop-filter: blur(4px); }
   margin-bottom: 1.5rem;
 }
 
+/* ── Dashboard channel-health row (capacity + quality side by side) ─────────── */
+.dash-health-row {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: var(--gutter);
+  margin-bottom: var(--gutter);
+  align-items: stretch;
+}
+.dash-cap-card   { flex: 1; }
+.dash-quality-card { display: flex; flex-direction: column; justify-content: center; }
+@media (max-width: 720px) { .dash-health-row { grid-template-columns: 1fr; } }
+
 /* ── Native <dialog> — global centering fix ─────────────────────────────────── */
 dialog {
   position: fixed;
