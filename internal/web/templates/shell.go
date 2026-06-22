@@ -102,21 +102,23 @@ func avatarDropdownHTML(agent *mw.AgentClaims) string {
 	initials := avatarInitials(name)
 	return fmt.Sprintf(`<div class="dropdown" x-data="{open:false}">
   <button class="topnav-avatar" aria-label="%s" aria-haspopup="true" @click="open=!open" @click.outside="open=false">%s</button>
-  <div class="dropdown-menu" x-show="open" x-cloak x-transition style="min-width:180px">
-    <span class="dropdown-item" style="font-size:12px;color:var(--text-muted);cursor:default;line-height:1.4">
-      <strong>%s</strong><br>%s
-    </span>
+  <div class="dropdown-menu av-dropdown" x-show="open" x-cloak x-transition>
+    <div class="av-dd-identity">
+      <div class="av-dd-name">%s</div>
+      <div class="av-dd-email">%s</div>
+    </div>
+    <div class="dropdown-divider"></div>
+    <a href="/account" class="dropdown-item">My account</a>
     <div class="dropdown-divider"></div>
     <form method="POST" action="/logout" style="margin:0">
-      <button type="submit" class="dropdown-item" style="width:100%%;text-align:left">
- Sign out</button>
+      <button type="submit" class="dropdown-item av-dd-signout">Sign out</button>
     </form>
   </div>
 </div>`,
 		escHTML(name),
 		escHTML(initials),
 		escHTML(name),
-		escHTML(email), // email shown below name in dropdown
+		escHTML(email),
 	)
 }
 

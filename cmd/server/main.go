@@ -90,6 +90,7 @@ func main() {
 	authH       := handlers.NewAuthHandler(pool, jwtSecret, cfg.BaseURL, mailer)
 	teamH       := handlers.NewTeamHandler(pool, jwtSecret, cfg.BaseURL, mailer)
 	settingsH   := handlers.NewSettingsHandler(pool, cfg.WA)
+	accountH    := handlers.NewAccountHandler(pool, jwtSecret)
 	onboardingH := handlers.NewOnboardingHandler(pool, jwtSecret, cfg.WA.PhoneNumberID, cfg.WA.AccessToken)
 
 	r := chi.NewRouter()
@@ -162,6 +163,11 @@ func main() {
 
 		// Dashboard
 		r.Get("/", dashboardH.Page)
+
+		// My Account — all roles
+		r.Route("/account", func(r chi.Router) {
+			accountH.Mount(r)
+		})
 
 		// Inbox — all roles
 		r.Route("/inbox", func(r chi.Router) {

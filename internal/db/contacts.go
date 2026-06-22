@@ -29,6 +29,9 @@ type Contact struct {
 	IsBlocked    bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	// Populated by ListContacts (joined from tags + conversations).
+	Tags          []string
+	LastMessageAt *time.Time
 }
 
 // ContactNote mirrors the contact_notes table.
@@ -112,17 +115,23 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 
 	rows, err := pool.Query(ctx, `
 		SELECT
-		  id::text, wa_phone, name, email, industry,
-		  custom_fields::text, opted_in, opt_in_source,
-		  opt_in_at, opt_out_at, is_blocked,
-		  created_at, updated_at
+		  c.id::text, c.wa_phone, c.name, c.email, c.industry,
+		  c.custom_fields::text, c.opted_in, c.opt_in_source,
+		  c.opt_in_at, c.opt_out_at, c.is_blocked,
+		  c.created_at, c.updated_at,
+		  COALESCE(array_agg(DISTINCT t.name ORDER BY t.name) FILTER (WHERE t.name IS NOT NULL), ARRAY[]::text[]) AS tags,
+		  conv.last_message_at
 		FROM contacts c
+		LEFT JOIN contact_tags ct ON ct.contact_id = c.id
+		LEFT JOIN tags t ON t.id = ct.tag_id
+		LEFT JOIN conversations conv ON conv.contact_id = c.id
 		WHERE ($1::text IS NULL OR c.wa_phone ILIKE $1 OR c.name ILIKE $1)
 		  AND ($2::bigint IS NULL OR EXISTS (
-		        SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag_id = $2
+		        SELECT 1 FROM contact_tags ct2 WHERE ct2.contact_id = c.id AND ct2.tag_id = $2
 		      ))
 		  AND ($3::boolean IS NULL OR c.opted_in = $3)
 		  AND ($4::text IS NULL OR c.industry = $4)
+		GROUP BY c.id, conv.last_message_at
 		ORDER BY c.created_at DESC
 		LIMIT $5 OFFSET $6
 	`, search, f.TagID, f.OptedIn, industry, limit, f.Offset)
@@ -133,11 +142,45 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 
 	var contacts []Contact
 	for rows.Next() {
-		c, err := scanContact(rows)
-		if err != nil {
-			return nil, 0, err
+		var c Contact
+		var (
+			email, optInSource, industry2 pgtype.Text
+			optInAt, optOutAt, lastMsgAt  pgtype.Timestamptz
+			customRaw                     string
+		)
+		if err := rows.Scan(
+			&c.ID, &c.WAPhone, &c.Name, &email, &industry2,
+			&customRaw, &c.OptedIn, &optInSource,
+			&optInAt, &optOutAt, &c.IsBlocked,
+			&c.CreatedAt, &c.UpdatedAt,
+			&c.Tags, &lastMsgAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan contact row: %w", err)
 		}
-		contacts = append(contacts, *c)
+		if industry2.Valid {
+			c.Industry = industry2.String
+		}
+		c.CustomFields = map[string]any{}
+		_ = json.Unmarshal([]byte(customRaw), &c.CustomFields)
+		if email.Valid {
+			c.Email = &email.String
+		}
+		if optInSource.Valid {
+			c.OptInSource = &optInSource.String
+		}
+		if optInAt.Valid {
+			t := optInAt.Time
+			c.OptInAt = &t
+		}
+		if optOutAt.Valid {
+			t := optOutAt.Time
+			c.OptOutAt = &t
+		}
+		if lastMsgAt.Valid {
+			t := lastMsgAt.Time
+			c.LastMessageAt = &t
+		}
+		contacts = append(contacts, c)
 	}
 	return contacts, total, rows.Err()
 }

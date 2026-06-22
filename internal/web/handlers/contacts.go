@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,8 +36,13 @@ func (h *ContactsHandler) Mount(r chi.Router) {
 	r.Get("/export.csv", h.ExportCSV)
 	r.Post("/", h.Create)
 
-	// CSV import wizard — GET redirects to contacts page (modal lives there)
-	r.Get("/import", h.ImportRedirect)
+	// New contact page
+	r.Get("/new", h.NewContactPage)
+	r.Post("/new", h.CreateNewContact)
+
+	// CSV import wizard
+	r.Get("/import", h.ImportPage)
+	r.Get("/import/sample", h.ImportSample)
 	r.Post("/import/upload", h.ImportUpload)
 	r.Post("/import/preview", h.ImportPreview)
 	r.Post("/import/confirm", h.ImportConfirm)
@@ -77,6 +83,111 @@ func (h *ContactsHandler) Page(w http.ResponseWriter, r *http.Request) {
 	if err := templates.ContactsPage(agent, tags, contactIndustries).Render(r.Context(), w); err != nil {
 		log.Printf("contacts page render: %v", err)
 	}
+}
+
+// ── New contact page ──────────────────────────────────────────────────────────
+
+func (h *ContactsHandler) NewContactPage(w http.ResponseWriter, r *http.Request) {
+	agent := mw.AgentFromCtx(r.Context())
+	tags, _ := db.ListTags(r.Context(), h.pool)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := templates.NewContactPage(agent, tags, "").Render(r.Context(), w); err != nil {
+		log.Printf("new contact page render: %v", err)
+	}
+}
+
+func (h *ContactsHandler) CreateNewContact(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	agent := mw.AgentFromCtx(r.Context())
+
+	rawPhone := strings.TrimSpace(r.FormValue("phone"))
+	phone, err := db.NormalizePhone(rawPhone)
+	if err != nil {
+		tags, _ := db.ListTags(r.Context(), h.pool)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		templates.NewContactPage(agent, tags, "Invalid phone: "+err.Error()).Render(r.Context(), w)
+		return
+	}
+
+	customFields := map[string]any{}
+	if city := strings.TrimSpace(r.FormValue("city")); city != "" {
+		customFields["city"] = city
+	}
+
+	src := "manual"
+	optIn := r.FormValue("opt_in") == "on" || r.FormValue("opt_in") == "true"
+	now := time.Now()
+
+	c := &db.Contact{
+		WAPhone:      phone,
+		Name:         strings.TrimSpace(r.FormValue("name")),
+		OptedIn:      optIn,
+		OptInSource:  &src,
+		CustomFields: customFields,
+	}
+	if optIn {
+		c.OptInAt = &now
+	}
+	if email := strings.TrimSpace(r.FormValue("email")); email != "" {
+		c.Email = &email
+	}
+
+	if err := db.CreateContact(r.Context(), h.pool, c); err != nil {
+		log.Printf("create new contact: %v", err)
+		tags, _ := db.ListTags(r.Context(), h.pool)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		msg := "Failed to save contact."
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			msg = "A contact with this phone number already exists."
+		}
+		templates.NewContactPage(agent, tags, msg).Render(r.Context(), w)
+		return
+	}
+
+	// Apply selected tags
+	if tagNames := strings.TrimSpace(r.FormValue("tags")); tagNames != "" {
+		allTags, _ := db.ListTags(r.Context(), h.pool)
+		tagMap := map[string]int64{}
+		for _, t := range allTags {
+			tagMap[strings.ToLower(t.Name)] = t.ID
+		}
+		for _, name := range strings.Split(tagNames, ",") {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			tagID, ok := tagMap[strings.ToLower(name)]
+			if !ok {
+				if t, err := db.CreateTag(r.Context(), h.pool, name, ""); err == nil {
+					tagID = t.ID
+					ok = true
+				}
+			}
+			if ok {
+				_ = db.BulkAddTag(r.Context(), h.pool, []string{c.ID}, tagID)
+			}
+		}
+	}
+
+	// Add initial note if provided
+	if note := strings.TrimSpace(r.FormValue("notes")); note != "" {
+		var agentID *string
+		if agent != nil {
+			agentID = &agent.ID
+		}
+		_ = db.CreateNote(r.Context(), h.pool, &db.ContactNote{
+			ContactID: c.ID,
+			AgentID:   agentID,
+			Body:      note,
+		})
+	}
+
+	http.Redirect(w, r, "/contacts", http.StatusSeeOther)
 }
 
 // ── Table partial ─────────────────────────────────────────────────────────────
@@ -387,10 +498,18 @@ func (h *ContactsHandler) DeleteSegment(w http.ResponseWriter, r *http.Request) 
 
 // ── CSV import wizard ─────────────────────────────────────────────────────────
 
-// ImportRedirect sends users who land on /contacts/import to the contacts page,
-// where the import modal lives.
-func (h *ContactsHandler) ImportRedirect(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/contacts", http.StatusSeeOther)
+func (h *ContactsHandler) ImportPage(w http.ResponseWriter, r *http.Request) {
+	agent := mw.AgentFromCtx(r.Context())
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := templates.ImportPage(agent).Render(r.Context(), w); err != nil {
+		log.Printf("import page render: %v", err)
+	}
+}
+
+func (h *ContactsHandler) ImportSample(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="contacts_sample.csv"`)
+	fmt.Fprint(w, "name,phone,email,city,tags,consent\nPriya Sharma,+919876543210,priya@mail.com,Mumbai,VIP,yes\nRaj Patel,+918765432109,,Delhi,Lead,yes\n")
 }
 
 const maxUploadBytes = 5 << 20 // 5 MB

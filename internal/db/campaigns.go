@@ -326,6 +326,37 @@ func GetAudienceContacts(ctx context.Context, pool *pgxpool.Pool, segmentTags, e
 	return cs, rows.Err()
 }
 
+// GetAudienceContactsAny returns opted-in, non-blocked contacts with ANY of the
+// given tag IDs. If tagIDs is nil or empty, all opted-in non-blocked contacts
+// are returned (equivalent to "All contacts").
+func GetAudienceContactsAny(ctx context.Context, pool *pgxpool.Pool, tagIDs []int64) ([]Contact, error) {
+	conds := []string{"c.opted_in = true", "c.is_blocked = false"}
+	var args []any
+	if len(tagIDs) > 0 {
+		args = append(args, tagIDs)
+		conds = append(conds, `EXISTS (SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag_id = ANY($1::bigint[]))`)
+	}
+	q := `SELECT c.id::text, c.wa_phone, c.name, c.email, c.industry, c.custom_fields::text,
+	             c.opted_in, c.opt_in_source, c.opt_in_at, c.opt_out_at, c.is_blocked,
+	             c.created_at, c.updated_at
+	      FROM contacts c
+	      WHERE ` + strings.Join(conds, " AND ") + ` ORDER BY c.created_at`
+	rows, err := pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get audience contacts any: %w", err)
+	}
+	defer rows.Close()
+	var cs []Contact
+	for rows.Next() {
+		c, err := scanContact(rows)
+		if err != nil {
+			return nil, err
+		}
+		cs = append(cs, *c)
+	}
+	return cs, rows.Err()
+}
+
 // FreqCappedContactIDs returns the subset of contactIDs that received a
 // marketing outbound message in the last freqCapHours hours.
 func FreqCappedContactIDs(ctx context.Context, pool *pgxpool.Pool, contactIDs []string, freqCapHours int) (map[string]bool, error) {
@@ -400,6 +431,97 @@ func GetCampaignRecipients(ctx context.Context, pool *pgxpool.Pool, campaignID s
 		rs = append(rs, *r)
 	}
 	return rs, rows.Err()
+}
+
+// FailedRecipient is a failed or skipped campaign recipient with categorised reason.
+type FailedRecipient struct {
+	ContactID    string
+	Name         string
+	WAPhone      string
+	FailReason   string
+	FailCategory string // opted_out | invalid_number | limit_reached | blocked | rejected
+	FailedAt     *time.Time
+}
+
+// CategorizeFail maps a raw skip_reason string to a display category.
+func CategorizeFail(reason string) string {
+	r := strings.ToLower(reason)
+	switch {
+	case strings.Contains(r, "opted") || strings.Contains(r, "stop") || strings.Contains(r, "opt_out"):
+		return "opted_out"
+	case strings.Contains(r, "131049") || strings.Contains(r, "invalid") ||
+		strings.Contains(r, "not registered") || strings.Contains(r, "deactivat") || strings.Contains(r, "ported"):
+		return "invalid_number"
+	case strings.Contains(r, "131048") || strings.Contains(r, "limit") || strings.Contains(r, "cap"):
+		return "limit_reached"
+	case strings.Contains(r, "blocked") || strings.Contains(r, "131031"):
+		return "blocked"
+	default:
+		return "rejected"
+	}
+}
+
+// GetFailedRecipients returns failed and skipped recipients for a campaign.
+func GetFailedRecipients(ctx context.Context, pool *pgxpool.Pool, campaignID string) ([]FailedRecipient, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT c.id::text, c.name, c.wa_phone,
+		       COALESCE(cr.skip_reason, ''), cr.sent_at
+		FROM campaign_recipients cr
+		JOIN contacts c ON c.id = cr.contact_id
+		WHERE cr.campaign_id = $1::uuid
+		  AND cr.status IN ('failed', 'skipped')
+		  AND cr.skip_reason IS NOT NULL AND cr.skip_reason <> ''
+		ORDER BY cr.id
+		LIMIT 500
+	`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("get failed recipients: %w", err)
+	}
+	defer rows.Close()
+	var out []FailedRecipient
+	for rows.Next() {
+		var fr FailedRecipient
+		var sentAt pgtype.Timestamptz
+		if err := rows.Scan(&fr.ContactID, &fr.Name, &fr.WAPhone, &fr.FailReason, &sentAt); err != nil {
+			return nil, err
+		}
+		if sentAt.Valid {
+			t := sentAt.Time
+			fr.FailedAt = &t
+		}
+		fr.FailCategory = CategorizeFail(fr.FailReason)
+		out = append(out, fr)
+	}
+	return out, rows.Err()
+}
+
+// HourlyCount is one bar in the send-distribution chart.
+type HourlyCount struct {
+	Hour  int
+	Count int
+}
+
+// GetHourlySendDistribution returns send counts grouped by hour for a campaign.
+func GetHourlySendDistribution(ctx context.Context, pool *pgxpool.Pool, campaignID string) ([]HourlyCount, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT EXTRACT(HOUR FROM sent_at AT TIME ZONE 'Asia/Kolkata')::int, COUNT(*)
+		FROM campaign_recipients
+		WHERE campaign_id = $1::uuid AND sent_at IS NOT NULL
+		GROUP BY 1 ORDER BY 1
+	`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("hourly distribution: %w", err)
+	}
+	defer rows.Close()
+	var out []HourlyCount
+	for rows.Next() {
+		var hc HourlyCount
+		if err := rows.Scan(&hc.Hour, &hc.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, hc)
+	}
+	return out, rows.Err()
 }
 
 // ListPendingRecipients returns pending recipients for a campaign (used at job-enqueue time).

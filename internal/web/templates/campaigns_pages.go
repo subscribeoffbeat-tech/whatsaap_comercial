@@ -53,23 +53,25 @@ func ExtractVarNames(body string) []string {
 }
 
 // WizardState carries campaign-creation state across wizard steps via a hidden
-// form field. Serialised as base64-encoded JSON by encodeState/DecodeState.
+// form field. Serialised as base64-encoded JSON.
 type WizardState struct {
-	Step          int
-	Name          string
-	SegmentTags   []int64
-	ExcludeTags   []int64
-	EligibleCount int
-	SkipReport    campaigns.SkipReport
-	TemplateID    string
-	VarMap        map[string]string
-	Fallbacks     map[string]string
-	ScheduleType  string
-	ScheduledAt   *time.Time
-	EstCost       float64
-	// Tier-cap snapshot captured at the audience step and carried through the wizard.
-	DailyCap  int // 90%-of-tier daily cap (from app_config at audience-step time)
-	DailySent int // messages already sent today (at audience-step time)
+	Step           int
+	Name           string
+	Category       string // marketing | utility | authentication (from Basics step)
+	Notes          string // internal notes (from Basics step)
+	HasVars        bool   // template has {{N}} placeholders
+	TemplateID     string
+	VarMap         map[string]string
+	Fallbacks      map[string]string
+	UseAllContacts bool    // audience: all opted-in contacts (no tag filter)
+	SegmentTagIDs  []int64 // audience: selected tag IDs (union); nil = all
+	EligibleCount  int
+	SkipReport     campaigns.SkipReport
+	ScheduleType   string
+	ScheduledAt    *time.Time
+	EstCost        float64
+	DailyCap       int
+	DailySent      int
 }
 
 func encodeState(s WizardState) string {
@@ -92,43 +94,17 @@ func DecodeState(s string) (WizardState, error) {
 
 // ── Campaign list ─────────────────────────────────────────────────────────────
 
-func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
+func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign, dailyCap int64) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "Campaigns", "")); err != nil {
 			return err
 		}
 
-		// Count by status
-		counts := map[string]int{
-			"all":       len(cs),
-			"running":   0,
-			"draft":     0,
-			"paused":    0,
-			"failed":    0,
-			"completed": 0,
-			"cancelled": 0,
-			"scheduled": 0,
-		}
-		for _, c := range cs {
-			counts[c.Status]++
-		}
-		// "failed" tab = campaigns where FailedCount > 0 and SentCount == 0
-		failedTabCount := 0
-		for _, c := range cs {
-			if c.FailedCount > 0 && c.SentCount == 0 {
-				failedTabCount++
-			}
-		}
-		counts["failed"] = failedTabCount
-
-		_, err := fmt.Fprintf(w, `
+		_, err := io.WriteString(w, `
 <div class="page-wrap">
-<div class="page-hd" style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:var(--gutter);flex-wrap:wrap;gap:var(--gutter)">
-  <div>
-    <h1 class="screen-title" style="margin:0 0 4px">Campaigns</h1>
-    <div style="color:var(--text-secondary);font-size:14px">Broadcast to opted-in contacts with approved templates</div>
-  </div>
-  <a class="btn btn-primary" href="/campaigns/new" style="font-size:15px;padding:10px 22px;gap:6px">+ New campaign</a>
+<div class="page-hd">
+<div><h1 class="screen-title">Campaigns</h1><p class="screen-subtitle">Broadcast messages to your contacts</p></div>
+<a class="btn btn-primary btn-sm" href="/campaigns/new">+ New campaign</a>
 </div>`)
 		if err != nil {
 			return err
@@ -144,192 +120,137 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 				return err
 			}
 		} else {
-			// Tab strip + campaign table
+			// Status tabs: map DB statuses to display tabs.
+			counts := map[string]int{"all": len(cs), "completed": 0, "sending": 0, "scheduled": 0, "paused": 0}
+			for _, c := range cs {
+				switch c.Status {
+				case "completed":
+					counts["completed"]++
+				case "running":
+					counts["sending"]++
+				case "scheduled":
+					counts["scheduled"]++
+				case "paused":
+					counts["paused"]++
+				}
+			}
+
 			_, err = fmt.Fprintf(w, `
-<div x-data="{tab:''}">
-<div class="cmp-tabs" style="margin-bottom:var(--gutter)" role="tablist">
-  <button class="cmp-tab" role="tab" :class="{active:tab===''}" @click="tab=''">All <span class="cmp-tab-count">%d</span></button>
-  <button class="cmp-tab" role="tab" :class="{active:tab==='running'}" @click="tab='running'">Active <span class="cmp-tab-count">%d</span></button>
-  <button class="cmp-tab" role="tab" :class="{active:tab==='draft'}" @click="tab='draft'">Draft <span class="cmp-tab-count">%d</span></button>
-  <button class="cmp-tab" role="tab" :class="{active:tab==='paused'}" @click="tab='paused'">Paused <span class="cmp-tab-count">%d</span></button>
-  <button class="cmp-tab cmp-tab--danger" role="tab" :class="{active:tab==='failed'}" @click="tab='failed'">Failed <span class="cmp-tab-count">%d</span></button>
-  <button class="cmp-tab" role="tab" :class="{active:tab==='completed'}" @click="tab='completed'">Completed <span class="cmp-tab-count">%d</span></button>
-  <button class="cmp-tab" role="tab" :class="{active:tab==='cancelled'}" @click="tab='cancelled'">Cancelled <span class="cmp-tab-count">%d</span></button>
+<div x-data="{tab:'all'}" class="cmp-list-wrap">
+<div class="cmp-tabs" role="tablist">
+<button class="cmp-tab" role="tab" :class="{active:tab==='all'}" @click="tab='all'" type="button">All</button>
+<button class="cmp-tab" role="tab" :class="{active:tab==='completed'}" @click="tab='completed'" type="button">Completed</button>
+<button class="cmp-tab" role="tab" :class="{active:tab==='sending'}" @click="tab='sending'" type="button">Sending</button>
+<button class="cmp-tab" role="tab" :class="{active:tab==='scheduled'}" @click="tab='scheduled'" type="button">Scheduled</button>
+<button class="cmp-tab" role="tab" :class="{active:tab==='paused'}" @click="tab='paused'" type="button">Paused</button>
 </div>
-<div class="card-static" role="tabpanel" tabindex="0">
-<table class="tbl">
+<div class="card-static cmp-table-card">
+<table class="tbl cmp-tbl">
 <thead><tr>
-  <th class="cmp-chev-cell"></th>
-  <th>CAMPAIGN</th><th>TEMPLATE</th><th>AUDIENCE</th>
-  <th>SENT</th><th>DELIVERED</th><th>FAILED</th>
-  <th>STATUS</th><th>COST</th><th>DATE</th>
+<th>CAMPAIGN</th><th>TEMPLATE</th><th>AUDIENCE</th><th>SENT</th>
+<th>READ RATE</th><th>STATUS</th><th>COST</th><th>DATE</th>
 </tr></thead>
-<tbody>`,
-				counts["all"], counts["running"], counts["draft"],
-				counts["paused"], counts["failed"], counts["completed"], counts["cancelled"],
-			)
+<tbody>`)
 			if err != nil {
 				return err
 			}
 
 			for _, c := range cs {
-				// Date: prefer scheduled_at, fall back to created_at
+				// Map status to tab.
+				tabStatus := c.Status
+				switch c.Status {
+				case "running":
+					tabStatus = "sending"
+				}
+				xShow := fmt.Sprintf(`tab==='all'||tab===%s`, jsLit(tabStatus))
+
+				// Date: prefer scheduled, then completed, then created.
 				dateStr := c.CreatedAt.Format("02 Jan 2006")
+				if c.CompletedAt != nil {
+					dateStr = c.CompletedAt.Format("02 Jan 2006")
+				}
 				if c.ScheduledAt != nil {
 					dateStr = c.ScheduledAt.Format("02 Jan 2006")
 				}
 
-				isFailed := c.FailedCount > 0 && c.SentCount == 0
-				xShow := fmt.Sprintf(`tab==='' || tab==='%s'`, c.Status)
-				if isFailed {
-					xShow += ` || tab==='failed'`
-				}
-
-				// Status badge
+				// Status badge.
 				badgeVariant := c.Status
+				badgeLabel := c.Status
 				switch c.Status {
-				case "running", "completed":
+				case "running":
+					badgeVariant, badgeLabel = "sending", "sending"
+				case "completed":
 					badgeVariant = "approved"
-				case "cancelled", "failed":
-					badgeVariant = "rejected"
 				case "paused":
-					badgeVariant = "paused"
-				case "scheduled", "draft":
+					badgeVariant = "warning"
+				case "scheduled":
 					badgeVariant = "pending"
-				}
-				statusBadge := BadgeHTML(badgeVariant, c.Status)
-
-				// Delivered cell: count + delivery rate bar + undelivered count
-				dlvCell := `<td class="cmp-td-dlv"><span class="dlv-dash">&#8212;</span></td>`
-				if c.SentCount > 0 {
-					dlvPct := c.DeliveredCount * 100 / c.SentCount
-					dlvFillClass := "dlv-fill--ok"
-					if dlvPct >= 70 {
-						dlvFillClass = "dlv-fill--good"
-					} else if dlvPct < 40 {
-						dlvFillClass = "dlv-fill--low"
-					}
-					notDlv := c.SentCount - c.DeliveredCount
-					notDlvHTML := ""
-					if notDlv > 0 {
-						notDlvHTML = fmt.Sprintf(`<div class="dlv-pending">%d not delivered</div>`, notDlv)
-					}
-					dlvCell = fmt.Sprintf(
-						`<td class="cmp-td-dlv">`+
-							`<div class="dlv-count">%d</div>`+
-							`<div class="dlv-bar-row">`+
-							`<div class="dlv-track"><div class="dlv-fill %s" style="width:%d%%"></div></div>`+
-							`<span class="dlv-pct">%d%%</span>`+
-							`</div>`+
-							`%s`+
-							`</td>`,
-						c.DeliveredCount, dlvFillClass, dlvPct, dlvPct, notDlvHTML,
-					)
+				case "cancelled", "draft":
+					badgeVariant = "neutral"
 				}
 
-				// Failed cell
-				failedCell := `<td class="cmp-time">&#8212;</td>`
-				if c.FailedCount > 0 {
-					failedCell = fmt.Sprintf(`<td class="cmp-td-fail">%d</td>`, c.FailedCount)
+				// Read rate cell.
+				readRateCell := `<td class="cmp-td-rate"><span class="cmp-dash">—</span></td>`
+				if c.SentCount > 0 && c.ReadCount > 0 {
+					pct := c.ReadCount * 100 / c.SentCount
+					readRateCell = fmt.Sprintf(
+						`<td class="cmp-td-rate"><div class="cmp-rate-bar"><div class="cmp-rate-fill" style="width:%d%%"></div></div><span class="cmp-rate-pct">%d%%</span></td>`,
+						pct, pct)
 				}
 
-				// Action buttons for detail row
-				actionsHTML := ""
-				if c.Status == "running" {
-					actionsHTML += fmt.Sprintf(
-						`<form hx-post="/campaigns/%s/pause" hx-swap="none" hx-disabled-elt="find button" style="display:inline"><button class="btn btn-sm btn-secondary" type="submit">&#8214; Pause</button></form> `,
-						c.ID)
-				}
-				if c.Status == "running" || c.Status == "scheduled" {
-					actionsHTML += fmt.Sprintf(
-						`<form hx-post="/campaigns/%s/cancel" hx-swap="none" hx-disabled-elt="find button" style="display:inline"><button class="btn btn-sm btn-danger-ghost" type="submit">Cancel</button></form>`,
-						c.ID)
+				// Cost: show "—" when zero.
+				costStr := fmt.Sprintf("&#8377;%.2f", c.CostTotalINR)
+				if c.CostTotalINR == 0 {
+					costStr = `<span class="cmp-dash">—</span>`
 				}
 
-				// Send progress for detail row
-				sendPct := 0
-				if c.TotalRecipients > 0 {
-					sendPct = (c.SentCount + c.FailedCount + c.SkippedCount) * 100 / c.TotalRecipients
-				}
-				detailHeaderHTML := ""
-				if actionsHTML != "" || c.Status == "running" || c.Status == "paused" {
-					detailHeaderHTML = fmt.Sprintf(
-						`<div class="cmp-detail-hd">`+
-							`<div class="cmp-detail-prog">`+
-							`<span class="cmp-detail-prog-label">Send progress</span>`+
-							`<div class="prog-wrap"><div class="prog-track"><div class="prog-fill" style="width:%d%%"></div></div>`+
-							`<span class="prog-label">%d / %d sent</span></div>`+
-							`</div>`+
-							`<div class="cmp-action-btns">%s</div>`+
-							`</div>`,
-						sendPct, c.SentCount+c.FailedCount, c.TotalRecipients, actionsHTML,
-					)
-				}
-
-				if _, err := fmt.Fprintf(w,
-					`<tr x-show="%s" id="cmp-row-%s" class="cmp-row--expand" onclick="toggleCmpDetail('%s')">`+
-						`<td class="cmp-chev-cell"><span id="cmp-chev-%s" class="cmp-chev"></span></td>`+
-						`<td><a href="/campaigns/%s/report" class="cmp-name" onclick="event.stopPropagation()">%s</a></td>`+
-						`<td class="cmp-tmpl">%s</td>`+
-						`<td>%d</td>`+
-						`<td>%d</td>`+
-						`%s`+
-						`%s`+
-						`<td>%s</td>`+
-						`<td>&#8377;%.2f</td>`+
-						`<td class="cmp-time">%s</td>`+
-						`</tr>`+
-						`<tr id="cmp-detail-%s" class="cmp-detail-row" style="display:none">`+
-						`<td colspan="10" class="cmp-detail-cell">`+
-						`<div data-cmp-id="%s" class="cmp-detail-inner" aria-live="polite">`+
-						`%s`+
-						`Loading&#8230;</div>`+
-						`</td></tr>`,
-					xShow, c.ID, c.ID,
-					c.ID,
+				_, err = fmt.Fprintf(w,
+					`<tr x-show="%s">
+<td><a href="/campaigns/%s/report" class="cmp-name">%s</a></td>
+<td class="cmp-tmpl"><code>%s</code></td>
+<td class="cmp-num">%s</td>
+<td class="cmp-num">%s</td>
+%s
+<td>%s</td>
+<td class="cmp-cost">%s</td>
+<td class="cmp-date">%s</td>
+</tr>`,
+					xShow,
 					c.ID, html.EscapeString(c.Name),
 					html.EscapeString(c.TemplateName),
-					c.TotalRecipients,
-					c.SentCount,
-					dlvCell,
-					failedCell,
-					statusBadge,
-					c.CostTotalINR,
+					fmtNum(c.TotalRecipients),
+					fmtNum(c.SentCount),
+					readRateCell,
+					BadgeHTML(badgeVariant, badgeLabel),
+					costStr,
 					dateStr,
-					c.ID,
-					c.ID,
-					detailHeaderHTML,
-				); err != nil {
+				)
+				if err != nil {
 					return err
 				}
 			}
 
-			if _, err := io.WriteString(w, `</tbody></table>
-</div>
-</div>
+			_, err = io.WriteString(w, `</tbody></table></div>`)
+			if err != nil {
+				return err
+			}
 
-<script>
-function toggleCmpDetail(id) {
-  var row = document.getElementById('cmp-detail-' + id);
-  var chev = document.getElementById('cmp-chev-' + id);
-  if (!row) return;
-  var open = row.style.display !== 'none';
-  row.style.display = open ? 'none' : '';
-  if (chev) chev.classList.toggle('open', !open);
-  if (!open) {
-    var inner = row.querySelector('[data-cmp-id]');
-    if (inner && !inner.dataset.loaded) {
-      inner.dataset.loaded = '1';
-      htmx.ajax('GET', '/campaigns/' + id + '/recipients', {target: inner, swap: 'innerHTML'});
-    }
-  }
-}
-</script>`); err != nil {
+			// Tier info bar.
+			_, err = fmt.Fprintf(w,
+				`<div class="cmp-tier-bar">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8h.01M12 12v4"/></svg>
+Your current tier allows <strong>%s messages / day</strong>. Increase your messaging limits by maintaining high quality ratings.
+</div>`, fmtNum(int(dailyCap)))
+			if err != nil {
+				return err
+			}
+
+			if _, err = io.WriteString(w, `</div>`); err != nil { // close cmp-list-wrap
 				return err
 			}
 		}
 
-		_, err = io.WriteString(w, `</div>`)
+		_, err = io.WriteString(w, `</div>`) // page-wrap
 		if err != nil {
 			return err
 		}
@@ -338,7 +259,7 @@ function toggleCmpDetail(id) {
 	})
 }
 
-// CampaignRecipientRows renders the expandable recipient detail rows for a campaign.
+// CampaignRecipientRows renders the expandable recipient detail rows.
 func CampaignRecipientRows(recipients []db.CampaignRecipient) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if len(recipients) == 0 {
@@ -383,550 +304,6 @@ func progressTrigger(status string) string {
 	return `load once`
 }
 
-// ── Wizard page-level wrappers (include the app shell) ────────────────────────
-
-func WizardNewPage(agent *mw.AgentClaims, tags []db.Tag) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
-			return err
-		}
-		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
-			return err
-		}
-		state := WizardState{Step: 1}
-		if err := WizardStep1(state, tags).Render(ctx, w); err != nil {
-			return err
-		}
-		_, err := io.WriteString(w, ShellClose())
-		return err
-	})
-}
-
-func WizardStep2Page(agent *mw.AgentClaims, state WizardState, tmpls []db.Template) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
-			return err
-		}
-		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
-			return err
-		}
-		if err := WizardStep2(state, tmpls).Render(ctx, w); err != nil {
-			return err
-		}
-		_, err := io.WriteString(w, ShellClose())
-		return err
-	})
-}
-
-func WizardStep2VarsPage(agent *mw.AgentClaims, state WizardState, tmpl db.Template, varNames []string) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
-			return err
-		}
-		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
-			return err
-		}
-		if err := WizardStep2Vars(state, tmpl, varNames).Render(ctx, w); err != nil {
-			return err
-		}
-		_, err := io.WriteString(w, ShellClose())
-		return err
-	})
-}
-
-func WizardStep2Vars(state WizardState, tmpl db.Template, varNames []string) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		bodyText := TemplateBodyText(tmpl)
-		// Highlight {{N}} placeholders in the preview.
-		highlighted := varPlaceholderRe.ReplaceAllStringFunc(html.EscapeString(bodyText), func(m string) string {
-			return `<mark class="var-highlight">` + m + `</mark>`
-		})
-
-		_, err := fmt.Fprintf(w, `
-<div class="page-wrap">
-<div class="wizard">
-<div class="wizard-steps">
-  <span class="step done">1 Audience</span>
-  <span class="step active" aria-current="step">2 Message</span>
-  <span class="step">3 Schedule</span>
-  <span class="step">4 Review</span>
-</div>
-<form method="post" action="/campaigns/wizard/message" class="wizard-form">
-<input type="hidden" name="wizard_state" value="%s">
-<input type="hidden" name="template_id" value="%s">
-<input type="hidden" name="vars_confirmed" value="1">
-<h2>Step 2 — Map variables</h2>
-<p style="font-size:13px;color:var(--text-secondary);margin:0 0 8px">Template: <strong style="color:var(--text)">%s</strong></p>
-<div class="var-preview">%s</div>
-<div class="var-map-table">`,
-			html.EscapeString(encodeState(state)),
-			html.EscapeString(tmpl.ID),
-			html.EscapeString(tmpl.Name),
-			highlighted)
-		if err != nil {
-			return err
-		}
-
-		for _, n := range varNames {
-			if _, err := fmt.Fprintf(w, `
-<div class="var-row" x-data="{sel:'name',custom:''}">
-  <span class="var-label">{{%s}}</span>
-  <select x-model="sel" class="form-input var-select">
-    <option value="name">Contact name</option>
-    <option value="wa_phone">WhatsApp phone</option>
-    <option value="email">Email</option>
-    <option value="_custom">Custom field…</option>
-  </select>
-  <input x-show="sel==='_custom'" x-cloak type="text" x-model="custom" placeholder="field key, e.g. order_id" class="form-input var-custom">
-  <input type="hidden" name="var_%s" :value="sel==='_custom' ? (custom ? 'custom_fields.'+custom : '') : sel">
-  <input type="text" name="fallback_%s" class="form-input var-fallback" placeholder="Fallback (required — used when field is empty)" required>
-</div>`, n, n, n); err != nil {
-				return err
-			}
-		}
-
-		_, err = fmt.Fprintf(w, `
-</div>
-<div class="wizard-btns">
-<button class="btn btn-primary" type="submit">Next: schedule &#8594;</button>
-<a class="btn btn-secondary" href="/campaigns">Cancel</a>
-</div>
-</form>
-</div>
-</div>`)
-		return err
-	})
-}
-
-func WizardStep3Page(agent *mw.AgentClaims, state WizardState) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
-			return err
-		}
-		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
-			return err
-		}
-		if err := WizardStep3(state).Render(ctx, w); err != nil {
-			return err
-		}
-		_, err := io.WriteString(w, ShellClose())
-		return err
-	})
-}
-
-func WizardStep3ErrorPage(agent *mw.AgentClaims, state WizardState, errMsg string) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
-			return err
-		}
-		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
-			return err
-		}
-		if err := WizardStep3Error(state, errMsg).Render(ctx, w); err != nil {
-			return err
-		}
-		_, err := io.WriteString(w, ShellClose())
-		return err
-	})
-}
-
-func WizardStep4Page(agent *mw.AgentClaims, state WizardState, tmpl *db.Template) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
-			return err
-		}
-		if _, err := io.WriteString(w, `<a href="/" class="wiz-back-link">&#8592; Back to Dashboard</a>`); err != nil {
-			return err
-		}
-		if err := WizardStep4(state, tmpl).Render(ctx, w); err != nil {
-			return err
-		}
-		_, err := io.WriteString(w, ShellClose())
-		return err
-	})
-}
-
-// ── Wizard steps ──────────────────────────────────────────────────────────────
-
-func WizardStep1(state WizardState, tags []db.Tag) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		segSet := make(map[int64]bool, len(state.SegmentTags))
-		for _, id := range state.SegmentTags {
-			segSet[id] = true
-		}
-		exclSet := make(map[int64]bool, len(state.ExcludeTags))
-		for _, id := range state.ExcludeTags {
-			exclSet[id] = true
-		}
-
-		segChips := ""
-		exclChips := ""
-		for _, t := range tags {
-			segChecked := ""
-			if segSet[t.ID] {
-				segChecked = " checked"
-			}
-			exclChecked := ""
-			if exclSet[t.ID] {
-				exclChecked = " checked"
-			}
-			chip := fmt.Sprintf(`<label class="tag-pick-item"><input type="checkbox" name="%s" value="%d"%s>%s</label>`,
-				"%s", t.ID, "%s", html.EscapeString(t.Name))
-			segChips += fmt.Sprintf(`<label class="tag-pick-item"><input type="checkbox" name="segment_tags" value="%d"%s>%s</label>`,
-				t.ID, segChecked, html.EscapeString(t.Name))
-			exclChips += fmt.Sprintf(`<label class="tag-pick-item"><input type="checkbox" name="exclude_tags" value="%d"%s>%s</label>`,
-				t.ID, exclChecked, html.EscapeString(t.Name))
-			_ = chip
-		}
-		emptyHint := ""
-		if len(tags) == 0 {
-			emptyHint = `<span class="tag-pick-empty">No tags yet — all opted-in contacts will be included</span>`
-		}
-
-		_, err := fmt.Fprintf(w, `
-<div class="page-wrap">
-<div class="wizard">
-<div class="wizard-steps">
-  <span class="step active" aria-current="step">1 Audience</span>
-  <span class="step">2 Message</span>
-  <span class="step">3 Schedule</span>
-  <span class="step">4 Review</span>
-</div>
-<form method="post" action="/campaigns/wizard/audience" class="wizard-form">
-  <h2>Step 1 — Name &amp; audience</h2>
-
-  <div class="form-group">
-    <label class="form-label" for="cmp-name">Campaign name</label>
-    <input id="cmp-name" class="form-input" type="text" name="name" value="%s" required placeholder="June promo">
-  </div>
-
-  <div class="aud-cols">
-    <div class="form-group">
-      <label class="form-label">Include tags</label>
-      <p class="tag-pick-hint">Contacts must have ALL selected tags. Leave blank for all opted-in.</p>
-      <div class="tag-pick-wrap">%s%s</div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Exclude tags</label>
-      <p class="tag-pick-hint">Contacts with ANY of these tags are excluded.</p>
-      <div class="tag-pick-wrap">%s%s</div>
-    </div>
-  </div>
-
-  <div class="wizard-btns">
-    <button class="btn btn-primary" type="submit">Next: choose message →</button>
-    <a class="btn btn-secondary" href="/campaigns">Cancel</a>
-  </div>
-</form>
-</div>
-</div>`,
-			html.EscapeString(state.Name),
-			segChips, emptyHint,
-			exclChips, emptyHint)
-		return err
-	})
-}
-
-// WizardStep2 renders the template-picker with the US-exclusion + freq-cap callout.
-func WizardStep2(state WizardState, tmpls []db.Template) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		// Guardrails 4+5: US exclusion and frequency-cap warning callout.
-		skipCallout := ""
-		if state.SkipReport.USNumber > 0 || state.SkipReport.FreqCap > 0 {
-			var msg string
-			switch {
-			case state.SkipReport.USNumber > 0 && state.SkipReport.FreqCap > 0:
-				msg = fmt.Sprintf(
-					"%d US (+1) numbers skipped for marketing · %d skipped (frequency cap, last 24h)",
-					state.SkipReport.USNumber, state.SkipReport.FreqCap)
-			case state.SkipReport.USNumber > 0:
-				msg = fmt.Sprintf("%d US (+1) numbers skipped for marketing",
-					state.SkipReport.USNumber)
-			default:
-				msg = fmt.Sprintf("%d contacts skipped (frequency cap, last 24h)",
-					state.SkipReport.FreqCap)
-			}
-			skipCallout = CalloutHTML("warning", msg)
-		}
-
-		_, err := fmt.Fprintf(w, `
-<div class="page-wrap">
-<div class="wizard">
-<div class="wizard-steps">
-  <span class="step done">1 Audience</span>
-  <span class="step active" aria-current="step">2 Message</span>
-  <span class="step">3 Schedule</span>
-  <span class="step">4 Review</span>
-</div>
-<form method="post" action="/campaigns/wizard/message" class="wizard-form">
-<input type="hidden" name="wizard_state" value="%s">
-<h2>Step 2 — Choose template</h2>
-<p style="margin:0;font-size:14px;color:var(--text-secondary)">Eligible recipients: <strong style="color:var(--text)">%d</strong></p>
-%s
-<fieldset class="tmpl-picker">`,
-			html.EscapeString(encodeState(state)),
-			state.EligibleCount, skipCallout)
-		if err != nil {
-			return err
-		}
-
-		for _, t := range tmpls {
-			checked := ""
-			if t.ID == state.TemplateID {
-				checked = " checked"
-			}
-			if _, err := fmt.Fprintf(w,
-				`<label class="tmpl-option">
-<input type="radio" name="template_id" value="%s"%s>
-<strong>%s</strong> %s / %s / %s
-</label>`,
-				t.ID, checked, html.EscapeString(t.Name),
-				BadgeHTML(t.Status, t.Status), t.Language, t.Category,
-			); err != nil {
-				return err
-			}
-		}
-
-		_, err = fmt.Fprintf(w, `</fieldset>
-<div class="wizard-btns">
-<button class="btn btn-primary" type="submit">Next: schedule →</button>
-<a class="btn btn-secondary" href="/campaigns">Cancel</a>
-</div>
-</form>
-</div>
-</div>`)
-		return err
-	})
-}
-
-func WizardStep3(state WizardState) templ.Component {
-	return wizardStep3Inner(state, "")
-}
-
-func WizardStep3Error(state WizardState, errMsg string) templ.Component {
-	return wizardStep3Inner(state, errMsg)
-}
-
-// wizardStep3Inner renders the schedule step with an Alpine-driven quiet-hours
-// guardrail (guardrail 3): the callout appears and submit is disabled when the
-// chosen time falls in the IST quiet window (21:00–09:00).
-func wizardStep3Inner(state WizardState, errMsg string) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		errHTML := ""
-		if errMsg != "" {
-			errHTML = CalloutHTML("warning", errMsg)
-		}
-		_, err := fmt.Fprintf(w, `
-<div class="page-wrap">
-<div class="wizard">
-<div class="wizard-steps">
-  <span class="step done">1 Audience</span>
-  <span class="step done">2 Message</span>
-  <span class="step active" aria-current="step">3 Schedule</span>
-  <span class="step">4 Review</span>
-</div>
-<form method="post" action="/campaigns/wizard/schedule" class="wizard-form"
-  x-data="scheduleStep()"
-  @submit.prevent="if (!inQuietHours) $el.submit()">
-<input type="hidden" name="wizard_state" value="%s">
-<h2>Step 3 — Schedule</h2>
-%s
-<fieldset style="border:none;padding:0;margin:0;display:flex;flex-direction:column;gap:12px">
-<label class="radio-row" style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
-<input type="radio" name="schedule_type" value="now" x-model="schedType" style="accent-color:var(--accent)"> Send now
-</label>
-<label class="radio-row" style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
-<input type="radio" name="schedule_type" value="scheduled" x-model="schedType" style="accent-color:var(--accent)"> Schedule for later
-</label>
-<div class="form-group" x-show="schedType === 'scheduled'">
-<label class="form-label" for="sched-at">Date &amp; time (IST)</label>
-<input id="sched-at" class="form-input" type="datetime-local" name="scheduled_at" x-model="scheduledAt">
-</div>
-</fieldset>
-<div class="callout callout--warning" x-show="inQuietHours" x-cloak role="alert">
-<span aria-hidden="true">⚠</span>
-Quiet hours: 9&nbsp;pm–9&nbsp;am IST. Choose a time between 9&nbsp;am and 9&nbsp;pm.
-</div>
-<div class="wizard-btns">
-<button class="btn btn-primary" type="submit"
-  :disabled="inQuietHours"
-  :aria-disabled="String(inQuietHours)">Next: review →</button>
-<a class="btn btn-secondary" href="/campaigns">Cancel</a>
-</div>
-</form>
-</div>
-</div>
-<script>
-function scheduleStep() {
-  return {
-    schedType: 'now',
-    scheduledAt: '',
-    get inQuietHours() {
-      if (this.schedType !== 'scheduled' || !this.scheduledAt) return false;
-      var parts = (this.scheduledAt.split('T')[1] || '').split(':');
-      var h = parseInt(parts[0], 10), m = parseInt(parts[1] || '0', 10);
-      var total = h * 60 + m;
-      return total < 9 * 60 || total >= 21 * 60;
-    }
-  };
-}
-</script>`, html.EscapeString(encodeState(state)), errHTML)
-		return err
-	})
-}
-
-// WizardStep4 renders the review step with a tier-cap banner (guardrail 1/2)
-// and a confirm-send <dialog> modal. The "Launch campaign" button opens the
-// dialog; only the dialog's "Confirm & send" button actually submits the form.
-func WizardStep4(state WizardState, tmpl *db.Template) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		schedInfo := "Send immediately"
-		if state.ScheduleType == "scheduled" && state.ScheduledAt != nil {
-			schedInfo = "Scheduled for " + state.ScheduledAt.Format("02 Jan 2006 15:04 IST")
-		}
-		tmplName := ""
-		tmplCategory := "marketing"
-		if tmpl != nil {
-			tmplName = tmpl.Name
-			tmplCategory = tmpl.Category
-		}
-
-		// Guardrail 1: tier-cap banner. Skipped when DailyCap is unknown (0).
-		tierBanner := ""
-		if state.DailyCap > 0 {
-			projected := state.DailySent + state.EligibleCount
-			remaining := state.DailyCap - state.DailySent
-			if remaining < 0 {
-				remaining = 0
-			}
-			pct := projected * 100 / state.DailyCap
-			switch {
-			case projected >= state.DailyCap:
-				tierBanner = CalloutHTML("danger", fmt.Sprintf(
-					"This campaign (%d messages) would exceed your daily cap of %d — it will be blocked at launch. Reduce audience or try tomorrow.",
-					state.EligibleCount, state.DailyCap))
-			case pct >= 70:
-				tierBanner = CalloutHTML("warning", fmt.Sprintf(
-					"Adding %d messages brings today's projected total to %d%% of your %d daily cap (%d sent so far).",
-					state.EligibleCount, pct, state.DailyCap, state.DailySent))
-			default:
-				tierBanner = CalloutHTML("info", fmt.Sprintf(
-					"Daily cap: %d sent · %d remaining · this campaign: %d messages.",
-					state.DailySent, remaining, state.EligibleCount))
-			}
-		}
-
-		// The form carries no submit button of its own; the confirm dialog's
-		// "Confirm & send" button submits it via form="launch-form".
-		confirmInner := fmt.Sprintf(
-			`<h2 id="confirm-launch-title">Confirm campaign launch</h2>`+
-				`<div class="confirm-summary"><dl>`+
-				`<dt>Recipients</dt><dd>%d contacts</dd>`+
-				`<dt>Category</dt><dd>%s</dd>`+
-				`<dt>Estimated cost</dt><dd>&#8377;%.2f (incl. 18%% GST)</dd>`+
-				`</dl></div>`+
-				`<p class="confirm-note">This action cannot be undone. %d messages will be queued for delivery.</p>`+
-				`<div class="confirm-btns">`+
-				`<button type="button" class="btn btn-secondary" onclick="document.getElementById('confirm-launch').close()">Cancel</button>`+
-				`<button type="submit" form="launch-form" class="btn btn-primary">Confirm &amp; send to %d contacts</button>`+
-				`</div>`,
-			state.EligibleCount,
-			html.EscapeString(tmplCategory),
-			state.EstCost,
-			state.EligibleCount,
-			state.EligibleCount,
-		)
-		_, err := fmt.Fprintf(w, `
-<div class="page-wrap">
-<div class="wizard">
-<div class="wizard-steps">
-  <span class="step done">1 Audience</span>
-  <span class="step done">2 Message</span>
-  <span class="step done">3 Schedule</span>
-  <span class="step active" aria-current="step">4 Review</span>
-</div>
-<form id="launch-form" method="post" action="/campaigns" class="wizard-form">
-<input type="hidden" name="wizard_state" value="%s">
-<h2>Step 4 — Review &amp; launch</h2>
-%s
-<div style="display:flex;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:var(--radius)">
-  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Campaign name</span><span class="stt-info-val">%s</span></div>
-  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Recipients</span><span class="stt-info-val">%d eligible</span></div>
-  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Template</span><span class="stt-info-val">%s</span></div>
-  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Category</span><span class="stt-info-val">%s</span></div>
-  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Scheduling</span><span class="stt-info-val">%s</span></div>
-  <div class="stt-info-row" style="padding:12px 16px;border-bottom:none"><span class="stt-info-key">Estimated cost</span><span class="stt-info-val">&#8377;%.2f</span></div>
-</div>
-<div class="wizard-btns">
-<button type="button" class="btn btn-primary"
-  onclick="openModal('confirm-launch',this)">Review &amp; launch &#8594;</button>
-<a class="btn btn-secondary" href="/campaigns">Cancel</a>
-</div>
-</form>
-</div>
-</div>
-%s`,
-			html.EscapeString(encodeState(state)),
-			tierBanner,
-			html.EscapeString(state.Name),
-			state.EligibleCount,
-			html.EscapeString(tmplName),
-			html.EscapeString(tmplCategory),
-			html.EscapeString(schedInfo),
-			state.EstCost,
-			ModalShellRaw("confirm-launch", "confirm-dialog", "confirm-launch-title", confirmInner),
-		)
-		return err
-	})
-}
-
-func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "Campaign Report", "")); err != nil {
-			return err
-		}
-		sched := "—"
-		if report.ScheduledAt != nil {
-			sched = report.ScheduledAt.Format("02 Jan 2006 15:04")
-		}
-		_, err := fmt.Fprintf(w, `
-<div class="page-wrap">
-<div class="page-hd">
-<div class="screen-title">%s</div>
-%s
-</div>
-<div class="stat-grid stat-grid--report">
-<div class="stat-card"><div class="stat-label">Total recipients</div><div class="stat-value">%d</div></div>
-<div class="stat-card"><div class="stat-label">Sent</div><div class="stat-value">%d</div></div>
-<div class="stat-card"><div class="stat-label">Delivered</div><div class="stat-value">%d</div></div>
-<div class="stat-card"><div class="stat-label">Read</div><div class="stat-value">%d</div></div>
-<div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value">%d</div></div>
-<div class="stat-card"><div class="stat-label">Clicked</div><div class="stat-value">%d</div></div>
-<div class="stat-card"><div class="stat-label">Total cost</div><div class="stat-value">₹%.2f</div></div>
-</div>
-<div class="card-static" style="display:flex;flex-direction:column;gap:0;margin-top:var(--gutter)">
-  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Template</span><span class="stt-info-val">%s</span></div>
-  <div class="stt-info-row" style="padding:12px 16px"><span class="stt-info-key">Category</span><span class="stt-info-val">%s</span></div>
-  <div class="stt-info-row" style="padding:12px 16px;border-bottom:none"><span class="stt-info-key">Scheduled</span><span class="stt-info-val">%s</span></div>
-</div>
-</div>`,
-			html.EscapeString(report.Name),
-			BadgeHTML(report.Status, report.Status),
-			report.TotalRecipients, report.SentCount, report.DeliveredCount,
-			report.ReadCount, report.FailedCount, report.ClickCount,
-			report.CostTotalINR,
-			html.EscapeString(report.TemplateName),
-			report.Category,
-			sched,
-		)
-		if err != nil {
-			return err
-		}
-		_, err = io.WriteString(w, ShellClose())
-		return err
-	})
-}
-
 func CampaignProgressBar(campaign db.Campaign) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		pct := 0
@@ -946,4 +323,1321 @@ func CampaignProgressBar(campaign db.Campaign) templ.Component {
 		)
 		return err
 	})
+}
+
+func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport, failed []db.FailedRecipient, hourly []db.HourlyCount) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "Campaign — "+report.Name, "")); err != nil {
+			return err
+		}
+
+		// ── Header ──────────────────────────────────────────────────────────
+		dateStr := report.CreatedAt.Format("02 Jan 2006")
+		if report.CompletedAt != nil {
+			dateStr = report.CompletedAt.Format("02 Jan 2006")
+		}
+		if report.ScheduledAt != nil {
+			dateStr = report.ScheduledAt.Format("02 Jan 2006")
+		}
+
+		badgeVariant := report.Status
+		switch report.Status {
+		case "completed":
+			badgeVariant = "approved"
+		case "running":
+			badgeVariant = "sending"
+		case "paused":
+			badgeVariant = "warning"
+		case "scheduled":
+			badgeVariant = "pending"
+		}
+
+		_, err := fmt.Fprintf(w, `
+<div class="page-wrap rpt-wrap">
+<div class="rpt-hd">
+<div class="rpt-hd-left">
+<a href="/campaigns" class="rpt-back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg></a>
+<div>
+<div class="rpt-title">%s %s</div>
+<div class="rpt-sub">%s &nbsp;<code class="rpt-tmpl-slug">%s</code></div>
+</div>
+</div>
+<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+Export
+</a>
+</div>`,
+			html.EscapeString(report.Name),
+			BadgeHTML(badgeVariant, report.Status),
+			dateStr,
+			html.EscapeString(report.TemplateName),
+			report.ID,
+		)
+		if err != nil {
+			return err
+		}
+
+		// ── Stat cards ───────────────────────────────────────────────────────
+		dlvPct := ""
+		if report.SentCount > 0 {
+			dlvPct = fmt.Sprintf("%d%% of sent", report.DeliveredCount*100/report.SentCount)
+		}
+		readPct := ""
+		if report.SentCount > 0 {
+			readPct = fmt.Sprintf("%d%% read rate", report.ReadCount*100/report.SentCount)
+		}
+
+		_, err = fmt.Fprintf(w, `
+<div class="rpt-stat-row">
+<div class="rpt-stat-card"><div class="rpt-stat-label">TARGETED</div><div class="rpt-stat-val">%s</div><div class="rpt-stat-sub">total recipients</div></div>
+<div class="rpt-stat-card"><div class="rpt-stat-label">SENT</div><div class="rpt-stat-val">%s</div><div class="rpt-stat-sub">messages dispatched</div></div>
+<div class="rpt-stat-card"><div class="rpt-stat-label">DELIVERED</div><div class="rpt-stat-val">%s</div><div class="rpt-stat-sub">%s</div></div>
+<div class="rpt-stat-card rpt-stat-card--read"><div class="rpt-stat-label">READ</div><div class="rpt-stat-val rpt-stat-val--read">%s</div><div class="rpt-stat-sub">%s</div></div>
+<div class="rpt-stat-card rpt-stat-card--fail"><div class="rpt-stat-label">FAILED</div><div class="rpt-stat-val rpt-stat-val--fail">%s</div><div class="rpt-stat-sub">not delivered</div></div>
+</div>`,
+			fmtNum(report.TotalRecipients),
+			fmtNum(report.SentCount),
+			fmtNum(report.DeliveredCount), dlvPct,
+			fmtNum(report.ReadCount), readPct,
+			fmtNum(report.FailedCount),
+		)
+		if err != nil {
+			return err
+		}
+
+		// ── Two-column body: left (funnel + chart) | right (info + rate) ───
+		if _, err = io.WriteString(w, `<div class="rpt-body">`); err != nil {
+			return err
+		}
+
+		// Left column.
+		if _, err = io.WriteString(w, `<div class="rpt-left">`); err != nil {
+			return err
+		}
+
+		// Delivery funnel.
+		type funnelRow struct {
+			Label string
+			Count int
+			Total int
+		}
+		funnelRows := []funnelRow{
+			{"Targeted", report.TotalRecipients, report.TotalRecipients},
+			{"Sent", report.SentCount, report.TotalRecipients},
+			{"Delivered", report.DeliveredCount, report.TotalRecipients},
+			{"Read", report.ReadCount, report.TotalRecipients},
+		}
+		if _, err = io.WriteString(w, `<div class="rpt-card rpt-funnel-card"><div class="rpt-card-hd"><span class="rpt-card-title">Delivery funnel</span><span class="rpt-card-sub">showing drop-off at each stage</span></div>`); err != nil {
+			return err
+		}
+		for i, row := range funnelRows {
+			pct := 100
+			if row.Total > 0 {
+				pct = row.Count * 100 / row.Total
+			}
+			barClass := "rpt-funnel-bar--base"
+			switch i {
+			case 1:
+				barClass = "rpt-funnel-bar--sent"
+			case 2:
+				barClass = "rpt-funnel-bar--dlv"
+			case 3:
+				barClass = "rpt-funnel-bar--read"
+			}
+			_, err = fmt.Fprintf(w,
+				`<div class="rpt-funnel-row">
+<span class="rpt-funnel-label">%s</span>
+<div class="rpt-funnel-track"><div class="rpt-funnel-bar %s" style="width:%d%%"><span class="rpt-funnel-count">%s</span></div></div>
+<span class="rpt-funnel-pct">%d%%</span>
+</div>`, row.Label, barClass, pct, fmtNum(row.Count), pct)
+			if err != nil {
+				return err
+			}
+		}
+		if _, err = io.WriteString(w, `</div>`); err != nil { // funnel-card
+			return err
+		}
+
+		// Hourly send distribution.
+		if _, err = io.WriteString(w, `<div class="rpt-card rpt-dist-card"><div class="rpt-card-hd"><span class="rpt-card-title">Send distribution</span><span class="rpt-card-sub">by hour (IST)</span></div>`); err != nil {
+			return err
+		}
+		if len(hourly) == 0 {
+			_, err = io.WriteString(w, `<div class="rpt-dist-empty">No send data yet</div>`)
+		} else {
+			maxCount := 0
+			for _, h := range hourly {
+				if h.Count > maxCount {
+					maxCount = h.Count
+				}
+			}
+			_, err = io.WriteString(w, `<div class="rpt-dist-chart">`)
+			if err != nil {
+				return err
+			}
+			for _, h := range hourly {
+				heightPct := 0
+				if maxCount > 0 {
+					heightPct = h.Count * 100 / maxCount
+				}
+				label := fmt.Sprintf("%dAM", h.Hour)
+				if h.Hour == 0 {
+					label = "12AM"
+				} else if h.Hour == 12 {
+					label = "12PM"
+				} else if h.Hour > 12 {
+					label = fmt.Sprintf("%dPM", h.Hour-12)
+				}
+				_, err = fmt.Fprintf(w,
+					`<div class="rpt-dist-col"><div class="rpt-dist-bar-wrap"><div class="rpt-dist-bar" style="height:%d%%"></div></div><span class="rpt-dist-lbl">%s</span></div>`,
+					heightPct, label)
+				if err != nil {
+					return err
+				}
+			}
+			_, err = io.WriteString(w, `</div>`)
+		}
+		if err != nil {
+			return err
+		}
+		if _, err = io.WriteString(w, `<div class="rpt-dist-hint">Peak sending in first 2 hours after launch</div></div>`); err != nil {
+			return err
+		}
+
+		if _, err = io.WriteString(w, `</div>`); err != nil { // rpt-left
+			return err
+		}
+
+		// Right column.
+		if _, err = io.WriteString(w, `<div class="rpt-right">`); err != nil {
+			return err
+		}
+
+		// Campaign info card.
+		audienceStr := fmt.Sprintf("%s contacts", fmtNum(report.TotalRecipients))
+		_, err = fmt.Fprintf(w, `
+<div class="rpt-card rpt-info-card">
+<div class="rpt-card-title" style="margin-bottom:12px">Campaign info</div>
+<div class="rpt-info-row"><span class="rpt-info-key">Template</span><code class="rpt-info-tmpl">%s</code></div>
+<div class="rpt-info-row"><span class="rpt-info-key">Audience</span><span class="rpt-info-val">%s</span></div>
+<div class="rpt-info-row"><span class="rpt-info-key">Sent</span><span class="rpt-info-val">%s</span></div>
+<div class="rpt-info-row"><span class="rpt-info-key">Date</span><span class="rpt-info-val">%s</span></div>
+<div class="rpt-info-row rpt-info-row--last"><span class="rpt-info-key">Cost</span><span class="rpt-info-val">&#8377;%.2f</span></div>
+</div>`,
+			html.EscapeString(report.TemplateName),
+			audienceStr,
+			fmtNum(report.SentCount),
+			dateStr,
+			report.CostTotalINR,
+		)
+		if err != nil {
+			return err
+		}
+
+		// Read rate card.
+		readRate := 0
+		if report.SentCount > 0 {
+			readRate = report.ReadCount * 100 / report.SentCount
+		}
+		rateLabel := "Below average"
+		rateStar := false
+		if readRate >= 65 {
+			rateLabel = "Excellent — above 65% industry avg"
+			rateStar = true
+		} else if readRate >= 30 {
+			rateLabel = "Average — above 30% industry avg"
+		}
+		starHTML := ""
+		if rateStar {
+			starHTML = `&#11088; `
+		}
+		_, err = fmt.Fprintf(w, `
+<div class="rpt-card rpt-rate-card">
+<div class="rpt-card-title">Read rate</div>
+<div class="rpt-rate-big">%d%%</div>
+<div class="rpt-rate-track"><div class="rpt-rate-fill" style="width:%d%%"></div></div>
+<div class="rpt-rate-label">%s%s</div>
+</div>`, readRate, readRate, starHTML, rateLabel)
+		if err != nil {
+			return err
+		}
+
+		// Failure breakdown (right sidebar).
+		if report.FailedCount > 0 {
+			failCounts := map[string]int{}
+			for _, fr := range failed {
+				failCounts[fr.FailCategory]++
+			}
+			_, err = io.WriteString(w, `<div class="rpt-card rpt-fail-card"><div class="rpt-card-title">Failure breakdown</div>`)
+			if err != nil {
+				return err
+			}
+			type failCat struct {
+				key   string
+				label string
+				dot   string
+			}
+			cats := []failCat{
+				{"opted_out", "Opted out", "sdot--orange"},
+				{"invalid_number", "Invalid number", "sdot--gray"},
+				{"limit_reached", "Limit reached", "sdot--purple"},
+				{"blocked", "Blocked", "sdot--red"},
+				{"rejected", "Rejected", "sdot--darkred"},
+			}
+			for _, cat := range cats {
+				if n := failCounts[cat.key]; n > 0 {
+					_, err = fmt.Fprintf(w,
+						`<div class="rpt-fail-row"><span class="sdot %s"></span><span class="rpt-fail-label">%s</span><span class="rpt-fail-count">%d</span></div>`,
+						cat.dot, cat.label, n)
+					if err != nil {
+						return err
+					}
+				}
+			}
+			if _, err = io.WriteString(w, `</div>`); err != nil {
+				return err
+			}
+		}
+
+		if _, err = io.WriteString(w, `</div>`); err != nil { // rpt-right
+			return err
+		}
+		if _, err = io.WriteString(w, `</div>`); err != nil { // rpt-body
+			return err
+		}
+
+		// ── Failed & undelivered contacts ────────────────────────────────────
+		if len(failed) > 0 {
+			// Compute counts per category.
+			failCats := map[string]int{}
+			for _, fr := range failed {
+				failCats[fr.FailCategory]++
+			}
+
+			_, err = fmt.Fprintf(w, `
+<div class="rpt-card rpt-failed-section" x-data="{cat:'all'}">
+<div class="rpt-failed-hd">
+<div><span class="rpt-card-title">Failed &amp; undelivered contacts</span> <span class="rpt-failed-total">%d total</span></div>
+<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export?type=failed">
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+Export list</a>
+</div>`, len(failed), report.ID)
+			if err != nil {
+				return err
+			}
+
+			// Filter pills.
+			type pill struct {
+				key   string
+				label string
+				dot   string
+			}
+			pills := []pill{{"all", fmt.Sprintf("All %d", len(failed)), ""}}
+			for _, k := range []struct{ key, label, dot string }{
+				{"opted_out", "Opted out", "sdot--orange"},
+				{"invalid_number", "Invalid number", "sdot--gray"},
+				{"limit_reached", "Limit reached", "sdot--purple"},
+				{"blocked", "Blocked", "sdot--red"},
+				{"rejected", "Rejected", "sdot--darkred"},
+			} {
+				if n := failCats[k.key]; n > 0 {
+					pills = append(pills, pill{k.key, fmt.Sprintf("%s %d", k.label, n), k.dot})
+				}
+			}
+
+			_, err = io.WriteString(w, `<div class="rpt-failed-pills">`)
+			if err != nil {
+				return err
+			}
+			for _, p := range pills {
+				dotHTML := ""
+				if p.dot != "" {
+					dotHTML = fmt.Sprintf(`<span class="sdot %s"></span>`, p.dot)
+				}
+				_, err = fmt.Fprintf(w,
+					`<button class="rpt-fail-pill" :class="{active:cat===%s}" @click="cat=%s" type="button">%s%s</button>`,
+					jsLit(p.key), jsLit(p.key), dotHTML, html.EscapeString(p.label))
+				if err != nil {
+					return err
+				}
+			}
+			if _, err = io.WriteString(w, `</div>`); err != nil {
+				return err
+			}
+
+			// Failed contacts table.
+			if _, err = io.WriteString(w, `
+<table class="tbl rpt-failed-tbl">
+<thead><tr><th>CONTACT</th><th>PHONE NUMBER</th><th>FAILURE REASON</th><th>CATEGORY</th><th>TIME</th></tr></thead>
+<tbody>`); err != nil {
+				return err
+			}
+
+			catBadgeMap := map[string][2]string{
+				"opted_out":      {"badge-warning", "Opted out"},
+				"invalid_number": {"badge-neutral", "Invalid number"},
+				"limit_reached":  {"badge-purple", "Limit reached"},
+				"blocked":        {"badge-danger", "Blocked"},
+				"rejected":       {"badge-danger", "Rejected"},
+			}
+
+			for _, fr := range failed {
+				initials := contactInitials(fr.Name)
+				avatarColor := avatarColor(fr.Name)
+				timeStr := "—"
+				if fr.FailedAt != nil {
+					timeStr = fr.FailedAt.Format("3:04 PM")
+				}
+				catInfo := catBadgeMap[fr.FailCategory]
+				catBadge := fmt.Sprintf(`<span class="badge %s">%s</span>`, catInfo[0], catInfo[1])
+				xShow := fmt.Sprintf(`cat==='all'||cat===%s`, jsLit(fr.FailCategory))
+
+				_, err = fmt.Fprintf(w,
+					`<tr x-show="%s">
+<td><div class="rpt-contact-cell"><div class="rpt-av" style="background:%s">%s</div><span>%s</span></div></td>
+<td class="rpt-phone">%s</td>
+<td class="rpt-fail-reason">%s</td>
+<td>%s</td>
+<td class="rpt-time">%s</td>
+</tr>`,
+					xShow,
+					avatarColor, initials,
+					html.EscapeString(fr.Name),
+					html.EscapeString(fr.WAPhone),
+					html.EscapeString(humanizeFailReason(fr.FailReason, fr.FailCategory)),
+					catBadge,
+					timeStr,
+				)
+				if err != nil {
+					return err
+				}
+			}
+
+			if _, err = io.WriteString(w, `</tbody></table></div>`); err != nil {
+				return err
+			}
+		}
+
+		_, err = io.WriteString(w, `</div>`) // page-wrap
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(w, ShellClose())
+		return err
+	})
+}
+
+// contactInitials returns up to 2 uppercase initials from a name.
+func contactInitials(name string) string {
+	parts := strings.Fields(name)
+	if len(parts) == 0 {
+		return "?"
+	}
+	if len(parts) == 1 {
+		r := []rune(parts[0])
+		if len(r) > 0 {
+			return strings.ToUpper(string(r[0]))
+		}
+	}
+	r0 := []rune(parts[0])
+	r1 := []rune(parts[len(parts)-1])
+	if len(r0) > 0 && len(r1) > 0 {
+		return strings.ToUpper(string(r0[0]) + string(r1[0]))
+	}
+	return strings.ToUpper(string(r0[0]))
+}
+
+
+// humanizeFailReason converts a raw skip_reason to a readable message.
+func humanizeFailReason(reason, category string) string {
+	switch category {
+	case "opted_out":
+		return "Contact opted out before send"
+	case "limit_reached":
+		return "Daily messaging limit reached"
+	case "blocked":
+		return "User has blocked the business number"
+	case "invalid_number":
+		if strings.Contains(strings.ToLower(reason), "deactivat") || strings.Contains(strings.ToLower(reason), "ported") {
+			return "Number deactivated or ported"
+		}
+		return "Number not registered on WhatsApp"
+	default:
+		if reason != "" {
+			return reason
+		}
+		return "Message rejected"
+	}
+}
+
+// fmtNum formats an int with comma separators.
+func fmtNum(n int) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+	s := fmt.Sprintf("%d", n)
+	var b strings.Builder
+	for i, r := range s {
+		rem := len(s) - i
+		if i > 0 && rem%3 == 0 {
+			b.WriteRune(',')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// ── Wizard helpers ────────────────────────────────────────────────────────────
+
+var wizStepLabels = []string{"Basics", "Template", "Variables", "Audience", "Schedule", "Review"}
+
+// wizOpen writes the wizard shell: app shell + sidebar + form open tag.
+func wizOpen(w io.Writer, agent *mw.AgentClaims, state WizardState, formAction, errMsg string) error {
+	if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "New Campaign", "")); err != nil {
+		return err
+	}
+	// Sidebar
+	sidebar := `<nav class="wiz-fp-nav" aria-label="Wizard steps"><div class="wiz-fp-nav-title">New Campaign</div>`
+	for i, label := range wizStepLabels {
+		n := i + 1
+		cls := "wiz-fp-step"
+		numHTML := fmt.Sprintf(`%d`, n)
+		if n < state.Step {
+			cls += " wiz-fp-step--done"
+			numHTML = `&#10003;`
+		} else if n == state.Step {
+			cls += " wiz-fp-step--active"
+		}
+		sidebar += fmt.Sprintf(`<div class="%s"><span class="wiz-fp-step-num">%s</span><span class="wiz-fp-step-label">%s</span></div>`, cls, numHTML, label)
+	}
+	sidebar += `</nav>`
+
+	// Dots
+	dots := `<div class="wiz-fp-dots" aria-hidden="true">`
+	for i := range wizStepLabels {
+		n := i + 1
+		if n <= state.Step {
+			dots += `<span class="wiz-fp-dot wiz-fp-dot--done"></span>`
+		} else {
+			dots += `<span class="wiz-fp-dot"></span>`
+		}
+	}
+	dots += `</div>`
+
+	errBanner := ""
+	if errMsg != "" {
+		errBanner = `<div class="callout callout--warning" role="alert" style="margin-bottom:0">` + html.EscapeString(errMsg) + `</div>`
+	}
+
+	_, err := fmt.Fprintf(w, `
+<div class="wiz-fp-root">
+%s
+<form id="wiz-form" method="post" action="%s" class="wiz-fp-body" autocomplete="off">
+<input type="hidden" name="wizard_state" value="%s">
+<div class="wiz-fp-inner" id="wiz-inner">
+`,
+		sidebar,
+		html.EscapeString(formAction),
+		html.EscapeString(encodeState(state)),
+	)
+	if err != nil {
+		return err
+	}
+	if errBanner != "" {
+		if _, err := fmt.Fprintf(w, `<div style="grid-column:1/-1;padding:16px 32px 0">%s</div>`, errBanner); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// wizClose writes the footer nav bar and closes all tags.
+// disabledExpr is an Alpine expression for :disabled (empty = always enabled).
+// onclickExpr makes the continue button type=button with the given onclick
+// instead of a form submit (used for the review step's modal trigger).
+func wizClose(w io.Writer, state WizardState, backLabel, continueLabel, disabledExpr, onclickExpr string) error {
+	dots := `<div class="wiz-fp-dots" aria-hidden="true">`
+	for i := range wizStepLabels {
+		n := i + 1
+		if n <= state.Step {
+			dots += `<span class="wiz-fp-dot wiz-fp-dot--done"></span>`
+		} else {
+			dots += `<span class="wiz-fp-dot"></span>`
+		}
+	}
+	dots += `</div>`
+
+	backBtn := ""
+	if state.Step == 1 {
+		backBtn = `<a class="btn btn-secondary" href="/campaigns">Cancel</a>`
+	} else {
+		backBtn = `<button class="btn btn-secondary" type="submit" name="action" value="back">&#8592; ` + html.EscapeString(backLabel) + `</button>`
+	}
+
+	var continueBtn string
+	if onclickExpr != "" {
+		attr := ""
+		if disabledExpr != "" {
+			attr = ` :disabled="` + disabledExpr + `"`
+		}
+		continueBtn = fmt.Sprintf(`<button class="btn btn-primary" type="button" onclick="%s"%s>%s</button>`,
+			html.EscapeString(onclickExpr), attr, html.EscapeString(continueLabel))
+	} else {
+		attr := ""
+		if disabledExpr != "" {
+			attr = ` :disabled="` + disabledExpr + `"`
+		}
+		continueBtn = fmt.Sprintf(`<button class="btn btn-primary" type="submit" name="action" value="next"%s>%s</button>`,
+			attr, html.EscapeString(continueLabel))
+	}
+
+	_, err := fmt.Fprintf(w, `
+</div><!-- wiz-fp-inner -->
+<div class="wiz-fp-footer">
+%s
+%s
+%s
+</div>
+</form>
+</div><!-- wiz-fp-root -->
+`,
+		backBtn, dots, continueBtn,
+	)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, ShellClose())
+	return err
+}
+
+// ── Wizard step 1: Basics ─────────────────────────────────────────────────────
+
+func WizardBasicsPage(agent *mw.AgentClaims, state WizardState, rates db.ConfigRates, errMsg string) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		if err := wizOpen(w, agent, state, "/campaigns/wizard/basics", errMsg); err != nil {
+			return err
+		}
+
+		mktRate := fmtRate(rates.Marketing, rates.GSTRate)
+		utlRate := fmtRate(rates.Utility, rates.GSTRate)
+		authRate := fmtRate(rates.Auth, rates.GSTRate)
+
+		mktSel := selAttr(state.Category, "marketing")
+		utlSel := selAttr(state.Category, "utility")
+		authSel := selAttr(state.Category, "authentication")
+
+		_, err := fmt.Fprintf(w, `
+<div class="wiz-fp-form wiz-fp-form--full">
+<div class="wiz-fp-hd">
+  <h2>Campaign basics</h2>
+  <p>Name your campaign and set its type.</p>
+</div>
+
+<div class="field">
+  <label for="cmp-name">Campaign name <span style="color:var(--danger)">*</span></label>
+  <input id="cmp-name" type="text" name="name" value="%s" required placeholder="e.g. Diwali Sale 2026" autofocus>
+</div>
+
+<div>
+  <label class="form-label" style="margin-bottom:10px;display:block">Campaign type</label>
+  <div class="ctype-cards">
+    <label class="ctype-card">
+      <input class="ctype-card-radio" type="radio" name="category" value="marketing"%s>
+      <div class="ctype-card-body">
+        <div class="ctype-card-name">Marketing</div>
+        <div class="ctype-card-desc">Promotions, offers, announcements</div>
+      </div>
+      <span class="ctype-card-price">%s</span>
+    </label>
+    <label class="ctype-card">
+      <input class="ctype-card-radio" type="radio" name="category" value="utility"%s>
+      <div class="ctype-card-body">
+        <div class="ctype-card-name">Utility</div>
+        <div class="ctype-card-desc">Order updates, reminders, alerts</div>
+      </div>
+      <span class="ctype-card-price">%s</span>
+    </label>
+    <label class="ctype-card">
+      <input class="ctype-card-radio" type="radio" name="category" value="authentication"%s>
+      <div class="ctype-card-body">
+        <div class="ctype-card-name">Authentication</div>
+        <div class="ctype-card-desc">OTPs and verification codes</div>
+      </div>
+      <span class="ctype-card-price">%s</span>
+    </label>
+  </div>
+</div>
+
+<div class="field">
+  <label for="cmp-notes">Internal notes <span style="color:var(--text-secondary);font-weight:400">(optional)</span></label>
+  <textarea id="cmp-notes" name="notes" rows="3" placeholder="Why this campaign, target goal, internal reference&#8230;">%s</textarea>
+</div>
+</div>
+`,
+			html.EscapeString(state.Name),
+			mktSel, mktRate,
+			utlSel, utlRate,
+			authSel, authRate,
+			html.EscapeString(state.Notes),
+		)
+		if err != nil {
+			return err
+		}
+
+		return wizClose(w, state, "Back", "Continue →", "", "")
+	})
+}
+
+// ── Wizard step 2: Template ───────────────────────────────────────────────────
+
+type wizTmplJS struct {
+	ID       string     `json:"id"`
+	Name     string     `json:"name"`
+	Category string     `json:"category"`
+	Status   string     `json:"status"`
+	Body     string     `json:"body"`
+	Footer   string     `json:"footer"`
+	VarCount int        `json:"varCount"`
+	BtnCount int        `json:"btnCount"`
+	Buttons  []wizBtnJS `json:"buttons"`
+}
+type wizBtnJS struct {
+	Text string `json:"text"`
+	Type string `json:"type"`
+}
+
+func WizardTemplPage(agent *mw.AgentClaims, state WizardState, tmpls []db.Template, errMsg string) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		if err := wizOpen(w, agent, state, "/campaigns/wizard/template", errMsg); err != nil {
+			return err
+		}
+
+		// Build JS data for Alpine template picker.
+		var jsData []wizTmplJS
+		for _, t := range tmpls {
+			body := TemplateBodyText(t)
+			varCount := len(ExtractVarNames(body))
+			var footer string
+			var btns []wizBtnJS
+			for _, comp := range t.Components {
+				switch fmt.Sprintf("%v", comp["type"]) {
+				case "FOOTER":
+					footer, _ = comp["text"].(string)
+				case "BUTTONS":
+					if bArr, ok := comp["buttons"].([]any); ok {
+						for _, b := range bArr {
+							if bm, ok := b.(map[string]any); ok {
+								btns = append(btns, wizBtnJS{
+									Text: fmt.Sprintf("%v", bm["text"]),
+									Type: fmt.Sprintf("%v", bm["type"]),
+								})
+							}
+						}
+					}
+				}
+			}
+			if btns == nil {
+				btns = []wizBtnJS{}
+			}
+			jsData = append(jsData, wizTmplJS{
+				ID:       t.ID,
+				Name:     t.Name,
+				Category: t.Category,
+				Status:   t.Status,
+				Body:     body,
+				Footer:   footer,
+				VarCount: varCount,
+				BtnCount: len(btns),
+				Buttons:  btns,
+			})
+		}
+		jsonBytes, _ := json.Marshal(jsData)
+
+		// Default filter tab = category chosen in basics.
+		initCat := state.Category
+		if initCat == "" {
+			initCat = "all"
+		}
+
+		xdata := `{q:'',cat:` + jsLit(initCat) + `,sel:` + jsLit(state.TemplateID) + `,tl:` + string(jsonBytes) + `,` +
+			`get ft(){return this.tl.filter(t=>(this.cat==='all'||t.category===this.cat)&&(!this.q||t.name.toLowerCase().includes(this.q.toLowerCase())||t.body.toLowerCase().includes(this.q.toLowerCase())))},` +
+			`get st(){return this.tl.find(t=>t.id===this.sel)||null}}`
+
+		_, err := fmt.Fprintf(w, `
+<div class="wiz-fp-form" x-data="%s">
+<div class="wiz-fp-hd">
+  <h2>Select a template</h2>
+  <p>Choose an approved WhatsApp message template.</p>
+</div>
+
+<div class="tmpl-pick-search">
+  <input type="text" x-model="q" placeholder="Search templates&#8230;" class="form-input" style="width:100%%">
+</div>
+<div class="tmpl-pick-tabs">
+  <button type="button" class="tmpl-pick-tab" :class="{active:cat==='all'}" @click="cat='all'">All</button>
+  <button type="button" class="tmpl-pick-tab" :class="{active:cat==='marketing'}" @click="cat='marketing'">Marketing</button>
+  <button type="button" class="tmpl-pick-tab" :class="{active:cat==='utility'}" @click="cat='utility'">Utility</button>
+  <button type="button" class="tmpl-pick-tab" :class="{active:cat==='authentication'}" @click="cat='authentication'">Authentication</button>
+</div>
+
+<div class="tmpl-pick-list">
+  <template x-if="ft.length===0">
+    <div style="padding:24px 0;text-align:center;color:var(--text-secondary);font-size:14px">No templates match your filter.</div>
+  </template>
+  <template x-for="t in ft" :key="t.id">
+    <label class="tmpl-pick-item" :class="{selected:sel===t.id}">
+      <input type="radio" name="template_id" :value="t.id" x-model="sel" style="accent-color:var(--accent);margin-top:3px;flex-shrink:0">
+      <div class="tmpl-pick-right">
+        <div class="tmpl-pick-name" x-text="t.name"></div>
+        <div class="tmpl-pick-body" x-text="t.body.replace(/\{\{(\d+)\}\}/g,'[...]')"></div>
+        <div class="tmpl-pick-meta">
+          <code x-text="t.name" style="font-size:11px;color:var(--text-secondary)"></code>
+          <span x-show="t.varCount>0" x-text="t.varCount+' variable'+(t.varCount>1?'s':'')"></span>
+        </div>
+      </div>
+    </label>
+  </template>
+</div>
+</div>
+
+<div class="wiz-fp-aside">
+  <div x-show="!st" class="wiz-aside-placeholder">
+    <div class="wiz-aside-placeholder-icon">&#128172;</div>
+    <span>Select a template to preview</span>
+  </div>
+  <template x-if="st">
+    <div>
+      <div class="aside-label">PREVIEW</div>
+      <div class="wiz-wa-wrap">
+        <div class="wiz-wa-hd">
+          <div class="wiz-wa-av">B</div>
+          <div>
+            <div class="wiz-wa-biz">Your Business</div>
+            <div class="wiz-wa-sub">Business Account</div>
+          </div>
+        </div>
+        <div class="wiz-wa-body">
+          <div class="wiz-wa-bub" x-text="st.body.replace(/\{\{(\d+)\}\}/g,'[...]')"></div>
+          <div x-show="st.footer" class="wiz-wa-footer" x-text="st.footer"></div>
+          <div class="wiz-wa-ts">10:24 AM &#10003;&#10003;</div>
+        </div>
+        <template x-if="st.buttons.length">
+          <div class="wiz-wa-btns">
+            <template x-for="btn in st.buttons" :key="btn.text">
+              <div class="wiz-wa-btn" x-text="btn.text"></div>
+            </template>
+          </div>
+        </template>
+      </div>
+      <div class="tmpl-info-card" style="margin-top:12px">
+        <div class="tmpl-info-label">TEMPLATE INFO</div>
+        <div class="tmpl-info-row"><span class="tmpl-info-key">Category</span><span class="tmpl-info-val" x-text="st.category.charAt(0).toUpperCase()+st.category.slice(1)"></span></div>
+        <div class="tmpl-info-row"><span class="tmpl-info-key">Variables</span><span class="tmpl-info-val" x-text="st.varCount"></span></div>
+        <div class="tmpl-info-row"><span class="tmpl-info-key">Buttons</span><span class="tmpl-info-val" x-text="st.btnCount"></span></div>
+      </div>
+    </div>
+  </template>
+</div>
+`,
+			html.EscapeString(xdata),
+		)
+		if err != nil {
+			return err
+		}
+
+		return wizClose(w, state, "Back", "Continue →", "!sel", "")
+	})
+}
+
+// ── Wizard step 3: Variables ──────────────────────────────────────────────────
+
+func WizardVarsPage(agent *mw.AgentClaims, state WizardState, tmpl db.Template, varNames []string) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		if err := wizOpen(w, agent, state, "/campaigns/wizard/vars", ""); err != nil {
+			return err
+		}
+
+		body := TemplateBodyText(tmpl)
+
+		// Build Alpine x-data for the preview.
+		varsInit := "{"
+		for i, n := range varNames {
+			if i > 0 {
+				varsInit += ","
+			}
+			existing := ""
+			if state.Fallbacks != nil {
+				existing = state.Fallbacks[n]
+			}
+			varsInit += jsLit(n) + ":" + jsLit(existing)
+		}
+		varsInit += "}"
+
+		xdata := `{vars:` + varsInit + `,body:` + jsLit(body) + `,` +
+			`get filled(){return Object.values(this.vars).filter(v=>v.trim()).length},` +
+			`get total(){return Object.keys(this.vars).length},` +
+			`get preview(){return this.body.replace(/\{\{(\d+)\}\}/g,(_,n)=>this.vars[n]?'['+this.vars[n]+']':'[...]')}` +
+			`}`
+
+		_, err := fmt.Fprintf(w, `
+<div class="wiz-fp-form" x-data="%s">
+<div class="wiz-fp-hd">
+  <h2>Fill in variables</h2>
+  <p>Set default values for your template placeholders. These will be personalised per contact at send time.</p>
+</div>
+
+<div class="wiz-var-tmpl-badge" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><rect x="1" y="1" width="14" height="14" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M4 5h8M4 8h6M4 11h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  <strong>%s</strong>
+  <code style="color:var(--text-secondary);font-size:11px;margin-left:auto">%s</code>
+</div>
+
+<div class="wiz-var-rows">
+`,
+			html.EscapeString(xdata),
+			html.EscapeString(tmpl.Name),
+			html.EscapeString(tmpl.Name),
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, n := range varNames {
+			existingVar := ""
+			existingFallback := ""
+			if state.VarMap != nil {
+				existingVar = state.VarMap[n]
+			}
+			if state.Fallbacks != nil {
+				existingFallback = state.Fallbacks[n]
+			}
+
+			sampleVal := "Customer"
+			if n == "2" {
+				sampleVal = "Your Business"
+			} else if n == "3" {
+				sampleVal = "tomorrow"
+			}
+
+			if _, err := fmt.Fprintf(w, `
+<div class="wiz-var-row">
+  <div class="wiz-var-label">
+    <span class="wiz-var-num">%s</span>
+    <span class="wiz-var-heading">Variable %s</span>
+  </div>
+  <div class="field" style="margin:0">
+    <label style="font-size:12px;color:var(--text-secondary)">Contact field to use</label>
+    <select name="var_%s" class="form-input" style="font-size:13px">
+      <option value="name"%s>Contact name</option>
+      <option value="wa_phone"%s>WhatsApp phone</option>
+      <option value="email"%s>Email</option>
+    </select>
+  </div>
+  <div class="field" style="margin:0">
+    <label style="font-size:12px;color:var(--text-secondary)">Fallback (used when field is empty)</label>
+    <div class="wiz-var-input-row">
+      <input type="text" name="fallback_%s" class="form-input"
+        placeholder="e.g. %s"
+        value="%s"
+        required
+        @input="vars[%s]=$event.target.value">
+      <button type="button" class="btn btn-sm btn-secondary"
+        @click="$el.previousElementSibling.value=%s;vars[%s]=%s">Use sample</button>
+    </div>
+  </div>
+  <div class="wiz-var-mapsto">Maps to <code>{{%s}}</code> in the template</div>
+</div>`,
+				n, n,
+				n,
+				sel(existingVar, "name"),
+				sel(existingVar, "wa_phone"),
+				sel(existingVar, "email"),
+				n,
+				html.EscapeString(sampleVal),
+				html.EscapeString(existingFallback),
+				jsLit(n),
+				jsLit(sampleVal), jsLit(n), jsLit(sampleVal),
+				n,
+			); err != nil {
+				return err
+			}
+		}
+
+		_, err = fmt.Fprintf(w, `
+</div>
+
+<div class="callout callout--info" style="font-size:13px">
+  &#9432; These are fallback values. If a contact has a matching field in their profile, that value will be used instead.
+</div>
+</div>
+
+<div class="wiz-fp-aside">
+  <div class="aside-label">PREVIEW</div>
+  <div class="wiz-wa-wrap">
+    <div class="wiz-wa-hd">
+      <div class="wiz-wa-av">B</div>
+      <div>
+        <div class="wiz-wa-biz">Your Business</div>
+        <div class="wiz-wa-sub">Business Account</div>
+      </div>
+    </div>
+    <div class="wiz-wa-body">
+      <div class="wiz-wa-bub" x-text="preview"></div>
+      <div class="wiz-wa-ts">10:24 AM &#10003;&#10003;</div>
+    </div>
+  </div>
+  <div class="fill-progress-card">
+    <div class="fill-progress-label">FILL PROGRESS</div>
+    <div class="fill-progress-track">
+      <div class="fill-progress-fill" :style="'width:'+(total?Math.round(filled/total*100):0)+'%%'"></div>
+    </div>
+    <div class="fill-progress-count" x-text="filled+'/'+total"></div>
+  </div>
+</div>
+`)
+		if err != nil {
+			return err
+		}
+
+		return wizClose(w, state, "Back", "Continue →", "", "")
+	})
+}
+
+// ── Wizard step 4: Audience ───────────────────────────────────────────────────
+
+func WizardAudiencePage(agent *mw.AgentClaims, state WizardState, tags []db.TagWithCount, totalOptedIn int, errMsg string) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		if err := wizOpen(w, agent, state, "/campaigns/wizard/audience", errMsg); err != nil {
+			return err
+		}
+
+		// Build Alpine tagCounts map and initial tagSel map.
+		tagCountsJS := "{"
+		tagSelJS := "{"
+		selTagSet := map[int64]bool{}
+		for _, id := range state.SegmentTagIDs {
+			selTagSet[id] = true
+		}
+		for i, tc := range tags {
+			if i > 0 {
+				tagCountsJS += ","
+				tagSelJS += ","
+			}
+			key := jsLit(strconv.FormatInt(tc.ID, 10))
+			tagCountsJS += key + ":" + strconv.Itoa(tc.OptedInCount)
+			tagSelJS += key + ":" + strconv.FormatBool(selTagSet[tc.ID])
+		}
+		tagCountsJS += "}"
+		tagSelJS += "}"
+
+		allSel := "false"
+		if state.UseAllContacts {
+			allSel = "true"
+		}
+
+		xdata := `{tagCounts:` + tagCountsJS + `,tagSel:` + tagSelJS + `,allSel:` + allSel + `,` +
+			`get reach(){if(this.allSel)return ` + strconv.Itoa(totalOptedIn) + `;` +
+			`let s=0;for(const[k,v]of Object.entries(this.tagSel)){if(v)s+=this.tagCounts[k]||0}return s}` +
+			`}`
+
+		tierNote := ""
+		if state.DailyCap > 0 {
+			tierNote = fmt.Sprintf(`<div class="tier-info">&#9432; Tier limit: <strong>%d</strong> msgs/day. This campaign will queue if it exceeds your daily limit.</div>`, state.DailyCap)
+		}
+
+		_, err := fmt.Fprintf(w, `
+<div class="wiz-fp-form" x-data="%s">
+<div class="wiz-fp-hd">
+  <h2>Select audience</h2>
+  <p>Choose which contact groups will receive this campaign.</p>
+</div>
+
+<div class="seg-list">
+  <label class="seg-item">
+    <input type="checkbox" name="use_all_contacts" value="1" x-model="allSel" @change="if(allSel){tagSel=Object.fromEntries(Object.keys(tagSel).map(k=>[k,false]))}">
+    <div class="seg-item-body">
+      <div class="seg-item-name">All contacts</div>
+      <div class="seg-item-desc">All opted-in contacts in your directory</div>
+    </div>
+    <div class="seg-item-count">%d<span>contacts</span></div>
+  </label>
+`,
+			html.EscapeString(xdata),
+			totalOptedIn,
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, tc := range tags {
+			idStr := strconv.FormatInt(tc.ID, 10)
+			if _, err := fmt.Fprintf(w, `
+  <label class="seg-item" :class="{'seg-item--selected':tagSel[%s]}">
+    <input type="checkbox" name="segment_tag_ids" value="%s"
+      x-model="tagSel[%s]"
+      @change="if(tagSel[%s])allSel=false">
+    <div class="seg-item-body">
+      <div class="seg-item-name">%s</div>
+      <div class="seg-item-desc">Contacts tagged %s</div>
+    </div>
+    <div class="seg-item-count" x-text="tagCounts[%s]"><span>contacts</span></div>
+  </label>`,
+				jsLit(idStr), idStr,
+				jsLit(idStr),
+				jsLit(idStr),
+				html.EscapeString(tc.Name),
+				html.EscapeString(tc.Name),
+				jsLit(idStr),
+			); err != nil {
+				return err
+			}
+		}
+
+		_, err = fmt.Fprintf(w, `
+</div>
+</div>
+
+<div class="wiz-fp-aside">
+  <div class="reach-summary">
+    <div class="reach-summary-title">Reach summary</div>
+    <div class="reach-count" x-text="reach">0</div>
+    <div class="reach-label">contacts selected</div>
+  </div>
+  %s
+</div>
+`, tierNote)
+		if err != nil {
+			return err
+		}
+
+		return wizClose(w, state, "Back", "Continue →", "reach===0", "")
+	})
+}
+
+// ── Wizard step 5: Schedule ───────────────────────────────────────────────────
+
+func WizardSchedulePage(agent *mw.AgentClaims, state WizardState, errMsg string) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		if err := wizOpen(w, agent, state, "/campaigns/wizard/schedule", errMsg); err != nil {
+			return err
+		}
+
+		initSched := "now"
+		if state.ScheduleType == "scheduled" {
+			initSched = "scheduled"
+		}
+
+		_, err := fmt.Fprintf(w, `
+<div class="wiz-fp-form"
+  x-data="schedWiz()"
+  @submit.prevent="if(!inQH)$el.closest('form').submit()">
+<div class="wiz-fp-hd">
+  <h2>Schedule</h2>
+  <p>Choose when to send this campaign.</p>
+</div>
+
+<div class="field">
+  <div class="ctype-cards">
+    <label class="ctype-card">
+      <input class="ctype-card-radio" type="radio" name="schedule_type" value="now" x-model="sched">
+      <div class="ctype-card-body">
+        <div class="ctype-card-name">Send now</div>
+        <div class="ctype-card-desc">Queued immediately after you confirm</div>
+      </div>
+    </label>
+    <label class="ctype-card">
+      <input class="ctype-card-radio" type="radio" name="schedule_type" value="scheduled" x-model="sched">
+      <div class="ctype-card-body">
+        <div class="ctype-card-name">Schedule for later</div>
+        <div class="ctype-card-desc">Pick a date and time (IST, 9 am–9 pm)</div>
+      </div>
+    </label>
+  </div>
+</div>
+
+<div class="field" x-show="sched==='scheduled'" x-cloak>
+  <label for="sched-at">Date &amp; time (IST)</label>
+  <input id="sched-at" type="datetime-local" name="scheduled_at" x-model="schedAt" class="form-input">
+</div>
+
+<div class="callout callout--warning" x-show="inQH" x-cloak role="alert">
+  &#9888; Quiet hours: 9&nbsp;pm–9&nbsp;am IST. Choose a time between 9&nbsp;am and 9&nbsp;pm.
+</div>
+
+<div class="wiz-sched-summary" style="padding:16px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
+  <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+    <span style="color:var(--text-secondary)">Eligible recipients</span>
+    <strong>%d</strong>
+  </div>
+  <div style="display:flex;justify-content:space-between">
+    <span style="color:var(--text-secondary)">Estimated cost</span>
+    <strong>&#8377;%.2f</strong>
+  </div>
+</div>
+</div>
+
+<div class="wiz-fp-aside">
+  <div class="aside-label">SEND SUMMARY</div>
+  <div style="display:flex;flex-direction:column;gap:12px;font-size:13px">
+    <div style="display:flex;justify-content:space-between"><span style="color:var(--text-secondary)">Campaign</span><strong>%s</strong></div>
+    <div style="display:flex;justify-content:space-between"><span style="color:var(--text-secondary)">Recipients</span><strong>%d</strong></div>
+    <div style="display:flex;justify-content:space-between"><span style="color:var(--text-secondary)">Category</span><strong>%s</strong></div>
+  </div>
+</div>
+
+<script>
+function schedWiz() {
+  return {
+    sched: %s,
+    schedAt: '',
+    get inQH() {
+      if (this.sched !== 'scheduled' || !this.schedAt) return false;
+      var parts = (this.schedAt.split('T')[1] || '').split(':');
+      var h = parseInt(parts[0], 10), m = parseInt(parts[1] || '0', 10);
+      var total = h * 60 + m;
+      return total < 9 * 60 || total >= 21 * 60;
+    }
+  };
+}
+</script>
+`,
+			state.EligibleCount,
+			state.EstCost,
+			html.EscapeString(state.Name),
+			state.EligibleCount,
+			html.EscapeString(state.Category),
+			jsLit(initSched),
+		)
+		if err != nil {
+			return err
+		}
+
+		return wizClose(w, state, "Back", "Continue →", "inQH", "")
+	})
+}
+
+// ── Wizard step 6: Review ─────────────────────────────────────────────────────
+
+func WizardReviewPage(agent *mw.AgentClaims, state WizardState, tmpl *db.Template) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		if err := wizOpen(w, agent, state, "/campaigns", ""); err != nil {
+			return err
+		}
+
+		schedInfo := "Send immediately"
+		if state.ScheduleType == "scheduled" && state.ScheduledAt != nil {
+			schedInfo = "Scheduled for " + state.ScheduledAt.Format("02 Jan 2006 15:04 IST")
+		}
+		tmplName := ""
+		tmplCategory := state.Category
+		if tmpl != nil {
+			tmplName = tmpl.Name
+			tmplCategory = tmpl.Category
+		}
+
+		// Tier banner
+		tierBanner := ""
+		if state.DailyCap > 0 {
+			projected := state.DailySent + state.EligibleCount
+			remaining := state.DailyCap - state.DailySent
+			if remaining < 0 {
+				remaining = 0
+			}
+			pct := projected * 100 / state.DailyCap
+			switch {
+			case projected >= state.DailyCap:
+				tierBanner = CalloutHTML("danger", fmt.Sprintf(
+					"This campaign (%d messages) would exceed your daily cap of %d — it will be blocked at launch.",
+					state.EligibleCount, state.DailyCap))
+			case pct >= 70:
+				tierBanner = CalloutHTML("warning", fmt.Sprintf(
+					"Adding %d messages brings today's projected total to %d%% of your %d daily cap (%d sent so far).",
+					state.EligibleCount, pct, state.DailyCap, state.DailySent))
+			default:
+				tierBanner = CalloutHTML("info", fmt.Sprintf(
+					"Daily cap: %d sent · %d remaining · this campaign: %d messages.",
+					state.DailySent, remaining, state.EligibleCount))
+			}
+		}
+
+		// Confirm dialog
+		confirmInner := fmt.Sprintf(
+			`<h2 id="confirm-launch-title" style="margin:0 0 16px;font-size:17px">Confirm campaign launch</h2>`+
+				`<dl class="confirm-dl">`+
+				`<dt>Campaign</dt><dd>%s</dd>`+
+				`<dt>Recipients</dt><dd>%d contacts</dd>`+
+				`<dt>Category</dt><dd>%s</dd>`+
+				`<dt>Est. cost</dt><dd>&#8377;%.2f (incl. 18%% GST)</dd>`+
+				`</dl>`+
+				`<p style="font-size:13px;color:var(--text-secondary);margin:12px 0 0">%d messages will be queued. This cannot be undone.</p>`+
+				`<div class="confirm-btns">`+
+				`<button type="button" class="btn btn-secondary" onclick="document.getElementById('confirm-launch').close()">Cancel</button>`+
+				`<button type="submit" form="wiz-form" name="action" value="next" class="btn btn-primary">Confirm &amp; send to %d contacts</button>`+
+				`</div>`,
+			html.EscapeString(state.Name),
+			state.EligibleCount,
+			html.EscapeString(tmplCategory),
+			state.EstCost,
+			state.EligibleCount,
+			state.EligibleCount,
+		)
+
+		_, err := fmt.Fprintf(w, `
+<div class="wiz-fp-form">
+<div class="wiz-fp-hd">
+  <h2>Review &amp; launch</h2>
+  <p>Check the details before sending.</p>
+</div>
+%s
+<div class="card-static" style="display:flex;flex-direction:column">
+  <div class="stt-info-row"><span class="stt-info-key">Campaign name</span><span class="stt-info-val">%s</span></div>
+  <div class="stt-info-row"><span class="stt-info-key">Template</span><span class="stt-info-val">%s</span></div>
+  <div class="stt-info-row"><span class="stt-info-key">Category</span><span class="stt-info-val">%s</span></div>
+  <div class="stt-info-row"><span class="stt-info-key">Recipients</span><span class="stt-info-val">%d eligible</span></div>
+  <div class="stt-info-row"><span class="stt-info-key">Scheduling</span><span class="stt-info-val">%s</span></div>
+  <div class="stt-info-row" style="border-bottom:none"><span class="stt-info-key">Estimated cost</span><span class="stt-info-val">&#8377;%.2f</span></div>
+</div>
+</div>
+
+<div class="wiz-fp-aside">
+  <div class="aside-label">LAUNCH</div>
+  <p style="font-size:13px;color:var(--text-secondary);line-height:1.5">
+    Clicking <strong>Launch campaign</strong> will open a confirmation dialog before anything is sent.
+  </p>
+  %s
+</div>
+%s
+`,
+			tierBanner,
+			html.EscapeString(state.Name),
+			html.EscapeString(tmplName),
+			html.EscapeString(tmplCategory),
+			state.EligibleCount,
+			html.EscapeString(schedInfo),
+			state.EstCost,
+			CalloutHTML("info", fmt.Sprintf("%.0f messages will be sent to opted-in contacts.", float64(state.EligibleCount))),
+			ModalShellRaw("confirm-launch", "confirm-dialog", "confirm-launch-title", confirmInner),
+		)
+		if err != nil {
+			return err
+		}
+
+		return wizClose(w, state, "Back", "Launch campaign →", "", "openModal('confirm-launch',this)")
+	})
+}
+
+// ── Misc helpers ──────────────────────────────────────────────────────────────
+
+func fmtRate(base, gst float64) string {
+	if base == 0 {
+		return "&#8212;"
+	}
+	return fmt.Sprintf("&#8377;%.4f/msg", base*(1+gst))
+}
+
+func selAttr(current, value string) string {
+	if current == value {
+		return " checked"
+	}
+	return ""
 }

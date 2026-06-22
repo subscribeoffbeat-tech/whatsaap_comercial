@@ -34,8 +34,10 @@ func NewCampaignHandler(pool *pgxpool.Pool, rc *river.Client[pgx.Tx], hub *ws.Hu
 func (h *CampaignHandler) Mount(r chi.Router) {
 	r.Get("/", h.List)
 	r.Get("/new", h.NewWizard)
+	r.Post("/wizard/basics", h.WizardBasics)
+	r.Post("/wizard/template", h.WizardTemplate)
+	r.Post("/wizard/vars", h.WizardVars)
 	r.Post("/wizard/audience", h.WizardAudience)
-	r.Post("/wizard/message", h.WizardMessage)
 	r.Post("/wizard/schedule", h.WizardSchedule)
 	r.Post("/", h.Create)
 	r.Get("/{id}/report", h.Report)
@@ -45,103 +47,126 @@ func (h *CampaignHandler) Mount(r chi.Router) {
 	r.Get("/{id}/recipients", h.RecipientsList)
 }
 
+// ── List ──────────────────────────────────────────────────────────────────────
+
 func (h *CampaignHandler) List(w http.ResponseWriter, r *http.Request) {
 	cs, err := db.ListCampaigns(r.Context(), h.pool)
 	if err != nil {
 		http.Error(w, "load campaigns: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	dailyCap := db.DailyCap(r.Context(), h.pool)
 	agent := mw.AgentFromCtx(r.Context())
-	templates.CampaignsPage(agent, cs).Render(r.Context(), w)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	templates.CampaignsPage(agent, cs, dailyCap).Render(r.Context(), w)
 }
+
+// ── Wizard step 1: Basics ─────────────────────────────────────────────────────
 
 func (h *CampaignHandler) NewWizard(w http.ResponseWriter, r *http.Request) {
-	tags, _ := db.ListTags(r.Context(), h.pool)
 	agent := mw.AgentFromCtx(r.Context())
-	templates.WizardNewPage(agent, tags).Render(r.Context(), w)
+	rates := db.LoadRates(r.Context(), h.pool)
+	templates.WizardBasicsPage(agent, templates.WizardState{Step: 1, Category: "marketing"}, rates, "").Render(r.Context(), w)
 }
 
-func (h *CampaignHandler) WizardAudience(w http.ResponseWriter, r *http.Request) {
+func (h *CampaignHandler) WizardBasics(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "parse form", http.StatusBadRequest)
 		return
 	}
-
 	agent := mw.AgentFromCtx(r.Context())
+	rates := db.LoadRates(r.Context(), h.pool)
 
 	name := strings.TrimSpace(r.FormValue("name"))
+	category := r.FormValue("category")
+	notes := strings.TrimSpace(r.FormValue("notes"))
+
+	switch category {
+	case "marketing", "utility", "authentication":
+	default:
+		category = "marketing"
+	}
+
+	state := templates.WizardState{Step: 1, Name: name, Category: category, Notes: notes}
+
 	if name == "" {
-		tags, _ := db.ListTags(r.Context(), h.pool)
-		templates.WizardNewPage(agent, tags).Render(r.Context(), w)
+		templates.WizardBasicsPage(agent, state, rates, "Campaign name is required.").Render(r.Context(), w)
 		return
 	}
 
-	segTags := parseInt64Slice(r.Form["segment_tags"])
-	exclTags := parseInt64Slice(r.Form["exclude_tags"])
-
-	// Use "marketing" as the conservative audience filter (most restrictive).
-	eligible, report, err := campaigns.BuildAudience(r.Context(), h.pool, segTags, exclTags, "marketing", 24)
-	if err != nil {
-		http.Error(w, "build audience: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Snapshot daily cap and today's sent count for the tier-cap banner (step 4).
-	dailySent, _ := db.DailyMessagesSent(r.Context(), h.pool)
-	dailyCap := db.DailyCap(r.Context(), h.pool)
-
-	state := templates.WizardState{
-		Step:          2,
-		Name:          name,
-		SegmentTags:   segTags,
-		ExcludeTags:   exclTags,
-		EligibleCount: len(eligible),
-		SkipReport:    report,
-		DailySent:     int(dailySent),
-		DailyCap:      int(dailyCap),
-	}
-
+	// Advance to step 2 (template selection).
+	state.Step = 2
 	tmplList, _ := db.ListTemplates(r.Context(), h.pool)
-	templates.WizardStep2Page(agent, state, approvedTemplates(tmplList)).Render(r.Context(), w)
+	templates.WizardTemplPage(agent, state, approvedTemplates(tmplList), "").Render(r.Context(), w)
 }
 
-func (h *CampaignHandler) WizardMessage(w http.ResponseWriter, r *http.Request) {
+// ── Wizard step 2: Template ───────────────────────────────────────────────────
+
+func (h *CampaignHandler) WizardTemplate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "parse form", http.StatusBadRequest)
 		return
 	}
 	state, err := templates.DecodeState(r.FormValue("wizard_state"))
 	if err != nil {
-		http.Error(w, "invalid state", http.StatusBadRequest)
+		http.Redirect(w, r, "/campaigns/new", http.StatusSeeOther)
 		return
 	}
-
 	agent := mw.AgentFromCtx(r.Context())
+
+	if r.FormValue("action") == "back" {
+		rates := db.LoadRates(r.Context(), h.pool)
+		state.Step = 1
+		templates.WizardBasicsPage(agent, state, rates, "").Render(r.Context(), w)
+		return
+	}
 
 	templateID := r.FormValue("template_id")
 	if templateID == "" {
 		tmplList, _ := db.ListTemplates(r.Context(), h.pool)
-		state.Step = 2
-		templates.WizardStep2Page(agent, state, approvedTemplates(tmplList)).Render(r.Context(), w)
+		templates.WizardTemplPage(agent, state, approvedTemplates(tmplList), "Please select a template to continue.").Render(r.Context(), w)
 		return
 	}
 
-	// Load the selected template to inspect its body variables.
 	tmpl, err := db.GetTemplate(r.Context(), h.pool, templateID)
 	if err != nil {
-		http.Error(w, "load template: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "template not found", http.StatusNotFound)
 		return
 	}
 
-	// Show variable mapping step when the template has {{N}} placeholders and
-	// the user hasn't confirmed the mapping yet.
-	if r.FormValue("vars_confirmed") == "" {
-		varNames := templates.ExtractVarNames(templates.TemplateBodyText(*tmpl))
-		if len(varNames) > 0 {
-			state.TemplateID = templateID
-			templates.WizardStep2VarsPage(agent, state, *tmpl, varNames).Render(r.Context(), w)
-			return
-		}
+	state.TemplateID = templateID
+	varNames := templates.ExtractVarNames(templates.TemplateBodyText(*tmpl))
+	state.HasVars = len(varNames) > 0
+
+	if state.HasVars {
+		state.Step = 3
+		templates.WizardVarsPage(agent, state, *tmpl, varNames).Render(r.Context(), w)
+	} else {
+		tags, totalOptedIn, _ := db.ListTagsWithOptedInCount(r.Context(), h.pool)
+		state.Step = 4
+		templates.WizardAudiencePage(agent, state, tags, totalOptedIn, "").Render(r.Context(), w)
+	}
+}
+
+// ── Wizard step 3: Variables ──────────────────────────────────────────────────
+
+func (h *CampaignHandler) WizardVars(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "parse form", http.StatusBadRequest)
+		return
+	}
+	state, err := templates.DecodeState(r.FormValue("wizard_state"))
+	if err != nil {
+		http.Redirect(w, r, "/campaigns/new", http.StatusSeeOther)
+		return
+	}
+	agent := mw.AgentFromCtx(r.Context())
+
+	if r.FormValue("action") == "back" {
+		tmplList, _ := db.ListTemplates(r.Context(), h.pool)
+		state.Step = 2
+		templates.WizardTemplPage(agent, state, approvedTemplates(tmplList), "").Render(r.Context(), w)
+		return
 	}
 
 	varMap := map[string]string{}
@@ -154,14 +179,79 @@ func (h *CampaignHandler) WizardMessage(w http.ResponseWriter, r *http.Request) 
 			fallbacks[strings.TrimPrefix(k, "fallback_")] = vs[0]
 		}
 	}
-
-	state.Step = 3
-	state.TemplateID = templateID
 	state.VarMap = varMap
 	state.Fallbacks = fallbacks
+	state.Step = 4
 
-	templates.WizardStep3Page(agent, state).Render(r.Context(), w)
+	tags, totalOptedIn, _ := db.ListTagsWithOptedInCount(r.Context(), h.pool)
+	templates.WizardAudiencePage(agent, state, tags, totalOptedIn, "").Render(r.Context(), w)
 }
+
+// ── Wizard step 4: Audience ───────────────────────────────────────────────────
+
+func (h *CampaignHandler) WizardAudience(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "parse form", http.StatusBadRequest)
+		return
+	}
+	state, err := templates.DecodeState(r.FormValue("wizard_state"))
+	if err != nil {
+		http.Redirect(w, r, "/campaigns/new", http.StatusSeeOther)
+		return
+	}
+	agent := mw.AgentFromCtx(r.Context())
+
+	if r.FormValue("action") == "back" {
+		if state.HasVars {
+			tmpl, _ := db.GetTemplate(r.Context(), h.pool, state.TemplateID)
+			if tmpl != nil {
+				varNames := templates.ExtractVarNames(templates.TemplateBodyText(*tmpl))
+				state.Step = 3
+				templates.WizardVarsPage(agent, state, *tmpl, varNames).Render(r.Context(), w)
+				return
+			}
+		}
+		tmplList, _ := db.ListTemplates(r.Context(), h.pool)
+		state.Step = 2
+		templates.WizardTemplPage(agent, state, approvedTemplates(tmplList), "").Render(r.Context(), w)
+		return
+	}
+
+	useAll := r.FormValue("use_all_contacts") == "1"
+	segTagIDs := parseInt64Slice(r.Form["segment_tag_ids"])
+
+	if !useAll && len(segTagIDs) == 0 {
+		tags, totalOptedIn, _ := db.ListTagsWithOptedInCount(r.Context(), h.pool)
+		templates.WizardAudiencePage(agent, state, tags, totalOptedIn, "Select at least one audience segment.").Render(r.Context(), w)
+		return
+	}
+
+	if useAll {
+		state.UseAllContacts = true
+		state.SegmentTagIDs = nil
+	} else {
+		state.UseAllContacts = false
+		state.SegmentTagIDs = segTagIDs
+	}
+
+	eligible, report, err := campaigns.BuildAudienceAny(r.Context(), h.pool, state.SegmentTagIDs, state.Category, 24)
+	if err != nil {
+		http.Error(w, "build audience: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	state.EligibleCount = len(eligible)
+	state.SkipReport = report
+
+	dailySent, _ := db.DailyMessagesSent(r.Context(), h.pool)
+	dailyCap := db.DailyCap(r.Context(), h.pool)
+	state.DailySent = int(dailySent)
+	state.DailyCap = int(dailyCap)
+	state.Step = 5
+
+	templates.WizardSchedulePage(agent, state, "").Render(r.Context(), w)
+}
+
+// ── Wizard step 5: Schedule ───────────────────────────────────────────────────
 
 func (h *CampaignHandler) WizardSchedule(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -170,11 +260,17 @@ func (h *CampaignHandler) WizardSchedule(w http.ResponseWriter, r *http.Request)
 	}
 	state, err := templates.DecodeState(r.FormValue("wizard_state"))
 	if err != nil {
-		http.Error(w, "invalid state", http.StatusBadRequest)
+		http.Redirect(w, r, "/campaigns/new", http.StatusSeeOther)
 		return
 	}
-
 	agent := mw.AgentFromCtx(r.Context())
+
+	if r.FormValue("action") == "back" {
+		tags, totalOptedIn, _ := db.ListTagsWithOptedInCount(r.Context(), h.pool)
+		state.Step = 4
+		templates.WizardAudiencePage(agent, state, tags, totalOptedIn, "").Render(r.Context(), w)
+		return
+	}
 
 	schedType := r.FormValue("schedule_type")
 	if schedType == "" {
@@ -185,16 +281,16 @@ func (h *CampaignHandler) WizardSchedule(w http.ResponseWriter, r *http.Request)
 	if schedType == "scheduled" {
 		dtStr := r.FormValue("scheduled_at")
 		if dtStr == "" {
-			templates.WizardStep3ErrorPage(agent, state, "Please select a date and time.").Render(r.Context(), w)
+			templates.WizardSchedulePage(agent, state, "Please select a date and time.").Render(r.Context(), w)
 			return
 		}
 		t, parseErr := parseLocalDateTime(dtStr)
 		if parseErr != nil {
-			templates.WizardStep3ErrorPage(agent, state, "Invalid date format.").Render(r.Context(), w)
+			templates.WizardSchedulePage(agent, state, "Invalid date format.").Render(r.Context(), w)
 			return
 		}
 		if campaigns.IsQuietHours(t) {
-			templates.WizardStep3ErrorPage(agent, state, "Quiet hours: 9pm–9am IST. Choose a time between 9am and 9pm IST.").Render(r.Context(), w)
+			templates.WizardSchedulePage(agent, state, "Quiet hours: 9 pm–9 am IST. Choose a time between 9 am and 9 pm IST.").Render(r.Context(), w)
 			return
 		}
 		state.ScheduledAt = &t
@@ -208,10 +304,12 @@ func (h *CampaignHandler) WizardSchedule(w http.ResponseWriter, r *http.Request)
 
 	rates := db.LoadRates(r.Context(), h.pool)
 	state.EstCost = campaigns.CalcTotalCost(tmpl.Category, state.EligibleCount, rates)
-	state.Step = 4
+	state.Step = 6
 
-	templates.WizardStep4Page(agent, state, tmpl).Render(r.Context(), w)
+	templates.WizardReviewPage(agent, state, tmpl).Render(r.Context(), w)
 }
+
+// ── Wizard step 6: Review / Create ───────────────────────────────────────────
 
 func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -220,7 +318,14 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	state, err := templates.DecodeState(r.FormValue("wizard_state"))
 	if err != nil {
-		http.Error(w, "invalid state", http.StatusBadRequest)
+		http.Redirect(w, r, "/campaigns/new", http.StatusSeeOther)
+		return
+	}
+	agent := mw.AgentFromCtx(r.Context())
+
+	if r.FormValue("action") == "back" {
+		state.Step = 5
+		templates.WizardSchedulePage(agent, state, "").Render(r.Context(), w)
 		return
 	}
 
@@ -231,14 +336,12 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Re-compute audience to get fresh list (state may be minutes old).
-	eligible, skipReport, err := campaigns.BuildAudience(ctx, h.pool, state.SegmentTags, state.ExcludeTags, tmpl.Category, 24)
+	eligible, skipReport, err := campaigns.BuildAudienceAny(ctx, h.pool, state.SegmentTagIDs, state.Category, 24)
 	if err != nil {
 		http.Error(w, "build audience: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Hard stop at daily cap.
 	sent, _ := db.DailyMessagesSent(ctx, h.pool)
 	if !campaigns.LimitGuardCheck(sent, db.DailyCap(ctx, h.pool)) {
 		http.Error(w, "Daily send cap reached. Try again tomorrow.", http.StatusTooManyRequests)
@@ -256,13 +359,18 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 		eligibleIDs[i] = e.ContactID
 	}
 
+	segTags := state.SegmentTagIDs
+	if segTags == nil {
+		segTags = []int64{}
+	}
+
 	campaign := &db.Campaign{
 		Name:              state.Name,
 		TemplateID:        tmpl.ID,
 		TemplateVariables: state.VarMap,
 		Fallbacks:         state.Fallbacks,
-		SegmentTags:       state.SegmentTags,
-		ExcludeTags:       state.ExcludeTags,
+		SegmentTags:       segTags,
+		ExcludeTags:       []int64{},
 		Status:            status,
 		ScheduledAt:       state.ScheduledAt,
 		TotalRecipients:   totalRecipients,
@@ -299,6 +407,8 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/campaigns", http.StatusSeeOther)
 }
 
+// ── Report / progress / control ───────────────────────────────────────────────
+
 func (h *CampaignHandler) Report(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	report, err := db.GetCampaignReport(r.Context(), h.pool, id)
@@ -306,8 +416,11 @@ func (h *CampaignHandler) Report(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "load report: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	failed, _ := db.GetFailedRecipients(r.Context(), h.pool, id)
+	hourly, _ := db.GetHourlySendDistribution(r.Context(), h.pool, id)
 	agent := mw.AgentFromCtx(r.Context())
-	templates.CampaignReportPage(agent, *report).Render(r.Context(), w)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	templates.CampaignReportPage(agent, *report, failed, hourly).Render(r.Context(), w)
 }
 
 func (h *CampaignHandler) ProgressPartial(w http.ResponseWriter, r *http.Request) {

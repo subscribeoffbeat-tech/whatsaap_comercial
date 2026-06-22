@@ -234,16 +234,6 @@ func (h *TemplatesHandler) Gallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	// Optional status filter: ?status=approved|pending|rejected|draft
-	if status := r.URL.Query().Get("status"); status != "" {
-		filtered := tmplList[:0]
-		for _, t := range tmplList {
-			if t.Status == status {
-				filtered = append(filtered, t)
-			}
-		}
-		tmplList = filtered
-	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := templates.TemplateGallery(tmplList).Render(r.Context(), w); err != nil {
 		log.Printf("template gallery render: %v", err)

@@ -91,6 +91,32 @@ func FilterAudience(contacts []db.Contact, freqCapped map[string]bool, category 
 	return
 }
 
+// BuildAudienceAny is like BuildAudience but matches contacts with ANY of the
+// given tags (union) rather than ALL. If tagIDs is empty, all opted-in contacts
+// are included (no tag filter).
+func BuildAudienceAny(
+	ctx context.Context, pool *pgxpool.Pool,
+	tagIDs []int64, category string, freqCapHours int,
+) (eligible []Recipient, report SkipReport, err error) {
+	contacts, err := db.GetAudienceContactsAny(ctx, pool, tagIDs)
+	if err != nil {
+		return nil, report, err
+	}
+	var freqCapped map[string]bool
+	if category == "marketing" && len(contacts) > 0 {
+		ids := make([]string, len(contacts))
+		for i, c := range contacts {
+			ids[i] = c.ID
+		}
+		freqCapped, err = db.FreqCappedContactIDs(ctx, pool, ids, freqCapHours)
+		if err != nil {
+			return nil, report, err
+		}
+	}
+	eligible, report = FilterAudience(contacts, freqCapped, category)
+	return eligible, report, nil
+}
+
 // BuildAudience fetches opted-in contacts matching the segment, applies all
 // exclusion rules, and returns the eligible list + skip counts.
 func BuildAudience(

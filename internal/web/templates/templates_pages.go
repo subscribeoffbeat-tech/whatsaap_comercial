@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net/url"
+	"strings"
 
 	"github.com/a-h/templ"
 
 	"whatsapptool/internal/db"
 	mw "whatsapptool/internal/web/middleware"
 )
+
+// ── Templates page ────────────────────────────────────────────────────────────
 
 func TemplatesPage(agent *mw.AgentClaims, flash string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
@@ -26,71 +30,25 @@ func TemplatesPage(agent *mw.AgentClaims, flash string) templ.Component {
 %s
 <div class="page-hd">
 <div>
-<h1 class="screen-title">WhatsApp Templates</h1>
-<p class="screen-subtitle">Browse approved templates and the sample library.</p>
+<h1 class="screen-title">Templates</h1>
+<p class="screen-subtitle">Manage and discover WhatsApp message templates</p>
 </div>
 <a class="btn btn-primary btn-sm" href="/templates/new">+ New template</a>
-</div>`, flashScript)
-		if err != nil {
-			return err
-		}
-		_, err = io.WriteString(w, `
-
-<div class="tmpl-tabs" role="tablist" x-data="{tab:'all'}">
-  <button class="tmpl-tab" role="tab" type="button" :class="{'active':tab==='all'}" :aria-selected="tab==='all'"
-    hx-get="/templates/gallery" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
-    @click="tab='all'">All</button>
-  <button class="tmpl-tab" role="tab" type="button" :class="{'active':tab==='approved'}" :aria-selected="tab==='approved'"
-    hx-get="/templates/gallery?status=approved" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
-    @click="tab='approved'">Approved</button>
-  <button class="tmpl-tab" role="tab" type="button" :class="{'active':tab==='pending'}" :aria-selected="tab==='pending'"
-    hx-get="/templates/gallery?status=pending" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
-    @click="tab='pending'">Pending</button>
-  <button class="tmpl-tab" role="tab" type="button" :class="{'active':tab==='draft'}" :aria-selected="tab==='draft'"
-    hx-get="/templates/gallery?status=draft" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
-    @click="tab='draft'">Drafts</button>
-  <button class="tmpl-tab" role="tab" type="button" :class="{'active':tab==='rejected'}" :aria-selected="tab==='rejected'"
-    hx-get="/templates/gallery?status=rejected" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
-    @click="tab='rejected'">Rejected</button>
-  <button class="tmpl-tab tmpl-tab-lib" role="tab" type="button" :class="{'active':tab==='library'}" :aria-selected="tab==='library'"
-    hx-get="/templates/library" hx-target="#tmpl-gallery" hx-swap="innerHTML" hx-indicator="#tmpl-loading"
-    @click="tab='library'">&#128218; Library</button>
-  <span id="tmpl-loading" class="htmx-indicator" aria-hidden="true" style="align-self:center;margin-left:4px"><span class="htmx-ind-spin"></span></span>
 </div>
 
-<div id="tmpl-gallery"
-  role="tabpanel" tabindex="0"
+<div class="tmpl-page-tabs" x-data="{tab:'my'}">
+<button class="tmpl-page-tab" :class="{active:tab==='my'}" @click="tab='my'"
+  hx-get="/templates/gallery" hx-target="#tmpl-main" hx-swap="innerHTML">My Templates</button>
+<button class="tmpl-page-tab" :class="{active:tab==='lib'}" @click="tab='lib'"
+  hx-get="/templates/library" hx-target="#tmpl-main" hx-swap="innerHTML">&#128218; Template Library</button>
+</div>
+
+<div id="tmpl-main"
   hx-get="/templates/gallery"
   hx-trigger="load, templatesUpdated from:body"
-  hx-swap="innerHTML"
-  aria-live="polite" aria-atomic="false">` + SkeletonRows(4) + `</div>
-
-` + ModalShell("new-tmpl-modal", "New template",
-`<form method="post" action="/templates" hx-post="/templates" hx-target="#tmpl-gallery" hx-swap="innerHTML"
-  hx-disabled-elt="find button[type='submit']"
-  hx-on::response-error="document.getElementById('tmpl-form-errors').innerHTML=event.detail.xhr.responseText">
-<div id="tmpl-form-errors" role="alert" aria-live="polite"></div>
-<label class="field"><span>Name (snake_case)</span>
-<input type="text" name="name" required pattern="[a-z0-9_]+" placeholder="promo_offer"></label>
-<label class="field"><span>Language</span>
-<select name="language">
-<option value="en_US">English (US)</option>
-<option value="en_GB">English (GB)</option>
-</select></label>
-<label class="field"><span>Category</span>
-<select name="category">
-<option value="marketing">Marketing</option>
-<option value="utility">Utility</option>
-<option value="authentication">Authentication</option>
-</select></label>
-<label class="field"><span>Body text (use {{1}}, {{2}} for variables)</span>
-<textarea name="body" rows="4" required></textarea></label>
-<div class="modal-btns">
-<button class="btn btn-primary btn-sm" type="submit">Create &amp; save</button>
-<button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('new-tmpl-modal').close()">Cancel</button>
+  hx-swap="innerHTML">
 </div>
-</form>`) + `
-</div>`)
+</div>`, flashScript)
 		if err != nil {
 			return err
 		}
@@ -99,140 +57,384 @@ func TemplatesPage(agent *mw.AgentClaims, flash string) templ.Component {
 	})
 }
 
+// ── Gallery partial (My Templates) ───────────────────────────────────────────
+
 func TemplateGallery(tmpls []db.Template) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if len(tmpls) == 0 {
 			_, err := io.WriteString(w, EmptyStateHTML(EmptyIconTemplates,
 				"No templates yet",
-				"Create a new template or browse the Meta-approved library.",
+				"Create a new template or browse the sample library.",
 				[]EmptyAction{
-					{Label: "New template", Primary: true, AtClick: "document.getElementById('new-tmpl-modal').showModal()"},
+					{Label: "New template", Primary: true, HREF: "/templates/new"},
 				}))
 			return err
 		}
-		if _, err := io.WriteString(w, `<div class="tmpl-gallery">`); err != nil {
+
+		// Count per status.
+		counts := map[string]int{}
+		for _, t := range tmpls {
+			counts[t.Status]++
+		}
+
+		_, err := io.WriteString(w, `<div x-data="{q:'',cat:'all',status:'all'}" class="tmpl-filter-wrap">`)
+		if err != nil {
 			return err
 		}
-		for _, t := range tmpls {
-			catClass := "cat-" + t.Category
 
-			// Extract body preview from components
-			bodyPreview := ""
+		// Search + category bar.
+		_, err = io.WriteString(w, `
+<div class="tmpl-filter-bar">
+<label class="tmpl-search">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+<input type="search" placeholder="Search templates..." x-model.debounce.250ms="q" class="tmpl-search-input">
+</label>
+<div class="tmpl-cat-tabs">
+<button class="tmpl-cat-tab" :class="{active:cat==='all'}" @click="cat='all'" type="button">ALL</button>
+<button class="tmpl-cat-tab" :class="{active:cat==='marketing'}" @click="cat='marketing'" type="button">MARKETING</button>
+<button class="tmpl-cat-tab" :class="{active:cat==='utility'}" @click="cat='utility'" type="button">UTILITY</button>
+</div>
+</div>`)
+		if err != nil {
+			return err
+		}
+
+		// Status pills with static counts.
+		_, err = fmt.Fprintf(w, `
+<div class="tmpl-status-pills">
+<button class="tmpl-status-pill" :class="{active:status==='all'}" @click="status='all'" type="button">All <span class="tmpl-status-count">%d</span></button>
+<button class="tmpl-status-pill" :class="{active:status==='approved'}" @click="status='approved'" type="button"><span class="sdot sdot--green"></span> Approved <span class="tmpl-status-count">%d</span></button>
+<button class="tmpl-status-pill" :class="{active:status==='pending'}" @click="status='pending'" type="button"><span class="sdot sdot--orange"></span> Pending <span class="tmpl-status-count">%d</span></button>
+<button class="tmpl-status-pill" :class="{active:status==='rejected'}" @click="status='rejected'" type="button"><span class="sdot sdot--red"></span> Rejected <span class="tmpl-status-count">%d</span></button>
+</div>`, len(tmpls), counts["approved"], counts["pending"], counts["rejected"])
+		if err != nil {
+			return err
+		}
+
+		if _, err = io.WriteString(w, `<div class="tmpl-gallery2">`); err != nil {
+			return err
+		}
+
+		for _, t := range tmpls {
+			bodyText := ""
+			var buttons []string
 			for _, comp := range t.Components {
 				if comp["type"] == "BODY" {
 					if text, ok := comp["text"].(string); ok {
-						bodyPreview = text
+						bodyText = text
+					}
+				}
+				if comp["type"] == "BUTTONS" {
+					if btns, ok := comp["buttons"].([]any); ok {
+						for _, b := range btns {
+							if bm, ok := b.(map[string]any); ok {
+								if label, ok := bm["text"].(string); ok {
+									buttons = append(buttons, label)
+								}
+							}
+						}
 					}
 				}
 			}
 
-			if _, err := fmt.Fprintf(w,
-				`<div class="tmpl-card">
-<div class="tmpl-card-hd">
-<span class="tmpl-name">%s</span>
-<span class="badge badge-cat %s">%s</span>
-%s
-</div>
-<div class="tmpl-body-preview">%s</div>
-<div class="tmpl-card-actions">`,
+			searchScope := t.Name + " " + bodyText
+
+			// Rejection reason block.
+			rejHTML := ""
+			if t.RejectionReason != nil && *t.RejectionReason != "" {
+				rejHTML = fmt.Sprintf(
+					`<div class="tmpl-rejection-reason"><strong>Rejection reason:</strong> %s</div>`,
+					html.EscapeString(*t.RejectionReason))
+			}
+
+			// Button chips.
+			btnChips := ""
+			for _, b := range buttons {
+				btnChips += fmt.Sprintf(`<span class="tmpl-btn-chip">%s</span>`, html.EscapeString(b))
+			}
+			if btnChips != "" {
+				btnChips = `<div class="tmpl-btn-chips">` + btnChips + `</div>`
+			}
+
+			// Action buttons.
+			var actionBtns string
+			switch {
+			case t.Status == "rejected":
+				actionBtns = fmt.Sprintf(
+					`<form method="post" action="/templates/%s/submit" style="display:inline"><button class="btn btn-sm btn-primary" type="submit">Resubmit</button></form>`,
+					t.ID)
+			case t.Status == "pending" || t.Status == "draft":
+				actionBtns = fmt.Sprintf(
+					`<form method="post" action="/templates/%s/submit" style="display:inline"><button class="btn btn-sm btn-primary" type="submit">Submit to Meta</button></form>`,
+					t.ID)
+			}
+			editBtn := fmt.Sprintf(
+				`<button class="btn btn-sm btn-secondary" hx-get="/templates/%s" hx-target="#tmpl-editor" hx-swap="innerHTML">Edit</button>`,
+				t.ID)
+
+			_, err = fmt.Fprintf(w,
+				`<div class="tmpl-card2" x-show="(status==='all'||status===%s)&&(cat==='all'||cat===%s)&&(!q||%s.toLowerCase().includes(q.toLowerCase()))">
+<div class="tmpl-card2-hd"><span class="tmpl-card2-name">%s</span><span class="badge badge-cat cat-%s">%s</span>%s</div>
+<div class="tmpl-card2-body">%s</div>%s%s
+<div class="tmpl-card2-ft"><span class="tmpl-card2-meta">%s &middot; %s</span><div class="tmpl-card2-actions">%s%s</div></div>
+</div>`,
+				jsLit(t.Status), jsLit(t.Category), jsLit(searchScope),
 				html.EscapeString(t.Name),
-				catClass, t.Category,
+				t.Category, strings.ToUpper(t.Category),
 				BadgeHTML(t.Status, t.Status),
-				html.EscapeString(bodyPreview),
-			); err != nil {
-				return err
-			}
-
-			// Edit button opens the editor form
-			if _, err := fmt.Fprintf(w,
-				`<button class="btn btn-sm btn-secondary"
-  hx-get="/templates/%s"
-  hx-target="#tmpl-editor"
-  hx-swap="innerHTML">Edit</button>`,
-				t.ID,
-			); err != nil {
-				return err
-			}
-
-			// Submit to Meta button for pending/rejected templates
-			if t.Status == "pending" || t.Status == "rejected" || t.Status == "draft" {
-				if _, err := fmt.Fprintf(w,
-					`<form method="post" action="/templates/%s/submit" style="display:inline">
-<button class="btn btn-sm btn-primary" type="submit">Submit to Meta</button></form>`, t.ID,
-				); err != nil {
-					return err
-				}
-			}
-
-			// Delete button
-			if _, err := fmt.Fprintf(w,
-				`<form method="post" action="/templates/%s" hx-delete="/templates/%s" hx-confirm="Delete template?" hx-target="closest .tmpl-card" hx-swap="outerHTML" style="display:inline">
-<button class="btn btn-sm btn-danger" type="submit">Delete</button></form>`,
-				t.ID, t.ID,
-			); err != nil {
-				return err
-			}
-
-			if _, err := io.WriteString(w, `</div></div>`); err != nil {
+				html.EscapeString(bodyText),
+				rejHTML, btnChips,
+				html.EscapeString(t.Name), html.EscapeString(t.Language),
+				actionBtns, editBtn,
+			)
+			if err != nil {
 				return err
 			}
 		}
-		_, err := io.WriteString(w, `</div><div id="tmpl-editor" aria-live="polite" aria-atomic="false"></div>`)
+
+		_, err = io.WriteString(w, `</div>`) // close tmpl-gallery2
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(w, `<div id="tmpl-editor" aria-live="polite" aria-atomic="false"></div>`)
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(w, `</div>`) // close Alpine wrapper
 		return err
 	})
 }
 
-// libraryTemplate is a sample template shown in the Library tab.
-type libraryTemplate struct {
-	Name     string
-	Category string
-	Industry string
-	Body     string
+// ── Template Library ──────────────────────────────────────────────────────────
+
+type libTmpl struct {
+	DisplayName string
+	Slug        string
+	Category    string   // marketing|utility
+	Body        string   // display body with [...] placeholders
+	Buttons     []string // CTA button labels
 }
 
-var libraryTemplates = []libraryTemplate{
-	{"welcome_new_customer", "utility", "All industries", "Hi {{1}}, welcome! We're thrilled to have you. Reply STOP to opt out."},
-	{"order_confirmation", "utility", "Retail & E-commerce", "Hi {{1}}, your order #{{2}} has been confirmed. Expected delivery: {{3}}."},
-	{"appointment_reminder", "utility", "Healthcare & Services", "Hi {{1}}, reminder: your appointment is on {{2}} at {{3}}. Reply to reschedule."},
-	{"payment_due_reminder", "utility", "Finance & Real Estate", "Hi {{1}}, your payment of ₹{{2}} is due on {{3}}. Pay now to avoid late fees."},
-	{"flash_sale_alert", "marketing", "Retail & FMCG", "Hi {{1}}, flash sale! Get {{2}}% off on all products today only. Shop now: {{3}}"},
-	{"reengagement_offer", "marketing", "All industries", "Hi {{1}}, we miss you! Here's a special {{2}}% discount just for you. Valid till {{3}}."},
-	{"support_ticket_opened", "utility", "Technology", "Hi {{1}}, ticket #{{2}} has been opened. Our team will respond within {{3}} hours."},
-	{"feedback_request", "marketing", "All industries", "Hi {{1}}, how was your experience with {{2}}? Reply with a rating 1-5. Your feedback matters!"},
+type libIndustry struct {
+	ID        string
+	Label     string
+	Templates []libTmpl
+}
+
+var libraryData = []libIndustry{
+	{
+		ID: "ecommerce", Label: "E-commerce",
+		Templates: []libTmpl{
+			{"Order Confirmed", "order_confirmed", "utility",
+				"Hi [...], your order #[...] is confirmed! \U0001f389 Amount: ₹[...]. Delivery by [...].",
+				[]string{"Track Order"}},
+			{"Shipping Update", "shipping_update", "utility",
+				"Your order #[...] is on its way! \U0001f69a Expected by [...]. Live tracking: [...]",
+				[]string{"Track Now"}},
+			{"Abandoned Cart", "abandoned_cart", "marketing",
+				"Hey [...], you left something behind! \U0001f6d2 Your cart is waiting. Complete your order before it expires.",
+				[]string{"Complete Order"}},
+			{"Flash Sale", "flash_sale", "marketing",
+				"⚡ FLASH SALE, [...]! Get [...]% off everything today. No code needed — sale ends at midnight!",
+				[]string{"Shop Now"}},
+		},
+	},
+	{
+		ID: "realestate", Label: "Real Estate",
+		Templates: []libTmpl{
+			{"Property Visit Reminder", "property_visit_reminder", "utility",
+				"Hi [...], reminder: your property visit at [...] is scheduled for [...] at [...]. See you there!", nil},
+			{"New Listing Alert", "new_listing_alert", "marketing",
+				"New listing! [...] BHK in [...] at ₹[...] Lac. Perfect for your requirements. Let’s talk!",
+				[]string{"View Property"}},
+			{"Loan Pre-Approval", "loan_pre_approval", "utility",
+				"Hi [...], great news! You’re pre-approved for a home loan up to ₹[...]. Valid till [...].",
+				[]string{"Apply Now"}},
+		},
+	},
+	{
+		ID: "healthcare", Label: "Healthcare",
+		Templates: []libTmpl{
+			{"Appointment Reminder", "appointment_reminder", "utility",
+				"Hi [...], your appointment with Dr. [...] is on [...] at [...]. Please arrive 10 mins early.",
+				[]string{"Confirm", "Reschedule"}},
+			{"Lab Results Ready", "lab_results_ready", "utility",
+				"Hi [...], your lab reports for [...] are ready. Download or visit us to collect.",
+				[]string{"View Report"}},
+			{"Health Tip", "health_tip", "marketing",
+				"\U0001f48a Weekly health tip for [...]: [...]. Stay healthy and consult us for any concerns.",
+				[]string{"Book Consult"}},
+		},
+	},
+	{
+		ID: "education", Label: "Education",
+		Templates: []libTmpl{
+			{"Class Reminder", "class_reminder", "utility",
+				"Hi [...], your [...] class starts in 1 hour at [...]. Don’t miss it!", nil},
+			{"Fee Due Reminder", "fee_due_reminder", "utility",
+				"Hi [...], your fee of ₹[...] for [...] is due on [...]. Pay to avoid late fees.",
+				[]string{"Pay Now"}},
+			{"Course Launch", "course_launch", "marketing",
+				"\U0001f393 New course alert, [...]! [...] is now live. Early bird price: ₹[...]. Hurry, limited seats!",
+				[]string{"Enrol Now"}},
+		},
+	},
+	{
+		ID: "finance", Label: "Finance",
+		Templates: []libTmpl{
+			{"Payment Reminder", "payment_reminder", "utility",
+				"Dear [...], your payment of ₹[...] is due on [...]. Please pay to avoid late fees.",
+				[]string{"Pay Now"}},
+			{"Account Statement", "account_statement", "utility",
+				"Hi [...], your [...] statement for [...] is ready. Download it below.",
+				[]string{"View Statement"}},
+			{"Exclusive Offer", "finance_offer", "marketing",
+				"Exclusive offer for you, [...]! Apply for a [...] at just [...]% interest. Limited period.",
+				[]string{"Apply Now"}},
+		},
+	},
+	{
+		ID: "food", Label: "Food & Delivery",
+		Templates: []libTmpl{
+			{"Order Confirmed", "food_order_confirmed", "utility",
+				"Your order from [...] is confirmed! \U0001f37d Estimated delivery: [...]. Track your order here.",
+				[]string{"Track Order"}},
+			{"Out for Delivery", "out_for_delivery", "utility",
+				"Your order is on the way, [...]! \U0001f6f5 ETA: [...] mins. Delivery partner: [...].", nil},
+			{"Daily Special", "daily_special", "marketing",
+				"\U0001f525 Today’s special for [...]: [...] at just ₹[...]. Order now before it sells out!",
+				[]string{"Order Now"}},
+		},
+	},
+	{
+		ID: "travel", Label: "Travel",
+		Templates: []libTmpl{
+			{"Booking Confirmation", "booking_confirmation", "utility",
+				"Hi [...], your booking to [...] on [...] is confirmed. Ref: [...]. Have a great trip!",
+				[]string{"View Booking"}},
+			{"Check-in Reminder", "checkin_reminder", "utility",
+				"Your flight to [...] departs tomorrow! ⏰ Check-in is open now. Booking: [...].",
+				[]string{"Check In"}},
+			{"Travel Offer", "travel_offer", "marketing",
+				"✈️ Exclusive deal for [...]: [...] to [...] from ₹[...]. Book by [...] to avail.",
+				[]string{"Book Now"}},
+		},
+	},
+}
+
+// libBodyToTemplate converts [...] placeholders to {{1}}, {{2}}, etc.
+func libBodyToTemplate(body string) string {
+	n := 0
+	var result strings.Builder
+	for {
+		idx := strings.Index(body, "[...]")
+		if idx == -1 {
+			result.WriteString(body)
+			break
+		}
+		n++
+		result.WriteString(body[:idx])
+		fmt.Fprintf(&result, "{{%d}}", n)
+		body = body[idx+5:]
+	}
+	return result.String()
 }
 
 func TemplateLibrary() templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		if _, err := io.WriteString(w, `<div class="lib-cards">`); err != nil {
+		if _, err := io.WriteString(w, `<div class="tmpl-lib-root" x-data="{ind:'ecommerce'}">`); err != nil {
 			return err
 		}
-		for _, t := range libraryTemplates {
-			catClass := "cat-" + t.Category
-			useURL := fmt.Sprintf("/templates/new?name=%s&category=%s&body=%s",
-				html.EscapeString(t.Name), html.EscapeString(t.Category), html.EscapeString(t.Body))
-			if _, err := fmt.Fprintf(w,
-				`<div class="lib-card">
-<div class="lib-card-hd">
-<span class="lib-card-name">%s</span>
-<span class="badge badge-cat %s">%s</span>
-</div>
-<div class="lib-card-industry">%s</div>
-<div class="lib-card-body">%s</div>
-<a class="btn btn-sm btn-secondary" href="%s">&#9999; Edit &amp; create draft</a>
-</div>`,
-				html.EscapeString(t.Name),
-				catClass, t.Category,
-				html.EscapeString(t.Industry),
-				html.EscapeString(t.Body),
-				useURL,
-			); err != nil {
+
+		// Left sidebar.
+		if _, err := io.WriteString(w, `<nav class="tmpl-lib-nav"><p class="tmpl-lib-nav-title">INDUSTRY</p>`); err != nil {
+			return err
+		}
+		for _, ind := range libraryData {
+			_, err := fmt.Fprintf(w,
+				`<button class="tmpl-lib-nav-item" :class="{active:ind===%s}" @click="ind=%s" type="button">%s</button>`,
+				jsLit(ind.ID), jsLit(ind.ID), html.EscapeString(ind.Label))
+			if err != nil {
 				return err
 			}
 		}
-		_, err := io.WriteString(w, `</div>`)
+		if _, err := io.WriteString(w, `</nav>`); err != nil {
+			return err
+		}
+
+		// Right content.
+		if _, err := io.WriteString(w, `<div class="tmpl-lib-content">`); err != nil {
+			return err
+		}
+		for _, ind := range libraryData {
+			_, err := fmt.Fprintf(w, `<div x-show="ind===%s">`, jsLit(ind.ID))
+			if err != nil {
+				return err
+			}
+			// Section header.
+			_, err = fmt.Fprintf(w,
+				`<div class="tmpl-lib-hd"><h2>%s <span class="tmpl-lib-count">%d templates</span></h2><p>Click "Use template" to customise and submit for approval</p></div>`,
+				html.EscapeString(ind.Label), len(ind.Templates))
+			if err != nil {
+				return err
+			}
+			// Template grid.
+			if _, err = io.WriteString(w, `<div class="tmpl-lib-grid">`); err != nil {
+				return err
+			}
+			for _, t := range ind.Templates {
+				catClass := "cat-" + t.Category
+				catLabel := strings.ToUpper(t.Category)
+
+				// Button chips.
+				chips := ""
+				for _, b := range t.Buttons {
+					chips += fmt.Sprintf(`<span class="tmpl-btn-chip">%s</span>`, html.EscapeString(b))
+				}
+				chipsHTML := ""
+				if chips != "" {
+					chipsHTML = `<div class="tmpl-btn-chips">` + chips + `</div>`
+				}
+
+				// "Use template" URL — convert [...] to {{N}} for the body param.
+				useURL := "/templates/new?" + url.Values{
+					"name":     {t.Slug},
+					"category": {t.Category},
+					"body":     {libBodyToTemplate(t.Body)},
+				}.Encode()
+
+				_, err = fmt.Fprintf(w,
+					`<div class="tmpl-lib-card">
+<div class="tmpl-lib-card-hd"><span class="tmpl-lib-card-name">%s</span><span class="badge badge-cat %s">%s</span></div>
+<div class="tmpl-lib-card-body">%s</div>%s
+<a class="btn btn-primary tmpl-lib-use-btn" href="%s">Use template</a>
+</div>`,
+					html.EscapeString(t.DisplayName),
+					catClass, catLabel,
+					html.EscapeString(t.Body),
+					chipsHTML,
+					html.EscapeString(useURL),
+				)
+				if err != nil {
+					return err
+				}
+			}
+			if _, err = io.WriteString(w, `</div>`); err != nil { // close grid
+				return err
+			}
+			if _, err = io.WriteString(w, `</div>`); err != nil { // close x-show div
+				return err
+			}
+		}
+		if _, err := io.WriteString(w, `</div>`); err != nil { // close tmpl-lib-content
+			return err
+		}
+		_, err := io.WriteString(w, `</div>`) // close tmpl-lib-root
 		return err
 	})
 }
+
+// ── Inline editor form (opened by Edit button) ────────────────────────────────
 
 func TemplateEditorForm(t *db.Template) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
@@ -263,7 +465,7 @@ func TemplateEditorForm(t *db.Template) templ.Component {
 <h3>Edit template</h3>
 <form method="post" action="/templates/%s"
   hx-put="/templates/%s"
-  hx-target="#tmpl-gallery"
+  hx-target="#tmpl-main"
   hx-swap="innerHTML"
   hx-disabled-elt="find button[type='submit']"
   hx-on::response-error="document.getElementById('tmpl-edit-errors').innerHTML=event.detail.xhr.responseText">
@@ -285,6 +487,8 @@ func TemplateEditorForm(t *db.Template) templ.Component {
 <textarea name="body" rows="5">%s</textarea></label>
 <div class="form-btns">
 <button class="btn btn-primary btn-sm" type="submit">Save changes</button>
+<button class="btn btn-secondary btn-sm" type="button"
+  onclick="document.getElementById('tmpl-editor').innerHTML=''">Cancel</button>
 </div>
 </form>
 </div>`,

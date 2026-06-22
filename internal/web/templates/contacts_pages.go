@@ -7,6 +7,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/a-h/templ"
 
@@ -35,15 +36,13 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
 			industryOpts += fmt.Sprintf(`<option value="%s">%s</option>`, html.EscapeString(ind), html.EscapeString(ind))
 		}
 
-		// Build industry filter options
-		industryFilterOpts := `<option value="">All industries</option>`
-		for _, ind := range industries {
-			industryFilterOpts += fmt.Sprintf(`<option value="%s">%s</option>`, html.EscapeString(ind), html.EscapeString(ind))
+		// Tag pills for filter bar
+		tagPills := `<button class="ct-tag-pill active" onclick="setTagFilter(0,this)">All</button>`
+		for _, t := range tags {
+			tagPills += fmt.Sprintf(`<button class="ct-tag-pill" onclick="setTagFilter(%d,this)">%s</button>`,
+				t.ID, html.EscapeString(t.Name))
 		}
 
-		// Pre-build the new-contact modal using ModalShellRaw so the canonical
-		// aria-modal/aria-labelledby/backdrop-close wrapper lives in one place (G-AP).
-		// for/id pairing added to every input/select (G-AQ).
 		ncInner := fmt.Sprintf(
 			`<div class="modal-gradient-hd" style="background:var(--avatar-gradient);padding:28px 24px;text-align:center;position:relative;border-radius:12px 12px 0 0">`+
 				`<button type="button" onclick="document.getElementById('new-contact-modal').close()"`+
@@ -104,50 +103,43 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
 
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap contacts-wrap">
-<div class="page-hd">
+
+<div class="ct-hd">
   <div>
     <div class="screen-title">Contacts</div>
-    <div class="screen-subtitle">Manage your contact list and segments</div>
+    <div class="screen-subtitle" id="ct-count-wrap"><span id="ct-count">Loading&hellip;</span></div>
   </div>
-  <div style="display:flex;gap:0.5rem;align-items:center">
-    <div class="view-toggle" id="view-toggle">
-      <button class="view-btn active" id="btn-grid" onclick="setView('grid')" aria-label="Grid view">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
-      </button>
-      <button class="view-btn" id="btn-list" onclick="setView('list')" aria-label="List view">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="14" height="2" rx="1"/><rect x="1" y="7" width="14" height="2" rx="1"/><rect x="1" y="12" width="14" height="2" rx="1"/></svg>
-      </button>
-    </div>
-    <button class="btn btn-secondary btn-sm" onclick="openModal('import-modal',this)">Import CSV</button>
-    <button class="btn btn-primary btn-sm" onclick="openModal('new-contact-modal',this)">+ Add contact</button>
+  <div style="display:flex;gap:8px;align-items:center">
+    <a href="/contacts/import" class="btn btn-secondary btn-sm" style="display:flex;align-items:center;gap:6px">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M7 1L4 4M7 1l3 3M1 11h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Import CSV
+    </a>
+    <a href="/contacts/new" class="btn btn-primary btn-sm">+ Add contact</a>
   </div>
 </div>
 
-<div class="contacts-filters">
-  <div class="ct-opt-tabs" id="opt-tabs" role="tablist" x-data="{optFilter:''}">
-    <button class="ct-opt-tab" role="tab" type="button" :class="{'active':optFilter===''}" :aria-selected="optFilter===''" @click="optFilter='';setOptFilter('',null)">All</button>
-    <button class="ct-opt-tab" role="tab" type="button" :class="{'active':optFilter==='true'}" :aria-selected="optFilter==='true'" @click="optFilter='true';setOptFilter('true',null)">Opted in</button>
-    <button class="ct-opt-tab" role="tab" type="button" :class="{'active':optFilter==='false'}" :aria-selected="optFilter==='false'" @click="optFilter='false';setOptFilter('false',null)">Opted out</button>
-  </div>
-  <select id="industry-filter-input" name="industry_filter" class="ct-filter-select" aria-label="Filter by industry"
-    hx-get="/contacts/table" hx-trigger="change" hx-target="#contacts-table" hx-swap="innerHTML"
-    hx-include="#opt-filter-input,[name=search]">
-    %s
-  </select>
-  <input type="search" placeholder="Search name or phone..."
-    hx-get="/contacts/table" hx-trigger="input changed delay:300ms" hx-target="#contacts-table" hx-swap="innerHTML"
-    hx-include="#opt-filter-input,#industry-filter-input" hx-indicator="#ct-search-ind"
-    name="search" class="form-input search-input" style="flex:1;min-width:180px;max-width:340px">
-  <span id="ct-search-ind" class="htmx-indicator" aria-hidden="true"><span class="htmx-ind-spin"></span></span>
+<div class="ct-search-bar">
+  <svg class="ct-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="var(--text-secondary)" stroke-width="1.5"/><path d="M10.5 10.5l3 3" stroke="var(--text-secondary)" stroke-width="1.5" stroke-linecap="round"/></svg>
+  <input type="search" placeholder="Search by name or phone..."
+    class="ct-search-input"
+    hx-get="/contacts/table" hx-trigger="input changed delay:300ms"
+    hx-target="#contacts-table" hx-swap="innerHTML"
+    hx-include="#ct-tag-input" hx-indicator="#ct-search-ind"
+    name="search" id="ct-search">
+  <span id="ct-search-ind" class="htmx-indicator"><span class="htmx-ind-spin"></span></span>
 </div>
-<input type="hidden" id="opt-filter-input" name="opted_in_filter" value="">
+
+<div class="ct-filter-row">
+  <div class="ct-tag-pills" id="ct-tag-pills">%s</div>
+</div>
+
+<input type="hidden" id="ct-tag-input" name="tag" value="">
 
 <div id="contacts-table"
-  role="tabpanel" tabindex="0"
   hx-get="/contacts/table"
   hx-trigger="load, contactsUpdated from:body"
   hx-swap="innerHTML"
-  aria-live="polite" aria-atomic="false">` + SkeletonRows(6) + `</div>
+  aria-live="polite">%s</div>
 
 <div id="ct-panel" class="ct-panel" role="complementary" aria-label="Contact details">
   <div id="ct-panel-body"></div>
@@ -155,36 +147,17 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
 <div id="ct-panel-overlay" onclick="closeContactPanel()"
   style="display:none;position:fixed;inset:0;z-index:98;background:rgba(0,0,0,0.08)"></div>
 
-` + ModalShell("import-modal", "Import contacts from CSV",
-			`<form hx-post="/contacts/import/upload" hx-target="#import-steps" hx-swap="innerHTML" enctype="multipart/form-data" hx-disabled-elt="find button[type='submit']">
-<label class="field"><span>CSV file</span><input type="file" name="csv_file" accept=".csv" required></label>
-<div class="modal-btns">
-<button class="btn btn-primary btn-sm" type="submit">Upload &amp; map columns</button>
-<button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('import-modal').close()">Cancel</button>
-</div>
-</form>
-<div id="import-steps" aria-live="polite" aria-atomic="false"></div>`) + `
-
 %s
 
 </div>
 
 <script>
-function setOptFilter(val, evt) {
-  document.getElementById('opt-filter-input').value = val;
-  var indEl = document.getElementById('industry-filter-input');
+function setTagFilter(tagID, el) {
+  document.querySelectorAll('.ct-tag-pill').forEach(function(b){b.classList.remove('active')});
+  if(el) el.classList.add('active');
+  document.getElementById('ct-tag-input').value = tagID || '';
   htmx.ajax('GET', '/contacts/table', {target:'#contacts-table', swap:'innerHTML',
-    values: {
-      opted_in_filter: val,
-      search: (document.querySelector('[name=search]') || {}).value || '',
-      industry_filter: indEl ? indEl.value : ''
-    }});
-}
-function setView(v) {
-  localStorage.setItem('ct_view', v);
-  document.getElementById('btn-grid').classList.toggle('active', v === 'grid');
-  document.getElementById('btn-list').classList.toggle('active', v === 'list');
-  htmx.ajax('GET', '/contacts/table?view=' + v, {target:'#contacts-table', swap:'innerHTML'});
+    values: { tag: tagID || '', search: document.getElementById('ct-search')?.value || '' }});
 }
 function openContactPanel() {
   document.getElementById('ct-panel').classList.add('open');
@@ -194,7 +167,8 @@ function closeContactPanel() {
   document.getElementById('ct-panel').classList.remove('open');
   document.getElementById('ct-panel-overlay').style.display = 'none';
 }
-</script>`, industryFilterOpts, ncDialogHTML)
+</script>`,
+			tagPills, SkeletonRows(6), ncDialogHTML)
 		if err != nil {
 			return err
 		}
@@ -229,6 +203,12 @@ func avatarGradient(id string) string {
 
 func ContactTable(contacts []db.Contact, total int, offset, limit int, searchActive bool) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		// OOB update for count in header
+		countText := fmt.Sprintf("%d contacts in your directory", total)
+		if _, err := fmt.Fprintf(w, `<span id="ct-count" hx-swap-oob="true">%s</span>`, countText); err != nil {
+			return err
+		}
+
 		if len(contacts) == 0 {
 			icon := EmptyIconContacts
 			title := "No contacts yet"
@@ -243,70 +223,80 @@ func ContactTable(contacts []db.Contact, total int, offset, limit int, searchAct
 		}
 
 		end := offset + len(contacts)
-		_, err := fmt.Fprintf(w, `<div class="contacts-table-wrap">
-<div class="table-count">%d&#8211;%d of %d</div>
-<table class="contacts-tbl">
+		if _, err := fmt.Fprintf(w, `<div class="ct-tbl-wrap">
+<table class="tbl ct-tbl">
 <thead><tr>
-  <th>PERSON</th><th>COMPANY</th><th>INDUSTRY</th><th>STATUS</th><th></th>
+<th>NAME</th><th>PHONE</th><th>TAGS</th><th>CONSENT</th><th>LAST MESSAGE</th><th>CITY</th><th></th>
 </tr></thead>
-<tbody>`, offset+1, end, total)
-		if err != nil {
+<tbody>`, ); err != nil {
 			return err
 		}
 
 		for _, c := range contacts {
-			company := "&#8212;"
-			if v, ok := c.CustomFields["company"]; ok {
-				if s, ok := v.(string); ok && s != "" {
-					company = html.EscapeString(s)
-				}
-			}
-			industryHTML := "&#8212;"
-			if c.Industry != "" {
-				industryHTML = fmt.Sprintf(`<span class="ind-chip">%s</span>`, html.EscapeString(c.Industry))
-			}
-
-			statusBadge := `<span class="ct-badge ct-badge-off">Not opted in</span>`
-			if c.OptedIn {
-				statusBadge = `<span class="ct-badge ct-badge-on">Opted in</span>`
-			}
-
-			initials := contactAvatarInitials(c.Name, c.WAPhone)
-			grad := avatarGradient(c.ID)
 			displayName := c.Name
 			if displayName == "" {
 				displayName = c.WAPhone
 			}
+			initials := contactAvatarInitials(c.Name, c.WAPhone)
+			grad := avatarGradient(c.ID)
+
+			// Tags badges
+			tagsHTML := `<span style="color:var(--text-secondary)">&#8212;</span>`
+			if len(c.Tags) > 0 {
+				tagsHTML = ""
+				for _, tg := range c.Tags {
+					tagsHTML += fmt.Sprintf(`<span class="ct-tag-badge">%s</span>`, html.EscapeString(tg))
+				}
+			}
+
+			// Consent
+			consentHTML := `<span class="ct-consent-dot ct-consent-dot--out"></span><span style="color:var(--danger)">Opted out</span>`
+			if c.OptedIn {
+				consentHTML = `<span class="ct-consent-dot ct-consent-dot--in"></span><span>Opted in</span>`
+			}
+
+			// Last message
+			lastMsg := relTime(c.LastMessageAt)
+
+			// City from custom fields
+			city := "&#8212;"
+			if v, ok := c.CustomFields["city"]; ok {
+				if s, ok := v.(string); ok && s != "" {
+					city = html.EscapeString(s)
+				}
+			}
 
 			if _, err := fmt.Fprintf(w,
 				`<tr class="ct-row"`+
-				` hx-get="/contacts/%s"`+
-				` hx-target="#ct-panel-body"`+
-				` hx-swap="innerHTML"`+
-				` hx-on::after-request="if(event.detail.successful)openContactPanel()">`+
-				`<td><div class="td-person">`+
-				`<div class="ct-av %s">%s</div>`+
-				`<div><div class="ct-name">%s</div><div class="ct-phone">%s</div></div>`+
-				`</div></td>`+
-				`<td class="td-company">%s</td>`+
-				`<td>%s</td>`+
-				`<td>%s</td>`+
-				`<td onclick="event.stopPropagation()">`+
-				`<div class="td-actions">`+
-				`<button class="ct-tbl-act ct-tbl-act-del"`+
-				` hx-delete="/contacts/%s"`+
-				` hx-confirm="Permanently delete this contact?"`+
-				` hx-target="#contacts-table" hx-swap="innerHTML"`+
-				` hx-include="#opt-filter-input,#industry-filter-input,[name=search]"`+
-				` aria-label="Delete contact"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M8 1.5V2.5H3C2.44772 2.5 2 2.94772 2 3.5V4.5C2 5.05228 2.44772 5.5 3 5.5H21C21.5523 5.5 22 5.05228 22 4.5V3.5C22 2.94772 21.5523 2.5 21 2.5H16V1.5C16 0.947715 15.5523 0.5 15 0.5H9C8.44772 0.5 8 0.947715 8 1.5Z" fill="currentColor"/><path d="M3.9231 7.5H20.0767L19.1344 20.2216C19.0183 21.7882 17.7135 23 16.1426 23H7.85724C6.28636 23 4.98148 21.7882 4.86544 20.2216L3.9231 7.5Z" fill="currentColor"/></svg></button>`+
-				`</div></td></tr>`,
+					` hx-get="/contacts/%s"`+
+					` hx-target="#ct-panel-body"`+
+					` hx-swap="innerHTML"`+
+					` hx-on::after-request="if(event.detail.successful)openContactPanel()">`+
+					`<td><div class="td-name-cell">`+
+					`<div class="ct-av %s">%s</div>`+
+					`<div class="ct-name">%s</div>`+
+					`</div></td>`+
+					`<td class="ct-phone">%s</td>`+
+					`<td><div class="ct-tags-cell">%s</div></td>`+
+					`<td><div class="ct-consent-cell">%s</div></td>`+
+					`<td class="ct-lastmsg">%s</td>`+
+					`<td class="ct-city">%s</td>`+
+					`<td onclick="event.stopPropagation()" class="ct-actions-cell">`+
+					`<button class="ct-tbl-act ct-tbl-act-del"`+
+					` hx-delete="/contacts/%s"`+
+					` hx-confirm="Permanently delete this contact?"`+
+					` hx-target="#contacts-table" hx-swap="innerHTML"`+
+					` hx-include="#ct-tag-input,[name=search]"`+
+					` aria-label="Delete contact"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M8 1.5V2.5H3C2.44772 2.5 2 2.94772 2 3.5V4.5C2 5.05228 2.44772 5.5 3 5.5H21C21.5523 5.5 22 5.05228 22 4.5V3.5C22 2.94772 21.5523 2.5 21 2.5H16V1.5C16 0.947715 15.5523 0.5 15 0.5H9C8.44772 0.5 8 0.947715 8 1.5Z" fill="currentColor"/><path d="M3.9231 7.5H20.0767L19.1344 20.2216C19.0183 21.7882 17.7135 23 16.1426 23H7.85724C6.28636 23 4.98148 21.7882 4.86544 20.2216L3.9231 7.5Z" fill="currentColor"/></svg></button>`+
+					`</td></tr>`,
 				c.ID,
 				html.EscapeString(grad), html.EscapeString(initials),
 				html.EscapeString(displayName),
-				html.EscapeString(c.WAPhone),
-				company,
-				industryHTML,
-				statusBadge,
+				fmtPhone(c.WAPhone),
+				tagsHTML,
+				consentHTML,
+				lastMsg,
+				city,
 				c.ID,
 			); err != nil {
 				return err
@@ -324,10 +314,10 @@ func ContactTable(contacts []db.Contact, total int, offset, limit int, searchAct
 			if prev < 0 {
 				prev = 0
 			}
-			paginationHTML += fmt.Sprintf(`<button class="btn btn-secondary btn-sm" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table" hx-swap="innerHTML" hx-indicator="#ct-search-ind">&#8592; Previous</button>`, prev)
+			paginationHTML += fmt.Sprintf(`<button class="btn btn-secondary btn-sm" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table" hx-swap="innerHTML" hx-include="#ct-tag-input,[name=search]">&#8592; Previous</button>`, prev)
 		}
 		if end < total {
-			paginationHTML += fmt.Sprintf(`<button class="btn btn-secondary btn-sm" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table" hx-swap="innerHTML" hx-indicator="#ct-search-ind">Next &#8594;</button>`, offset+limit)
+			paginationHTML += fmt.Sprintf(`<button class="btn btn-secondary btn-sm" hx-get="/contacts/table?offset=%d" hx-target="#contacts-table" hx-swap="innerHTML" hx-include="#ct-tag-input,[name=search]">Next &#8594;</button>`, offset+limit)
 		}
 		paginationHTML += `</div>`
 		if _, err := io.WriteString(w, paginationHTML+"</div>"); err != nil {
@@ -335,6 +325,36 @@ func ContactTable(contacts []db.Contact, total int, offset, limit int, searchAct
 		}
 		return nil
 	})
+}
+
+func fmtPhone(p string) string {
+	if !strings.HasPrefix(p, "+") || len(p) < 6 {
+		return p
+	}
+	// Split after first 3 chars (+CC), then split remaining in half
+	if len(p) > 3 {
+		rest := p[3:]
+		mid := len(rest) / 2
+		return p[:3] + " " + rest[:mid] + " " + rest[mid:]
+	}
+	return p
+}
+
+func relTime(t *time.Time) string {
+	if t == nil {
+		return "&#8212;"
+	}
+	d := time.Since(*t)
+	switch {
+	case d < 2*time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
 }
 
 func ContactDetail(c *db.Contact, tags []db.Tag, notes []db.ContactNote, allTags []db.Tag) templ.Component {
@@ -607,6 +627,126 @@ func SegmentList(segs []db.Segment) templ.Component {
 	})
 }
 
+// ImportPage renders the full 3-step import wizard page.
+func ImportPage(agent *mw.AgentClaims) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		if _, err := io.WriteString(w, ShellOpen(agent, "/contacts", "Import Contacts", "")); err != nil {
+			return err
+		}
+		_, err := fmt.Fprintf(w, `
+<div class="imp-pg">
+  <div class="imp-pg-hd">
+    <a href="/contacts" class="imp-back-btn">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+    <div>
+      <div class="imp-pg-title">Import Contacts</div>
+      <div class="imp-pg-sub">Upload a CSV or Excel file to bulk-add contacts</div>
+    </div>
+  </div>
+  <div class="imp-pg-body">
+    <aside class="imp-pg-side">
+      <div class="card imp-side-card">
+        <div id="import-sidebar">%s</div>
+      </div>
+    </aside>
+    <div class="imp-pg-main">
+      <div class="card imp-main-card">
+        <div id="import-content">%s</div>
+      </div>
+    </div>
+  </div>
+</div>
+`, importSidebarInner(1), importUploadHTML())
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(w, ShellClose())
+		return err
+	})
+}
+
+func importSidebarInner(activeStep int) string {
+	steps := []string{"Upload", "Map columns", "Review &amp; import"}
+	var sb strings.Builder
+	sb.WriteString(`<div class="imp-steps">`)
+	for i, label := range steps {
+		n := i + 1
+		cls := "imp-step-item"
+		if n == activeStep {
+			cls += " imp-step--active"
+		} else if n < activeStep {
+			cls += " imp-step--done"
+		}
+		numHTML := fmt.Sprintf(`%d`, n)
+		if n < activeStep {
+			numHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+		}
+		sb.WriteString(fmt.Sprintf(`<div class="%s"><div class="imp-step-num">%s</div><div class="imp-step-label">%s</div></div>`, cls, numHTML, label))
+	}
+	sb.WriteString(`</div>`)
+	sb.WriteString(`<div class="imp-tips">
+<div class="imp-tips-title">CSV TIPS</div>
+<ul class="imp-tips-list">
+<li>First row = column headers</li>
+<li>UTF-8 encoding</li>
+<li>Phone in E.164 format</li>
+<li>Max 10,000 rows</li>
+</ul>
+</div>`)
+	return sb.String()
+}
+
+func importUploadHTML() string {
+	return `<div class="imp-step-hd">
+<div class="imp-step-hd-title">Upload your CSV file</div>
+<div class="imp-step-hd-sub">Drag and drop your file below, or click to browse.</div>
+</div>
+<div x-data="{dragging:false,filename:''}" class="imp-upload-wrap">
+  <form id="imp-upload-form"
+    hx-post="/contacts/import/upload"
+    hx-target="#import-content"
+    hx-swap="innerHTML"
+    hx-encoding="multipart/form-data"
+    hx-indicator="#imp-upload-ind">
+    <div class="imp-dropzone" :class="{'imp-dropzone--drag':dragging}"
+      @dragover.prevent="dragging=true"
+      @dragleave.prevent="dragging=false"
+      @drop.prevent="dragging=false;let f=$event.dataTransfer.files[0];if(f){$refs.fi.files=$event.dataTransfer.files;filename=f.name;htmx.trigger($refs.form,'submit')}"
+      @click="$refs.fi.click()">
+      <div class="imp-drop-icon">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="4" y="4" width="24" height="24" rx="8" fill="var(--bg-surface)"/><path d="M16 20V12M16 12l-3 3M16 12l3 3" stroke="var(--text-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 22h12" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+      <div class="imp-drop-title" x-text="filename || 'Drag &amp; drop your CSV here'"></div>
+      <div class="imp-drop-sub" x-show="!filename">or <span class="imp-browse-link">browse file</span> &mdash; CSV or Excel, max 10 MB</div>
+      <div x-show="filename" class="imp-drop-sub" style="color:var(--accent)">File selected. Uploading&hellip;</div>
+    </div>
+    <input type="file" name="csv_file" accept=".csv,.xlsx,.xls" x-ref="fi"
+      class="imp-file-hidden"
+      @change="if($el.files[0]){filename=$el.files[0].name;htmx.trigger(document.getElementById('imp-upload-form'),'submit')}">
+    <div class="imp-upload-actions">
+      <a href="/contacts/import/sample" class="btn btn-secondary btn-sm" download>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="margin-right:4px"><path d="M7 2v7M7 9l-2.5-2.5M7 9l2.5-2.5M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Download sample template
+      </a>
+      <span id="imp-upload-ind" class="htmx-indicator" style="font-size:13px;color:var(--text-secondary)">Parsing&hellip;</span>
+    </div>
+  </form>
+</div>
+<div class="imp-fmt">
+  <div class="imp-fmt-title">Expected format</div>
+  <div class="imp-fmt-scroll">
+  <table class="tbl imp-fmt-tbl">
+  <thead><tr><th>NAME *</th><th>PHONE *</th><th>EMAIL</th><th>CITY</th><th>TAGS</th><th>CONSENT</th></tr></thead>
+  <tbody>
+  <tr><td>Priya Sharma</td><td>+91 98765 43210</td><td>priya@mail.com</td><td>Mumbai</td><td>VIP</td><td>yes</td></tr>
+  <tr><td>Raj Patel</td><td>+91 87654 32109</td><td><em style="color:var(--text-secondary)">(empty)</em></td><td>Delhi</td><td>Lead</td><td>yes</td></tr>
+  </tbody>
+  </table>
+  </div>
+</div>`
+}
+
 func ImportMapColumns(headers []string, csvData string, rowCount int) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		opts := `<option value="">&#8212; skip &#8212;</option>`
@@ -615,37 +755,57 @@ func ImportMapColumns(headers []string, csvData string, rowCount int) templ.Comp
 		}
 
 		_, err := fmt.Fprintf(w, `
-<div class="import-map">
-<p>%d data rows detected. Map the columns:</p>
-<form hx-post="/contacts/import/preview" hx-target="#import-steps" hx-swap="innerHTML">
+<div class="imp-step-hd">
+<div class="imp-step-hd-title">Map columns</div>
+<div class="imp-step-hd-sub">%d data rows detected. Tell us which CSV column contains each field.</div>
+</div>
+<form class="imp-map-form" hx-post="/contacts/import/preview" hx-target="#import-content" hx-swap="innerHTML">
 <input type="hidden" name="csv_data" value="%s">
-<label class="field"><span>Phone column <span class="req">*</span></span>
-<select name="phone_col" required>%s</select></label>
-<label class="field"><span>Name column</span>
-<select name="name_col">%s</select></label>
-<label class="field"><span>Email column</span>
-<select name="email_col">%s</select></label>
-<label class="field"><span>Tags (comma-separated)</span>
-<input type="text" name="tags" placeholder="newsletter, promo"></label>
-<label class="field cb">
+<div class="imp-map-fields">
+<div class="form-group">
+<label class="form-label">Phone column <span style="color:var(--danger)">*</span></label>
+<select class="form-input" name="phone_col" required>%s</select>
+</div>
+<div class="form-group">
+<label class="form-label">Name column</label>
+<select class="form-input" name="name_col">%s</select>
+</div>
+<div class="form-group">
+<label class="form-label">Email column</label>
+<select class="form-input" name="email_col">%s</select>
+</div>
+<div class="form-group">
+<label class="form-label">Apply tags <span style="color:var(--text-secondary);font-weight:400">(comma-separated)</span></label>
+<input class="form-input" type="text" name="tags" placeholder="newsletter, promo">
+</div>
+<label class="imp-opted-in-row">
 <input type="checkbox" name="mark_opted_in">
-<span>Mark all as opted-in</span></label>
-<div class="form-btns">
-<button class="btn btn-primary btn-sm" type="submit">Preview import</button>
+<span>Mark all imported contacts as opted-in</span>
+</label>
+</div>
+<div class="imp-step-footer">
+<button class="btn btn-primary" type="submit">Preview import &rarr;</button>
 </div>
 </form>
-</div>`, rowCount, html.EscapeString(csvData), opts, opts, opts)
+<div id="import-sidebar" hx-swap-oob="true">%s</div>
+`, rowCount, html.EscapeString(csvData), opts, opts, opts, importSidebarInner(2))
 		return err
 	})
 }
 
 func ImportPreview(rows []ImportPreviewRow, total int, csvData string, phoneCol, nameCol, emailCol int, tags string, optedIn bool) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		optedInVal := "false"
+		if optedIn {
+			optedInVal = "true"
+		}
 		_, err := fmt.Fprintf(w, `
-<div class="import-preview">
-<p>Preview (first %d of %d rows):</p>
-<table class="tbl">
-<thead><tr><th>Phone</th><th>Name</th><th>Email</th><th>Status</th></tr></thead>
+<div class="imp-step-hd">
+<div class="imp-step-hd-title">Review &amp; import</div>
+<div class="imp-step-hd-sub">Showing first %d of %d rows. Check the data looks correct, then confirm.</div>
+</div>
+<table class="tbl imp-preview-tbl">
+<thead><tr><th>PHONE</th><th>NAME</th><th>EMAIL</th><th>STATUS</th></tr></thead>
 <tbody>`, len(rows), total)
 		if err != nil {
 			return err
@@ -662,26 +822,24 @@ func ImportPreview(rows []ImportPreviewRow, total int, csvData string, phoneCol,
 				return err
 			}
 		}
-		optedInVal := "false"
-		if optedIn {
-			optedInVal = "true"
-		}
 		_, err = fmt.Fprintf(w, `</tbody></table>
-<form method="post" action="/contacts/import/confirm">
+<form hx-post="/contacts/import/confirm" hx-target="#import-content" hx-swap="innerHTML">
 <input type="hidden" name="csv_data" value="%s">
 <input type="hidden" name="phone_col" value="%s">
 <input type="hidden" name="name_col" value="%s">
 <input type="hidden" name="email_col" value="%s">
 <input type="hidden" name="tags" value="%s">
 <input type="hidden" name="mark_opted_in" value="%s">
-<div class="form-btns">
-<button class="btn btn-primary btn-sm" type="submit">Confirm import (%d total rows)</button>
+<div class="imp-step-footer">
+<button class="btn btn-primary" type="submit">Confirm import &mdash; %d rows &rarr;</button>
 </div>
 </form>
-</div>`,
+<div id="import-sidebar" hx-swap-oob="true">%s</div>
+`,
 			html.EscapeString(csvData),
 			strconv.Itoa(phoneCol), strconv.Itoa(nameCol), strconv.Itoa(emailCol),
 			html.EscapeString(tags), optedInVal, total,
+			importSidebarInner(3),
 		)
 		return err
 	})
@@ -690,15 +848,23 @@ func ImportPreview(rows []ImportPreviewRow, total int, csvData string, phoneCol,
 func ImportResult(inserted, skipped, invalidCount int) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		_, err := fmt.Fprintf(w, `
-<div class="import-result">
-<p class="success">Import complete.</p>
-<dl>
-<dt>Inserted</dt><dd>%d</dd>
-<dt>Skipped (duplicate phone)</dt><dd>%d</dd>
-<dt>Invalid</dt><dd>%d</dd>
-</dl>
-<a class="btn btn-primary btn-sm" href="/contacts">View contacts</a>
-</div>`, inserted, skipped, invalidCount)
+<div class="imp-result">
+<div class="imp-result-icon">
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="24" fill="var(--accent-light,#e6f9f0)"/><path d="M14 24l7 7 13-13" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</div>
+<div class="imp-result-title">Import complete!</div>
+<div class="imp-result-stats">
+<div class="imp-result-stat"><span class="imp-result-num" style="color:var(--accent)">%d</span><span class="imp-result-label">Added</span></div>
+<div class="imp-result-stat"><span class="imp-result-num" style="color:var(--warning,#f59e0b)">%d</span><span class="imp-result-label">Skipped (duplicate)</span></div>
+<div class="imp-result-stat"><span class="imp-result-num" style="color:var(--danger)">%d</span><span class="imp-result-label">Invalid</span></div>
+</div>
+<div class="imp-result-actions">
+<a class="btn btn-primary" href="/contacts">View contacts</a>
+<a class="btn btn-secondary" href="/contacts/import">Import another file</a>
+</div>
+</div>
+<div id="import-sidebar" hx-swap-oob="true">%s</div>
+`, inserted, skipped, invalidCount, importSidebarInner(4))
 		return err
 	})
 }

@@ -1513,3 +1513,47 @@ code {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ── Avatar dropdown ──────────────────────────────────────── */
+.av-dropdown { min-width: 220px; padding: 4px 0; }
+.av-dd-identity { padding: 12px 16px 10px; }
+.av-dd-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.av-dd-email { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.av-dd-signout { color: var(--danger) !important; }
+
+/* ── My Account page ─────────────────────────────────────── */
+.acct-wrap { max-width: 680px; }
+.acct-hd { margin-bottom: 24px; }
+.acct-flash { background: var(--success-light,#f0fdf4); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 16px; font-size: 13px; color: var(--accent); margin-bottom: 16px; }
+.acct-cards { display: flex; flex-direction: column; gap: 16px; }
+.acct-card { padding: 24px 28px; }
+.acct-card-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 20px; }
+
+/* Profile header */
+.acct-profile-hd { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.acct-av { width: 64px; height: 64px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.acct-name { font-size: 18px; font-weight: 700; color: var(--text); }
+.acct-email-disp { font-size: 13px; color: var(--text-secondary); margin-top: 2px; margin-bottom: 8px; }
+.acct-role-badge { display: inline-block; padding: 3px 12px; font-size: 12px; font-weight: 600; border-radius: 20px; background: var(--accent-light,#e6f9f0); color: var(--accent); border: 1px solid var(--accent-border,#a7f3d0); text-transform: capitalize; }
+
+/* Profile form */
+.acct-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.acct-form-footer { display: flex; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+/* Notifications */
+.acct-notif-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid var(--border); cursor: pointer; gap: 12px; }
+.acct-notif-row:last-child { border-bottom: none; }
+.acct-notif-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.acct-notif-desc { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+/* Toggle switch */
+.acct-toggle-cb { appearance: none; -webkit-appearance: none; width: 44px; height: 24px; border-radius: 12px; background: var(--border); position: relative; cursor: pointer; flex-shrink: 0; transition: background .2s; }
+.acct-toggle-cb:checked { background: var(--accent); }
+.acct-toggle-cb::after { content:''; position:absolute; width:20px; height:20px; border-radius:50%; background:#fff; top:2px; left:2px; transition:left .2s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+.acct-toggle-cb:checked::after { left:22px; }
+
+/* Danger card */
+.acct-danger-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1.5px solid var(--danger-light, #fee2e2) !important; }
+.acct-danger-title { font-size: 14px; font-weight: 600; color: var(--danger); }
+.acct-danger-desc { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+.acct-signout-btn { padding: 8px 20px; font-size: 14px; font-weight: 600; color: var(--danger); background: transparent; border: 1.5px solid var(--danger); border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.acct-signout-btn:hover { background: var(--danger-light, #fee2e2); }

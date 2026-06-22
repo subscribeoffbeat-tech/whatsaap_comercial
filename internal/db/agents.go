@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -22,20 +23,27 @@ type Agent struct {
 	LastActiveAt    *time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	// Extended profile fields (migration 011)
+	Phone       *string
+	Timezone    string
+	Preferences map[string]any
 }
 
 const agentColumns = `id::text, name, email, password_hash, role, available,
 	COALESCE(active, TRUE), invite_token, invite_expires_at, last_active_at,
-	created_at, updated_at`
+	created_at, updated_at,
+	phone, COALESCE(timezone,'Asia/Kolkata'), COALESCE(preferences::text,'{}')`
 
 func scanAgent(row rowScanner) (*Agent, error) {
 	a := &Agent{}
-	var inviteToken pgtype.Text
+	var inviteToken, phone pgtype.Text
 	var inviteExp, lastActive pgtype.Timestamptz
+	var prefRaw string
 	err := row.Scan(
 		&a.ID, &a.Name, &a.Email, &a.PasswordHash, &a.Role, &a.Available,
 		&a.Active, &inviteToken, &inviteExp, &lastActive,
 		&a.CreatedAt, &a.UpdatedAt,
+		&phone, &a.Timezone, &prefRaw,
 	)
 	if err != nil {
 		return nil, err
@@ -51,6 +59,11 @@ func scanAgent(row rowScanner) (*Agent, error) {
 		t := lastActive.Time
 		a.LastActiveAt = &t
 	}
+	if phone.Valid {
+		a.Phone = &phone.String
+	}
+	a.Preferences = map[string]any{}
+	_ = json.Unmarshal([]byte(prefRaw), &a.Preferences)
 	return a, nil
 }
 
@@ -203,5 +216,30 @@ func UpdateInviteToken(ctx context.Context, pool *pgxpool.Pool, agentID, token s
 	_, err := pool.Exec(ctx,
 		`UPDATE agents SET invite_token = $1, invite_expires_at = $2 WHERE id = $3::uuid`,
 		token, expiresAt, agentID)
+	return err
+}
+
+// UpdateAgentProfile updates name, email, phone, and timezone for the logged-in agent.
+func UpdateAgentProfile(ctx context.Context, pool *pgxpool.Pool, agentID, name, email, phone, timezone string) error {
+	var phoneVal *string
+	if phone != "" {
+		phoneVal = &phone
+	}
+	_, err := pool.Exec(ctx, `
+		UPDATE agents SET name=$1, email=$2, phone=$3, timezone=$4, updated_at=NOW()
+		WHERE id=$5::uuid
+	`, name, email, phoneVal, timezone, agentID)
+	return err
+}
+
+// UpdateAgentPreferences stores notification preference toggles as JSONB.
+func UpdateAgentPreferences(ctx context.Context, pool *pgxpool.Pool, agentID string, prefs map[string]any) error {
+	raw, err := json.Marshal(prefs)
+	if err != nil {
+		return err
+	}
+	_, err = pool.Exec(ctx, `
+		UPDATE agents SET preferences=$1::jsonb, updated_at=NOW() WHERE id=$2::uuid
+	`, string(raw), agentID)
 	return err
 }
