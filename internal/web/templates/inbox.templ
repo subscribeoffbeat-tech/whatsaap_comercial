@@ -230,7 +230,7 @@ templ MessageBubble(msg *db.Message) {
 // Composer renders the reply input bar.
 templ Composer(conv *db.Conversation) {
 	<div class="composer" x-data="{ body: '' }">
-		<button class="btn sm emoji-btn" type="button">😊</button>
+		<button class="cb-btn" type="button" title="Emoji">😊</button>
 		<input class="composer-input"
 			type="text"
 			placeholder={ composerPlaceholder(conv) }
@@ -239,9 +239,11 @@ templ Composer(conv *db.Conversation) {
 		if !whatsapp.IsWindowOpen(conv.LastInboundAt) {
 			<button class="btn sm" type="button"
 				hx-get={ "/inbox/convs/" + conv.ID + "/template-picker" }
-				hx-target="#template-modal">Template</button>
+				hx-target="#template-modal">📋 Template</button>
 		}
-		<button class="btn pri sm" type="button"
-			@click={ "submitReply('" + conv.ID + "', body); body = ''" }>Send</button>
+		<button class="send-btn" type="button"
+			@click={ "submitReply('" + conv.ID + "', body); body = ''" }>
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+		</button>
 	</div>
 }
