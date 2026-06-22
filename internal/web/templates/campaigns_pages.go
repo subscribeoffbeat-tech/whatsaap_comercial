@@ -160,9 +160,9 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 <table class="tbl">
 <thead><tr>
   <th class="cmp-chev-cell"></th>
-  <th>NAME</th><th>STATUS</th><th>SENT</th><th>DELIVERED</th>
-  <th>FAILED</th><th>SUPPRESSED</th><th>COST</th><th>SCHEDULED</th>
-  <th style="min-width:200px">PROGRESS</th>
+  <th>CAMPAIGN</th><th>TEMPLATE</th><th>AUDIENCE</th>
+  <th>SENT</th><th>DELIVERED</th><th>FAILED</th>
+  <th>STATUS</th><th>COST</th><th>DATE</th>
 </tr></thead>
 <tbody>`,
 				counts["all"], counts["running"], counts["draft"],
@@ -173,9 +173,10 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 			}
 
 			for _, c := range cs {
-				sched := "&#8212;"
+				// Date: prefer scheduled_at, fall back to created_at
+				dateStr := c.CreatedAt.Format("02 Jan 2006")
 				if c.ScheduledAt != nil {
-					sched = c.ScheduledAt.Format("02 Jan 15:04")
+					dateStr = c.ScheduledAt.Format("02 Jan 2006")
 				}
 
 				isFailed := c.FailedCount > 0 && c.SentCount == 0
@@ -198,65 +199,106 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign) templ.Component {
 				}
 				statusBadge := BadgeHTML(badgeVariant, c.Status)
 
-				// Action buttons — stop propagation so row click doesn't fire
+				// Delivered cell: count + delivery rate bar + undelivered count
+				dlvCell := `<td class="cmp-td-dlv"><span class="dlv-dash">&#8212;</span></td>`
+				if c.SentCount > 0 {
+					dlvPct := c.DeliveredCount * 100 / c.SentCount
+					dlvFillClass := "dlv-fill--ok"
+					if dlvPct >= 70 {
+						dlvFillClass = "dlv-fill--good"
+					} else if dlvPct < 40 {
+						dlvFillClass = "dlv-fill--low"
+					}
+					notDlv := c.SentCount - c.DeliveredCount
+					notDlvHTML := ""
+					if notDlv > 0 {
+						notDlvHTML = fmt.Sprintf(`<div class="dlv-pending">%d not delivered</div>`, notDlv)
+					}
+					dlvCell = fmt.Sprintf(
+						`<td class="cmp-td-dlv">`+
+							`<div class="dlv-count">%d</div>`+
+							`<div class="dlv-bar-row">`+
+							`<div class="dlv-track"><div class="dlv-fill %s" style="width:%d%%"></div></div>`+
+							`<span class="dlv-pct">%d%%</span>`+
+							`</div>`+
+							`%s`+
+							`</td>`,
+						c.DeliveredCount, dlvFillClass, dlvPct, dlvPct, notDlvHTML,
+					)
+				}
+
+				// Failed cell
+				failedCell := `<td class="cmp-time">&#8212;</td>`
+				if c.FailedCount > 0 {
+					failedCell = fmt.Sprintf(`<td class="cmp-td-fail">%d</td>`, c.FailedCount)
+				}
+
+				// Action buttons for detail row
 				actionsHTML := ""
 				if c.Status == "running" {
 					actionsHTML += fmt.Sprintf(
-						`<form hx-post="/campaigns/%s/pause" hx-swap="none" hx-disabled-elt="find button" style="display:inline" onclick="event.stopPropagation()"><button class="btn btn-sm btn-secondary" type="submit">&#8214; Pause</button></form> `,
+						`<form hx-post="/campaigns/%s/pause" hx-swap="none" hx-disabled-elt="find button" style="display:inline"><button class="btn btn-sm btn-secondary" type="submit">&#8214; Pause</button></form> `,
 						c.ID)
 				}
 				if c.Status == "running" || c.Status == "scheduled" {
 					actionsHTML += fmt.Sprintf(
-						`<form hx-post="/campaigns/%s/cancel" hx-swap="none" hx-disabled-elt="find button" style="display:inline" onclick="event.stopPropagation()"><button class="btn btn-sm btn-danger-ghost" type="submit">Cancel</button></form>`,
+						`<form hx-post="/campaigns/%s/cancel" hx-swap="none" hx-disabled-elt="find button" style="display:inline"><button class="btn btn-sm btn-danger-ghost" type="submit">Cancel</button></form>`,
 						c.ID)
 				}
 
-				// Progress bar
-				pct := 0
+				// Send progress for detail row
+				sendPct := 0
 				if c.TotalRecipients > 0 {
-					pct = (c.SentCount + c.FailedCount + c.SkippedCount) * 100 / c.TotalRecipients
+					sendPct = (c.SentCount + c.FailedCount + c.SkippedCount) * 100 / c.TotalRecipients
 				}
-				progHTML := fmt.Sprintf(
-					`<div class="cmp-actions-inner">`+
-						`<div class="prog-wrap"><div class="prog-track"><div class="prog-fill" style="width:%d%%"></div></div>`+
-						`<span class="prog-label">%d/%d</span></div>`+
-						`<div class="cmp-action-btns">%s</div></div>`,
-					pct, c.SentCount+c.FailedCount, c.TotalRecipients, actionsHTML,
-				)
-
-				failedCell := fmt.Sprintf(`<td>%d</td>`, c.FailedCount)
-				if c.FailedCount > 0 {
-					failedCell = fmt.Sprintf(`<td class="cmp-td-fail">%d</td>`, c.FailedCount)
+				detailHeaderHTML := ""
+				if actionsHTML != "" || c.Status == "running" || c.Status == "paused" {
+					detailHeaderHTML = fmt.Sprintf(
+						`<div class="cmp-detail-hd">`+
+							`<div class="cmp-detail-prog">`+
+							`<span class="cmp-detail-prog-label">Send progress</span>`+
+							`<div class="prog-wrap"><div class="prog-track"><div class="prog-fill" style="width:%d%%"></div></div>`+
+							`<span class="prog-label">%d / %d sent</span></div>`+
+							`</div>`+
+							`<div class="cmp-action-btns">%s</div>`+
+							`</div>`,
+						sendPct, c.SentCount+c.FailedCount, c.TotalRecipients, actionsHTML,
+					)
 				}
 
 				if _, err := fmt.Fprintf(w,
 					`<tr x-show="%s" id="cmp-row-%s" class="cmp-row--expand" onclick="toggleCmpDetail('%s')">`+
 						`<td class="cmp-chev-cell"><span id="cmp-chev-%s" class="cmp-chev"></span></td>`+
 						`<td><a href="/campaigns/%s/report" class="cmp-name" onclick="event.stopPropagation()">%s</a></td>`+
-						`<td>%s</td>`+
-						`<td>%d</td><td>%d</td>`+
-						`%s`+
+						`<td class="cmp-tmpl">%s</td>`+
 						`<td>%d</td>`+
+						`<td>%d</td>`+
+						`%s`+
+						`%s`+
+						`<td>%s</td>`+
 						`<td>&#8377;%.2f</td>`+
 						`<td class="cmp-time">%s</td>`+
-						`<td>%s</td>`+
 						`</tr>`+
 						`<tr id="cmp-detail-%s" class="cmp-detail-row" style="display:none">`+
 						`<td colspan="10" class="cmp-detail-cell">`+
-						`<div data-cmp-id="%s" class="cmp-detail-inner" aria-live="polite">Loading&#8230;</div>`+
+						`<div data-cmp-id="%s" class="cmp-detail-inner" aria-live="polite">`+
+						`%s`+
+						`Loading&#8230;</div>`+
 						`</td></tr>`,
 					xShow, c.ID, c.ID,
 					c.ID,
 					c.ID, html.EscapeString(c.Name),
-					statusBadge,
-					c.SentCount, c.DeliveredCount,
+					html.EscapeString(c.TemplateName),
+					c.TotalRecipients,
+					c.SentCount,
+					dlvCell,
 					failedCell,
-					c.SkippedCount,
+					statusBadge,
 					c.CostTotalINR,
-					sched,
-					progHTML,
+					dateStr,
 					c.ID,
 					c.ID,
+					detailHeaderHTML,
 				); err != nil {
 					return err
 				}

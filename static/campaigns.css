@@ -592,6 +592,78 @@
   box-shadow: none;
 }
 
+/* ── Template name cell ─────────────────────────────────────────── */
+.cmp-tmpl {
+  font-family: var(--font-mono, monospace);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Delivered cell: count + bar + % + pending ──────────────────── */
+.cmp-td-dlv { min-width: 130px; }
+.dlv-dash { color: var(--text-muted); }
+.dlv-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong, var(--text));
+  line-height: 1.2;
+}
+.dlv-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.dlv-track {
+  width: 80px;
+  height: 5px;
+  background: var(--border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.dlv-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--duration-slow);
+}
+.dlv-fill--good { background: var(--success-text, #16a34a); }
+.dlv-fill--ok   { background: var(--warning-text, #d97706); }
+.dlv-fill--low  { background: var(--danger, #dc2626); }
+.dlv-pct {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.dlv-pending {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ── Expand detail header (progress + action buttons) ───────────── */
+.cmp-detail-hd {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 10px;
+}
+.cmp-detail-prog { display: flex; align-items: center; gap: 10px; }
+.cmp-detail-prog-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* ── Campaign list: expandable rows ─────────────────────────────── */
 .cmp-row--expand {
   cursor: pointer;
