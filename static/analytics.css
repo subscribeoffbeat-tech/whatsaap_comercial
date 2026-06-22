@@ -56,7 +56,7 @@
   display: grid;
   grid-template-columns: 1fr 288px;
   gap: var(--gutter);
-  align-items: start;
+  align-items: stretch;   /* both columns same height */
 }
 @media (max-width: 960px) { .an-main-grid { grid-template-columns: 1fr; } }
 
@@ -81,11 +81,16 @@
   background: var(--success);
   flex-shrink: 0;
 }
+.an-chart-section {
+  display: flex;
+  flex-direction: column;
+}
 .an-chart {
   display: flex;
   align-items: flex-end;
   gap: 4px;
-  height: 160px;
+  flex: 1;               /* fill remaining card height */
+  min-height: 200px;
   overflow-x: auto;
   padding-bottom: 4px;
 }
