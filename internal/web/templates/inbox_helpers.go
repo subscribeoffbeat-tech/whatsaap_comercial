@@ -99,6 +99,12 @@ func messageBody(msg *db.Message) string {
 			return s
 		}
 	}
+	if tmpl, ok := msg.Content["template"]; ok {
+		if s, ok := tmpl.(string); ok && s != "" {
+			return "[Template: " + s + "]"
+		}
+		return "[Template message]"
+	}
 	if msg.MediaPath != nil {
 		return fmt.Sprintf("[%s]", msg.MessageType)
 	}

@@ -133,6 +133,7 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 		log.Printf("campaign worker: insert message: %v", err)
 		// Non-fatal: the send already happened; continue with status update.
 	}
+	_ = db.TouchLastMessage(ctx, w.pool, conv.ID, msg.CreatedAt)
 
 	// Update recipient and campaign counters.
 	_ = db.UpdateRecipientSent(ctx, w.pool, args.RecipientRowID, msg.ID)

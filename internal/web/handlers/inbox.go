@@ -134,7 +134,7 @@ func (h *InboxHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 	if cRole != "" {
 		parts = append(parts, cRole)
 	}
-	if cCompany != "" {
+	if cCompany != "" && cCompany != "Your Business Name" {
 		parts = append(parts, "at "+cCompany)
 	}
 	contactSub := strings.Join(parts, " ")
