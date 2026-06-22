@@ -155,7 +155,7 @@ templ ConversationItem(c db.ConvListRow) {
 		</div>
 		<div class="conv-meta">
 			<div class="conv-time">{ shortTime(c.LastMessageAt) }</div>
-			if c.Status == "open" && c.AssignedTo == nil {
+			if c.Status == "open" && c.LastDir == "inbound" {
 				<div class="conv-badge">!</div>
 			}
 		</div>
