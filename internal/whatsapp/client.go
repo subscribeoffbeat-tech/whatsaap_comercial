@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -102,16 +103,22 @@ type TemplateParameter struct {
 // SendTemplate sends an approved WhatsApp template message.
 // Use outside the 24h window (required) or for structured messages inside it.
 func (c *Client) SendTemplate(ctx context.Context, to, templateName, langCode string, components []TemplateComponent) (waMessageID string, err error) {
+	tmpl := map[string]any{
+		"name":     templateName,
+		"language": map[string]string{"code": langCode},
+	}
+	if len(components) > 0 {
+		tmpl["components"] = components
+	}
 	req := map[string]any{
 		"messaging_product": "whatsapp",
 		"recipient_type":    "individual",
 		"to":                to,
 		"type":              "template",
-		"template": map[string]any{
-			"name":       templateName,
-			"language":   map[string]string{"code": langCode},
-			"components": components,
-		},
+		"template":          tmpl,
+	}
+	if b, jerr := json.Marshal(req); jerr == nil {
+		log.Printf("meta send payload to=%s template=%s: %s", to, templateName, string(b))
 	}
 	return c.sendMessage(ctx, req)
 }
@@ -142,6 +149,7 @@ func (c *Client) sendMessage(ctx context.Context, body any) (string, error) {
 	raw, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("meta send error status=%d body=%s", resp.StatusCode, string(raw))
 		return "", c.parseError(raw)
 	}
 
