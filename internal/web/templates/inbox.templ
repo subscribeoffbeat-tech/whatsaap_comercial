@@ -54,7 +54,7 @@ templ InboxPage(agent *mw.AgentClaims) {
 	<script>
 	function inboxApp() {
 	  return {
-	    ws: null, activeConvID: null,
+	    ws: null,
 	    init() { this.connectWS(); },
 	    connectWS() {
 	      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -63,9 +63,10 @@ templ InboxPage(agent *mw.AgentClaims) {
 	      this.ws.onclose   = () => setTimeout(() => this.connectWS(), 3000);
 	    },
 	    onWSMessage(event) {
+	      const activeConvID = document.getElementById('thread')?.dataset?.convId;
 	      if (event.type === 'new_message') {
-	        if (event.conversation_id === this.activeConvID) {
-	          htmx.ajax('GET', '/inbox/convs/' + this.activeConvID + '/messages',
+	        if (event.conversation_id === activeConvID) {
+	          htmx.ajax('GET', '/inbox/convs/' + activeConvID + '/messages',
 	            {target: '#thread', swap: 'outerHTML'});
 	        }
 	        htmx.ajax('GET', '/inbox/convs', {target: '#conv-list', swap: 'innerHTML'});
@@ -78,10 +79,6 @@ templ InboxPage(agent *mw.AgentClaims) {
 	          if (ticks) ticks.outerHTML = msgStatusSVG(event.data.status);
 	        }
 	      }
-	    },
-	    selectConv(id) {
-	      this.activeConvID = id;
-	      htmx.ajax('GET', '/inbox/convs/' + id + '/messages', {target: '#thread', swap: 'outerHTML'});
 	    }
 	  };
 	}
@@ -146,8 +143,11 @@ templ ConversationList(convs []db.ConvListRow) {
 // ConversationItem renders one row in the conversation list.
 templ ConversationItem(c db.ConvListRow) {
 	<div class="conv"
-		onclick={ templ.JSFuncCall("inboxApp().selectConv", c.ID) }
-		data-conv-id={ c.ID }>
+		hx-get={ "/inbox/convs/" + c.ID + "/messages" }
+		hx-target="#thread"
+		hx-swap="outerHTML"
+		data-conv-id={ c.ID }
+		style="cursor:pointer">
 		<div class="conv-av">{ initial(c.ContactName) }</div>
 		<div class="conv-info">
 			<div class="conv-name">{ c.ContactName }</div>
