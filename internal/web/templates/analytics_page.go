@@ -113,7 +113,8 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
       Export CSV
     </a>
   </form>
-</div>`,
+</div>
+<div class="an-body">`,
 			data.From.Format("2006-01-02"), data.To.Format("2006-01-02"))
 		if err != nil {
 			return err
@@ -131,7 +132,7 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 			failStyle = ` style="color:var(--danger)"`
 		}
 		if _, err := fmt.Fprintf(w, `
-<div class="stat-grid">
+<div class="stat-grid an-stat-grid">
   <div class="stat-card">
     <div class="stat-label">Sent</div>
     <div class="stat-value">%d</div>
@@ -366,7 +367,7 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 			}
 		}
 
-		if _, err := io.WriteString(w, `</div>`); err != nil { // close page-wrap
+		if _, err := io.WriteString(w, `</div></div>`); err != nil { // close an-body + page-wrap
 			return err
 		}
 

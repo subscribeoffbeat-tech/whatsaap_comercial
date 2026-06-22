@@ -1,6 +1,5 @@
-/* Analytics page — v3 styles.
-   Shared components (btn, badge, stat-card) live in app.css.
-   Only analytics-specific layout and classes defined here.
+/* Analytics page — v4 styles.
+   Spacing is controlled by .an-body gap — .an-section has NO margin-bottom.
    ------------------------------------------------------------------ */
 
 /* ── Date range form ─────────────────────────────────────────────── */
@@ -21,32 +20,29 @@
   cursor: pointer;
 }
 .an-date-arrow { color: var(--text-muted); }
-.an-export-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
+.an-export-btn { display: inline-flex; align-items: center; gap: 5px; }
 
-/* ── Main two-column grid: chart + sidebar ───────────────────────── */
-.an-main-grid {
-  display: grid;
-  grid-template-columns: 1fr 280px;
+/* ── Body wrapper — all spacing lives here ───────────────────────── */
+.an-body {
+  display: flex;
+  flex-direction: column;
   gap: var(--gutter);
-  align-items: start;
-  margin-bottom: var(--gutter);
-}
-@media (max-width: 960px) {
-  .an-main-grid { grid-template-columns: 1fr; }
 }
 
-/* ── Section cards ───────────────────────────────────────────────── */
+/* Stat grid: override app.css repeat(4) → auto-fit fits 4 or 5 cards */
+.an-stat-grid {
+  margin-bottom: 0 !important;   /* gap on .an-body handles separation */
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+}
+
+/* ── Section cards — NO margin; gap from .an-body ────────────────── */
 .an-section {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px 24px;
   box-shadow: var(--shadow-card);
-  margin-bottom: var(--gutter);
+  margin-bottom: 0;   /* always 0 — .an-body gap is the single source of truth */
 }
 .an-section-title {
   font-size: 15px;
@@ -55,9 +51,16 @@
   margin: 0 0 16px;
 }
 
-/* ── Bar chart ───────────────────────────────────────────────────── */
-.an-chart-section { margin-bottom: 0; }
+/* ── Main two-column grid: chart + sidebar ───────────────────────── */
+.an-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 288px;
+  gap: var(--gutter);
+  align-items: start;
+}
+@media (max-width: 960px) { .an-main-grid { grid-template-columns: 1fr; } }
 
+/* ── Bar chart ───────────────────────────────────────────────────── */
 .an-chart-hd {
   display: flex;
   align-items: center;
@@ -119,11 +122,7 @@
   border-radius: 3px 3px 0 0;
   min-height: 3px;
 }
-.an-bar--empty {
-  background: transparent;
-  min-height: 0;
-  height: 0;
-}
+.an-bar--empty { background: transparent; min-height: 0; height: 0; }
 .an-bar-lbl {
   font-size: 11px;
   color: var(--text-muted);
@@ -131,16 +130,16 @@
   white-space: nowrap;
 }
 
-/* ── Sidebar ─────────────────────────────────────────────────────── */
+/* ── Right sidebar: stacked cards with gap ───────────────────────── */
 .an-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--gutter);
 }
-.an-cost-card { margin-bottom: var(--gutter); }
-.an-quality-card { margin-bottom: 0; }
+/* All section cards inside sidebar have no extra margin */
+.an-sidebar .an-section { margin-bottom: 0; }
 
-/* ── Cost split ──────────────────────────────────────────────────── */
+/* ── Cost split card ─────────────────────────────────────────────── */
 .an-cost-total {
   font-size: 22px;
   font-weight: 700;
@@ -150,23 +149,19 @@
   align-items: baseline;
   gap: 6px;
 }
-.an-cost-period {
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--text-muted);
-}
+.an-cost-period { font-size: 13px; font-weight: 400; color: var(--text-muted); }
 .cost-split-bar {
   display: flex;
   height: 8px;
   border-radius: 4px;
   overflow: hidden;
-  background: var(--border-light, var(--border));
+  background: var(--border);
   margin-bottom: 12px;
 }
 .split-seg           { height: 100%; flex-shrink: 0; }
 .split-seg--utility  { background: var(--info, #3b82f6); }
 .split-seg--marketing{ background: var(--warning); }
-.split-seg--auth     { background: var(--success-fill, var(--success)); }
+.split-seg--auth     { background: var(--success); }
 
 .cost-split-legend {
   display: flex;
@@ -186,29 +181,29 @@
 }
 .legend-item--utility::before   { background: var(--info, #3b82f6); }
 .legend-item--marketing::before { background: var(--warning); }
-.legend-item--auth::before      { background: var(--success-fill, var(--success)); }
+.legend-item--auth::before      { background: var(--success); }
 .legend-item--service::before   { background: var(--text-muted); }
 
 /* ── Quality / tier card ─────────────────────────────────────────── */
-.an-qual-list { display: flex; flex-direction: column; gap: 0; }
+.an-qual-list { display: flex; flex-direction: column; }
 .an-qual-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-light, var(--border));
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
-.an-qual-row:last-of-type { border-bottom: none; }
+.an-qual-row:last-of-type { border-bottom: none; padding-bottom: 0; }
 .an-qual-lbl { color: var(--text-secondary); }
 .an-qual-val { font-weight: 500; color: var(--text-primary); }
 .an-qual-val--bold { font-weight: 700; }
 .an-qual-val--muted { color: var(--text-muted); font-weight: 400; }
 .an-usage-bar {
   height: 4px;
-  background: var(--border-light, var(--border));
+  background: var(--border);
   border-radius: 2px;
-  margin-top: 8px;
+  margin-top: 10px;
   overflow: hidden;
 }
 .an-usage-fill {
@@ -218,17 +213,13 @@
   min-width: 2px;
 }
 
-/* ── Bottom grid: cost tables ────────────────────────────────────── */
+/* ── Bottom grid: cost tables side by side ───────────────────────── */
 .an-bottom-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--gutter);
-  margin-bottom: var(--gutter);
 }
-@media (max-width: 800px) {
-  .an-bottom-grid { grid-template-columns: 1fr; }
-}
-.an-bottom-grid .an-section { margin-bottom: 0; }
+@media (max-width: 800px) { .an-bottom-grid { grid-template-columns: 1fr; } }
 
 /* ── Tables ──────────────────────────────────────────────────────── */
 .an-table {
@@ -248,28 +239,25 @@
 }
 .an-table td {
   padding: 11px 10px;
-  border-bottom: 1px solid var(--border-light, var(--border));
+  border-bottom: 1px solid var(--border);
 }
 .an-table tbody tr:last-child td { border-bottom: none; }
 .an-muted td { color: var(--text-muted); }
 
-/* Category colored dot */
+/* Category dot */
 .an-cat-dot {
   display: inline-block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   margin-right: 7px;
-  flex-shrink: 0;
   vertical-align: middle;
+  flex-shrink: 0;
 }
 .an-dot--marketing { background: var(--warning); }
 .an-dot--utility   { background: var(--info, #3b82f6); }
-.an-dot--auth      { background: var(--success-fill, var(--success)); }
+.an-dot--auth      { background: var(--success); }
 .an-dot--service   { background: var(--success); }
 
-.an-camp-link {
-  color: var(--text-primary);
-  text-decoration: none;
-}
+.an-camp-link { color: var(--text-primary); text-decoration: none; }
 .an-camp-link:hover { color: var(--primary); text-decoration: underline; }
