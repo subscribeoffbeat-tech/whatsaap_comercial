@@ -437,7 +437,7 @@ func WizardStep2Vars(state WizardState, tmpl db.Template, varNames []string) tem
   </select>
   <input x-show="sel==='_custom'" x-cloak type="text" x-model="custom" placeholder="field key, e.g. order_id" class="form-input var-custom">
   <input type="hidden" name="var_%s" :value="sel==='_custom' ? (custom ? 'custom_fields.'+custom : '') : sel">
-  <input type="text" name="fallback_%s" class="form-input var-fallback" placeholder="Fallback (used when field is empty)">
+  <input type="text" name="fallback_%s" class="form-input var-fallback" placeholder="Fallback (required — used when field is empty)" required>
 </div>`, n, n, n); err != nil {
 				return err
 			}

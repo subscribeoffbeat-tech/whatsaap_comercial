@@ -78,7 +78,16 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 	}
 
 	// Build template body components from pre-resolved params.
-	components := buildComponents(args.Params)
+	components, compErr := buildComponents(args.Params)
+	if compErr != nil {
+		_ = db.UpdateRecipientFailed(ctx, w.pool, args.RecipientRowID, compErr.Error())
+		done, _ := db.IncrCampaignFailed(ctx, w.pool, args.CampaignID)
+		w.broadcastProgress(args.CampaignID)
+		if done {
+			_ = db.UpdateCampaignStatus(ctx, w.pool, args.CampaignID, "completed")
+		}
+		return river.JobCancel(compErr)
+	}
 
 	// Call Meta API.
 	waID, sendErr := w.waClient.SendTemplate(ctx, args.WAPhone, args.TemplateName, args.LangCode, components)
@@ -146,17 +155,20 @@ func (w *SendMessageWorker) broadcastProgress(campaignID string) {
 	})
 }
 
-func buildComponents(params []string) []whatsapp.TemplateComponent {
+func buildComponents(params []string) ([]whatsapp.TemplateComponent, error) {
 	if len(params) == 0 {
-		return nil
+		return nil, nil
 	}
 	ps := make([]whatsapp.TemplateParameter, len(params))
 	for i, p := range params {
+		if p == "" {
+			return nil, fmt.Errorf("variable {{%d}} resolved to empty string — set a fallback when building the campaign", i+1)
+		}
 		ps[i] = whatsapp.TemplateParameter{Type: "text", Text: p}
 	}
 	return []whatsapp.TemplateComponent{
 		{Type: "body", Parameters: ps},
-	}
+	}, nil
 }
 
 // ── Token bucket ──────────────────────────────────────────────────────────────
