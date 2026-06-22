@@ -70,17 +70,21 @@
 .an-chart-legend {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 12px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
-.an-legend-dot {
-  width: 10px;
-  height: 10px;
+.an-leg-item { display: inline-flex; align-items: center; gap: 5px; }
+.an-leg-dot {
+  width: 9px;
+  height: 9px;
   border-radius: 2px;
-  background: var(--success);
   flex-shrink: 0;
 }
+.an-leg-dot--sent      { background: var(--success); }
+.an-leg-dot--delivered { background: var(--primary); }
+.an-leg-dot--failed    { background: var(--danger); }
+
 .an-chart-section {
   display: flex;
   flex-direction: column;
@@ -88,8 +92,8 @@
 .an-chart {
   display: flex;
   align-items: flex-end;
-  gap: 4px;
-  flex: 1;               /* fill remaining card height */
+  gap: 6px;
+  flex: 1;
   min-height: 200px;
   overflow-x: auto;
   padding-bottom: 4px;
@@ -101,37 +105,58 @@
   width: 100%;
   text-align: center;
 }
+
+/* Day column */
 .an-bar-col {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 36px;
+  min-width: 56px;
   flex: 1;
-  height: 100%;
   justify-content: flex-end;
 }
-.an-bar-cnt {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--success);
-  margin-bottom: 3px;
-  line-height: 1;
-  height: 14px;
+.an-bar-col--empty { justify-content: flex-end; }
+
+/* Group of 2-3 bars side by side */
+.an-bar-group {
   display: flex;
-  align-items: center;
-}
-.an-bar-cnt--empty { visibility: hidden; }
-.an-bar {
+  align-items: flex-end;
+  gap: 3px;
   width: 100%;
-  background: var(--success);
-  border-radius: 3px 3px 0 0;
-  min-height: 3px;
+  justify-content: center;
 }
-.an-bar--empty { background: transparent; min-height: 0; height: 0; }
+.an-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  justify-content: flex-end;
+}
+
+/* Count labels above bars */
+.an-cnt {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+.an-cnt--sent      { color: var(--success); }
+.an-cnt--delivered { color: var(--primary); }
+.an-cnt--failed    { color: var(--danger); }
+
+/* Bars */
+.an-bar {
+  width: 14px;
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+}
+.an-bar--sent      { background: var(--success); }
+.an-bar--delivered { background: var(--primary); }
+.an-bar--failed    { background: var(--danger); }
+
 .an-bar-lbl {
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 5px;
+  margin-top: 6px;
   white-space: nowrap;
 }
 

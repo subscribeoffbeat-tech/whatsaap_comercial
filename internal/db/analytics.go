@@ -63,6 +63,7 @@ func GetAgentOverviewStats(ctx context.Context, pool *pgxpool.Pool, from, to tim
 type DayStat struct {
 	Day       time.Time
 	Sent      int64
+	Delivered int64
 	Failed    int64
 }
 
@@ -72,6 +73,7 @@ func MessagesPerDay(ctx context.Context, pool *pgxpool.Pool, from, to time.Time)
 		SELECT
 		  DATE_TRUNC('day', created_at AT TIME ZONE 'Asia/Kolkata') AS day,
 		  COUNT(*) FILTER (WHERE status IN ('sent','delivered','read')) AS sent,
+		  COUNT(*) FILTER (WHERE status IN ('delivered','read'))        AS delivered,
 		  COUNT(*) FILTER (WHERE status = 'failed')                    AS failed
 		FROM messages
 		WHERE direction = 'outbound'
@@ -86,7 +88,7 @@ func MessagesPerDay(ctx context.Context, pool *pgxpool.Pool, from, to time.Time)
 	var stats []DayStat
 	for rows.Next() {
 		var s DayStat
-		if err := rows.Scan(&s.Day, &s.Sent, &s.Failed); err != nil {
+		if err := rows.Scan(&s.Day, &s.Sent, &s.Delivered, &s.Failed); err != nil {
 			return nil, err
 		}
 		stats = append(stats, s)

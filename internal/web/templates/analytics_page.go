@@ -45,11 +45,11 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 	}
 
 	// Build day lookup and find date range
-	type dayCounts struct{ sent, failed int64 }
+	type dayCounts struct{ sent, delivered, failed int64 }
 	dayMap := map[string]dayCounts{}
 	var chartFrom, chartTo time.Time
 	for i, d := range data.Days {
-		dayMap[d.Day.Format("2006-01-02")] = dayCounts{d.Sent, d.Failed}
+		dayMap[d.Day.Format("2006-01-02")] = dayCounts{d.Sent, d.Delivered, d.Failed}
 		if i == 0 || d.Day.Before(chartFrom) {
 			chartFrom = d.Day
 		}
@@ -182,36 +182,54 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 		if _, err := io.WriteString(w, `<section class="an-section an-chart-section">
 <div class="an-chart-hd">
   <h2 class="an-section-title">Messages per day</h2>
-  <span class="an-chart-legend"><span class="an-legend-dot"></span>Sent</span>
+  <div class="an-chart-legend">
+    <span class="an-leg-item"><span class="an-leg-dot an-leg-dot--sent"></span>Sent</span>
+    <span class="an-leg-item"><span class="an-leg-dot an-leg-dot--delivered"></span>Delivered</span>
+    <span class="an-leg-item"><span class="an-leg-dot an-leg-dot--failed"></span>Failed</span>
+  </div>
 </div>
 <div class="an-chart">`); err != nil {
 			return err
 		}
+
+		const maxBarPx = int64(160)
 
 		if len(data.Days) == 0 {
 			if _, err := io.WriteString(w, `<div class="an-chart-empty">No messages in this period.</div>`); err != nil {
 				return err
 			}
 		} else {
-			// Render every day between first and last activity
 			for cur := chartFrom; !cur.After(chartTo); cur = cur.AddDate(0, 0, 1) {
 				key := cur.Format("2006-01-02")
 				dc := dayMap[key]
+				label := cur.Format("2/1")
 				if dc.sent > 0 {
-					barPct := int(dc.sent * 100 / maxDay)
-					if barPct < 6 {
-						barPct = 6
+					sentPx := dc.sent * maxBarPx / maxDay
+					if sentPx < 4 {
+						sentPx = 4
+					}
+					delivPx := dc.delivered * maxBarPx / maxDay
+					if delivPx < 2 && dc.delivered > 0 {
+						delivPx = 2
+					}
+					failPx := dc.failed * maxBarPx / maxDay
+					if failPx < 2 && dc.failed > 0 {
+						failPx = 2
+					}
+					failBar := ""
+					if dc.failed > 0 {
+						failBar = fmt.Sprintf(`<div class="an-bar-wrap"><span class="an-cnt an-cnt--failed">%d</span><div class="an-bar an-bar--failed" style="height:%dpx"></div></div>`, dc.failed, failPx)
 					}
 					if _, err := fmt.Fprintf(w,
-						`<div class="an-bar-col"><div class="an-bar-cnt">%d</div><div class="an-bar" style="height:%d%%"></div><div class="an-bar-lbl">%s</div></div>`,
-						dc.sent, barPct, cur.Format("2/1"),
+						`<div class="an-bar-col"><div class="an-bar-group"><div class="an-bar-wrap"><span class="an-cnt an-cnt--sent">%d</span><div class="an-bar an-bar--sent" style="height:%dpx"></div></div><div class="an-bar-wrap"><span class="an-cnt an-cnt--delivered">%d</span><div class="an-bar an-bar--delivered" style="height:%dpx"></div></div>%s</div><div class="an-bar-lbl">%s</div></div>`,
+						dc.sent, sentPx, dc.delivered, delivPx, failBar, label,
 					); err != nil {
 						return err
 					}
 				} else {
 					if _, err := fmt.Fprintf(w,
-						`<div class="an-bar-col"><div class="an-bar-cnt an-bar-cnt--empty"></div><div class="an-bar an-bar--empty"></div><div class="an-bar-lbl">%s</div></div>`,
-						cur.Format("2/1"),
+						`<div class="an-bar-col an-bar-col--empty"><div class="an-bar-lbl">%s</div></div>`,
+						label,
 					); err != nil {
 						return err
 					}
