@@ -26,13 +26,9 @@ type AnalyticsData struct {
 }
 
 func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
-	// Role gate: agents must not see any cost data, at either layer.
-	// (The handler already returns 0 cost_inr from the DB and nil ByCat/ByCampaign
-	// for agents, but we defensively gate the template too so the HTML never
-	// contains a ₹ figure, even if field values changed.)
 	isAgent := agent != nil && agent.Role == "agent"
 
-	// Overview delivery percentages (safe to pre-compute; no cost involved)
+	// Overview percentages
 	var delivPct, readPct, failPct float64
 	if data.Overview.Sent > 0 {
 		delivPct = float64(data.Overview.Delivered) * 100.0 / float64(data.Overview.Sent)
@@ -40,7 +36,7 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 		failPct = float64(data.Overview.Failed) * 100.0 / float64(data.Overview.Sent)
 	}
 
-	// Bar chart: max daily sent to compute proportional heights
+	// Bar chart: max daily sent for proportional heights
 	var maxDay int64 = 1
 	for _, d := range data.Days {
 		if d.Sent > maxDay {
@@ -48,8 +44,21 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 		}
 	}
 
-	// Cost split — only computed/used for admin/manager.
-	// ByCat is nil for agents at the data layer; isAgent guard is defense-in-depth.
+	// Build day lookup and find date range
+	type dayCounts struct{ sent, failed int64 }
+	dayMap := map[string]dayCounts{}
+	var chartFrom, chartTo time.Time
+	for i, d := range data.Days {
+		dayMap[d.Day.Format("2006-01-02")] = dayCounts{d.Sent, d.Failed}
+		if i == 0 || d.Day.Before(chartFrom) {
+			chartFrom = d.Day
+		}
+		if i == 0 || d.Day.After(chartTo) {
+			chartTo = d.Day
+		}
+	}
+
+	// Cost split (admin/manager only)
 	var totalCost, utilityCost, marketingCost, authCost float64
 	if !isAgent {
 		for _, c := range data.ByCat {
@@ -72,6 +81,15 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 		authPct = authCost / splitBase * 100
 	}
 
+	// Daily usage bar
+	var usagePct int64
+	if data.Quality.DailyCap > 0 {
+		usagePct = data.Quality.SentToday * 100 / data.Quality.DailyCap
+		if usagePct > 100 {
+			usagePct = 100
+		}
+	}
+
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/analytics", "Analytics", "")); err != nil {
 			return err
@@ -81,17 +99,20 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 		_, err := fmt.Fprintf(w, `
 <div class="page-wrap">
 <div class="page-hd">
-<div>
-<h1 class="screen-title">Analytics</h1>
-<p class="screen-subtitle">Delivery performance and cost breakdown.</p>
-</div>
-<form method="get" action="/analytics" class="an-date-form">
-<input type="date" name="from" value="%s">
-<span style="color:var(--text-muted)">→</span>
-<input type="date" name="to" value="%s">
-<button class="btn btn-secondary btn-sm" type="submit">Apply</button>
-<a class="btn btn-secondary btn-sm" href="/analytics/export.csv">Export CSV</a>
-</form>
+  <div>
+    <h1 class="screen-title">Analytics</h1>
+    <p class="screen-subtitle">Delivery performance and cost breakdown.</p>
+  </div>
+  <form method="get" action="/analytics" class="an-date-form">
+    <input type="date" name="from" value="%s">
+    <span class="an-date-arrow">→</span>
+    <input type="date" name="to" value="%s">
+    <button class="btn btn-primary btn-sm" type="submit">Apply</button>
+    <a class="btn btn-secondary btn-sm an-export-btn" href="/analytics/export.csv">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export CSV
+    </a>
+  </form>
 </div>`,
 			data.From.Format("2006-01-02"), data.To.Format("2006-01-02"))
 		if err != nil {
@@ -105,20 +126,43 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 			readStr = fmt.Sprintf("%.1f%%", readPct)
 			failStr = fmt.Sprintf("%.1f%%", failPct)
 		}
+		failStyle := ""
+		if failPct > 0 {
+			failStyle = ` style="color:var(--danger)"`
+		}
 		if _, err := fmt.Fprintf(w, `
 <div class="stat-grid">
-<div class="stat-card"><div class="stat-label">Sent</div><div class="stat-value">%d</div><div class="stat-sub">messages dispatched</div></div>
-<div class="stat-card"><div class="stat-label">Delivered</div><div class="stat-value">%s</div><div class="stat-sub">of messages sent</div></div>
-<div class="stat-card"><div class="stat-label">Read</div><div class="stat-value">%s</div><div class="stat-sub">of messages sent</div></div>
-<div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value" style="color:var(--danger)">%s</div><div class="stat-sub">delivery failures</div></div>`,
-			data.Overview.Sent, delivStr, readStr, failStr,
+  <div class="stat-card">
+    <div class="stat-label">Sent</div>
+    <div class="stat-value">%d</div>
+    <div class="stat-sub">messages dispatched</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Delivered</div>
+    <div class="stat-value">%s</div>
+    <div class="stat-sub">of messages sent</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Read</div>
+    <div class="stat-value">%s</div>
+    <div class="stat-sub">of messages sent</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Failed</div>
+    <div class="stat-value"%s>%s</div>
+    <div class="stat-sub">delivery failures</div>
+  </div>`,
+			data.Overview.Sent, delivStr, readStr, failStyle, failStr,
 		); err != nil {
 			return err
 		}
-		// Cost card: admin/manager only — must NOT appear in agent's rendered HTML.
 		if !isAgent {
 			if _, err := fmt.Fprintf(w,
-				`<div class="stat-card"><div class="stat-label">Cost</div><div class="stat-value">₹%.2f</div><div class="stat-sub">incl. 18%% GST</div></div>`,
+				`  <div class="stat-card">
+    <div class="stat-label">Cost</div>
+    <div class="stat-value">₹%.2f</div>
+    <div class="stat-sub">incl. 18%% GST</div>
+  </div>`,
 				data.Overview.CostINR,
 			); err != nil {
 				return err
@@ -128,133 +172,185 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 			return err
 		}
 
-		// ── Empty state ───────────────────────────────────────────────────────
-		if data.Overview.Sent == 0 {
-			if _, err := io.WriteString(w, EmptyStateHTML(EmptyIconCampaigns,
-				"No data yet",
-				"No messages were sent in this period.",
-				nil,
-			)); err != nil {
+		// ── Main two-column grid: chart + sidebar ─────────────────────────────
+		if _, err := io.WriteString(w, `<div class="an-main-grid">`); err != nil {
+			return err
+		}
+
+		// Chart section
+		if _, err := io.WriteString(w, `<section class="an-section an-chart-section">
+<div class="an-chart-hd">
+  <h2 class="an-section-title">Messages per day</h2>
+  <span class="an-chart-legend"><span class="an-legend-dot"></span>Sent</span>
+</div>
+<div class="an-chart">`); err != nil {
+			return err
+		}
+
+		if len(data.Days) == 0 {
+			if _, err := io.WriteString(w, `<div class="an-chart-empty">No messages in this period.</div>`); err != nil {
 				return err
+			}
+		} else {
+			// Render every day between first and last activity
+			for cur := chartFrom; !cur.After(chartTo); cur = cur.AddDate(0, 0, 1) {
+				key := cur.Format("2006-01-02")
+				dc := dayMap[key]
+				if dc.sent > 0 {
+					barPct := int(dc.sent * 100 / maxDay)
+					if barPct < 6 {
+						barPct = 6
+					}
+					if _, err := fmt.Fprintf(w,
+						`<div class="an-bar-col"><div class="an-bar-cnt">%d</div><div class="an-bar" style="height:%d%%"></div><div class="an-bar-lbl">%s</div></div>`,
+						dc.sent, barPct, cur.Format("2/1"),
+					); err != nil {
+						return err
+					}
+				} else {
+					if _, err := fmt.Fprintf(w,
+						`<div class="an-bar-col"><div class="an-bar-cnt an-bar-cnt--empty"></div><div class="an-bar an-bar--empty"></div><div class="an-bar-lbl">%s</div></div>`,
+						cur.Format("2/1"),
+					); err != nil {
+						return err
+					}
+				}
 			}
 		}
 
-		// ── Daily chart + cost split grid ─────────────────────────────────────
-		if len(data.Days) > 0 {
-			showCostSplit := !isAgent && totalCost > 0
-			if showCostSplit {
-				if _, err := io.WriteString(w, `<div class="an-grid">`); err != nil {
-					return err
-				}
-			}
+		if _, err := io.WriteString(w, `</div></section>`); err != nil {
+			return err
+		}
 
-			// Messages per day bar chart
-			if _, err := io.WriteString(w, `<section class="an-section"><h2>Messages per day</h2><div class="an-chart">`); err != nil {
+		// Right sidebar: cost split (admin/manager) + quality/tier (always)
+		if _, err := io.WriteString(w, `<aside class="an-sidebar">`); err != nil {
+			return err
+		}
+
+		// Cost split card
+		if !isAgent && totalCost > 0 {
+			if _, err := fmt.Fprintf(w, `<section class="an-section an-cost-card">
+<h2 class="an-section-title">Cost split</h2>
+<div class="an-cost-total">₹%.2f <span class="an-cost-period">this period</span></div>
+<div class="cost-split-bar">
+  <div class="split-seg split-seg--utility" style="width:%.1f%%"></div>
+  <div class="split-seg split-seg--marketing" style="width:%.1f%%"></div>
+  <div class="split-seg split-seg--auth" style="width:%.1f%%"></div>
+</div>
+<div class="cost-split-legend">`,
+				totalCost, utilPct, mktPct, authPct,
+			); err != nil {
 				return err
 			}
-			for _, d := range data.Days {
-				barPct := int(d.Sent * 100 / maxDay)
-				if barPct < 4 {
-					barPct = 4
-				}
-				if _, err := fmt.Fprintf(w,
-					`<div class="an-bar-col"><div class="an-bar" style="height:%d%%"></div><div class="an-bar-lbl">%s</div></div>`,
-					barPct, d.Day.Format("2/1"),
-				); err != nil {
-					return err
-				}
+			if marketingCost > 0 {
+				fmt.Fprintf(w, `<span class="legend-item legend-item--marketing">Marketing ₹%.2f</span>`, marketingCost) //nolint:errcheck
 			}
+			if utilityCost > 0 {
+				fmt.Fprintf(w, `<span class="legend-item legend-item--utility">Utility ₹%.2f</span>`, utilityCost) //nolint:errcheck
+			}
+			if authCost > 0 {
+				fmt.Fprintf(w, `<span class="legend-item legend-item--auth">Auth ₹%.2f</span>`, authCost) //nolint:errcheck
+			}
+			fmt.Fprintf(w, `<span class="legend-item legend-item--service">Service free</span>`) //nolint:errcheck
 			if _, err := io.WriteString(w, `</div></section>`); err != nil {
 				return err
 			}
+		}
 
-			// Cost split panel (admin/manager only, non-zero cost only)
-			if showCostSplit {
-				if _, err := fmt.Fprintf(w, `
-<section class="an-section"><h2>Cost split</h2>
-<div class="an-cost-total">₹%.2f <span class="an-cost-period">this period</span></div>
-<div class="cost-split-bar">
-<div class="split-seg split-seg--utility" style="width:%.1f%%"></div>
-<div class="split-seg split-seg--marketing" style="width:%.1f%%"></div>
-<div class="split-seg split-seg--auth" style="width:%.1f%%"></div>
+		// Quality / tier card (always visible)
+		capLabel := fmt.Sprintf("%d msg/day", data.Quality.DailyCap)
+		if _, err := fmt.Fprintf(w, `<section class="an-section an-quality-card">
+<h2 class="an-section-title">Quality / tier</h2>
+<div class="an-qual-list">
+  <div class="an-qual-row"><span class="an-qual-lbl">Tier</span><span class="an-qual-val">%d</span></div>
+  <div class="an-qual-row"><span class="an-qual-lbl">Daily cap</span><span class="an-qual-val an-qual-val--bold">%s</span></div>
+  <div class="an-qual-row"><span class="an-qual-lbl">Sent today</span><span class="an-qual-val">%d</span></div>
+  <div class="an-qual-row"><span class="an-qual-lbl">Quality</span><span class="an-qual-val an-qual-val--muted">%s</span></div>
+  <div class="an-qual-row"><span class="an-qual-lbl">Today's usage</span><span class="an-qual-val">%d / %d</span></div>
+  <div class="an-usage-bar"><div class="an-usage-fill" style="width:%d%%"></div></div>
 </div>
-<div class="cost-split-legend">`,
-					totalCost, utilPct, mktPct, authPct,
-				); err != nil {
+</section>`,
+			data.Quality.Tier,
+			capLabel,
+			data.Quality.SentToday,
+			html.EscapeString(data.Quality.QualityRating),
+			data.Quality.SentToday, data.Quality.DailyCap,
+			usagePct,
+		); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(w, `</aside></div>`); err != nil { // close an-main-grid
+			return err
+		}
+
+		// ── Bottom: cost tables side-by-side (admin/manager only) ─────────────
+		if !isAgent && (len(data.ByCat) > 0 || len(data.ByCampaign) > 0) {
+			if _, err := io.WriteString(w, `<div class="an-bottom-grid">`); err != nil {
+				return err
+			}
+
+			// Cost by category
+			if len(data.ByCat) > 0 {
+				if _, err := io.WriteString(w, `<section class="an-section">
+<h2 class="an-section-title">Cost by category</h2>
+<table class="an-table">
+<thead><tr><th>CATEGORY</th><th>MESSAGES</th><th>COST (INR)</th></tr></thead>
+<tbody>`); err != nil {
 					return err
 				}
-				if utilityCost > 0 {
+				for _, c := range data.ByCat {
+					dotClass := anCatDotClass(c.Category)
+					muted := ""
+					if c.CostINR == 0 {
+						muted = ` class="an-muted"`
+					}
 					if _, err := fmt.Fprintf(w,
-						`<span class="legend-item legend-item--utility">Utility ₹%.2f</span>`, utilityCost); err != nil {
+						`<tr%s><td><span class="an-cat-dot %s"></span>%s</td><td>%d</td><td>₹%.4f</td></tr>`,
+						muted, dotClass, html.EscapeString(catLabel(c.Category)), c.Count, c.CostINR,
+					); err != nil {
 						return err
 					}
 				}
-				if marketingCost > 0 {
+				if _, err := io.WriteString(w, `</tbody></table></section>`); err != nil {
+					return err
+				}
+			}
+
+			// Cost by campaign
+			if len(data.ByCampaign) > 0 {
+				if _, err := io.WriteString(w, `<section class="an-section">
+<h2 class="an-section-title">Cost by campaign</h2>
+<table class="an-table">
+<thead><tr><th>CAMPAIGN</th><th>MESSAGES</th><th>COST (INR)</th></tr></thead>
+<tbody>`); err != nil {
+					return err
+				}
+				for _, c := range data.ByCampaign {
 					if _, err := fmt.Fprintf(w,
-						`<span class="legend-item legend-item--marketing">Marketing ₹%.2f</span>`, marketingCost); err != nil {
+						`<tr><td><a class="an-camp-link" href="/campaigns/%s/report">%s</a></td><td>%d</td><td>₹%.4f</td></tr>`,
+						c.CampaignID, html.EscapeString(c.CampaignName), c.Count, c.CostINR,
+					); err != nil {
 						return err
 					}
 				}
-				if authCost > 0 {
-					if _, err := fmt.Fprintf(w,
-						`<span class="legend-item legend-item--auth">Auth ₹%.2f</span>`, authCost); err != nil {
-						return err
-					}
-				}
-				if _, err := io.WriteString(w, `<span class="legend-item">Service free</span></div></section>`); err != nil {
-					return err
-				}
-				if _, err := io.WriteString(w, `</div>`); err != nil { // close an-grid
+				if _, err := io.WriteString(w, `</tbody></table></section>`); err != nil {
 					return err
 				}
 			}
-		}
 
-		// ── ByCat table (admin/manager only) ──────────────────────────────────
-		if !isAgent && len(data.ByCat) > 0 {
-			if _, err := io.WriteString(w, `
-<section class="an-section"><h2>Cost by category</h2>
-<table class="an-table tbl"><thead><tr><th>Category</th><th>Messages</th><th>Cost (INR)</th></tr></thead><tbody>`); err != nil {
-				return err
-			}
-			for _, c := range data.ByCat {
-				if _, err := fmt.Fprintf(w,
-					`<tr><td>%s</td><td>%d</td><td>₹%.4f</td></tr>`,
-					html.EscapeString(c.Category), c.Count, c.CostINR,
-				); err != nil {
-					return err
-				}
-			}
-			if _, err := io.WriteString(w, `</tbody></table></section>`); err != nil {
+			if _, err := io.WriteString(w, `</div>`); err != nil { // close an-bottom-grid
 				return err
 			}
 		}
 
-		// ── ByCampaign table (admin/manager only) ─────────────────────────────
-		if !isAgent && len(data.ByCampaign) > 0 {
-			if _, err := io.WriteString(w, `
-<section class="an-section"><h2>Cost by campaign</h2>
-<table class="an-table tbl"><thead><tr><th>Campaign</th><th>Messages</th><th>Cost (INR)</th></tr></thead><tbody>`); err != nil {
-				return err
-			}
-			for _, c := range data.ByCampaign {
-				if _, err := fmt.Fprintf(w,
-					`<tr><td><a href="/campaigns/%s/report">%s</a></td><td>%d</td><td>₹%.4f</td></tr>`,
-					c.CampaignID, html.EscapeString(c.CampaignName), c.Count, c.CostINR,
-				); err != nil {
-					return err
-				}
-			}
-			if _, err := io.WriteString(w, `</tbody></table></section>`); err != nil {
-				return err
-			}
-		}
-
-		// ── Agent stats table ─────────────────────────────────────────────────
+		// ── Agent performance ─────────────────────────────────────────────────
 		if len(data.AgentStats) > 0 {
-			if _, err := io.WriteString(w, `
-<section class="an-section"><h2>Agent performance</h2>
-<table class="an-table tbl"><thead><tr><th>Agent</th><th>Messages sent</th><th>Convs resolved</th></tr></thead><tbody>`); err != nil {
+			if _, err := io.WriteString(w, `<section class="an-section">
+<h2 class="an-section-title">Agent performance</h2>
+<table class="an-table">
+<thead><tr><th>AGENT</th><th>MESSAGES SENT</th><th>CONVS RESOLVED</th></tr></thead>
+<tbody>`); err != nil {
 				return err
 			}
 			for _, s := range data.AgentStats {
@@ -270,24 +366,41 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 			}
 		}
 
-		// ── Quality / tier ────────────────────────────────────────────────────
-		if _, err := fmt.Fprintf(w, `
-<section class="an-section"><h2>Quality / tier</h2>
-<dl>
-<dt>Tier</dt><dd>%d</dd>
-<dt>Daily cap</dt><dd>%d</dd>
-<dt>Sent today</dt><dd>%d</dd>
-<dt>Quality</dt><dd>%s</dd>
-</dl>
-</section>
-</div>`,
-			data.Quality.Tier, data.Quality.DailyCap,
-			data.Quality.SentToday, html.EscapeString(data.Quality.QualityRating),
-		); err != nil {
+		if _, err := io.WriteString(w, `</div>`); err != nil { // close page-wrap
 			return err
 		}
 
 		_, err = io.WriteString(w, ShellClose())
 		return err
 	})
+}
+
+func anCatDotClass(cat string) string {
+	switch cat {
+	case "marketing":
+		return "an-dot--marketing"
+	case "utility":
+		return "an-dot--utility"
+	case "authentication":
+		return "an-dot--auth"
+	case "service":
+		return "an-dot--service"
+	default:
+		return "an-dot--service"
+	}
+}
+
+func catLabel(cat string) string {
+	switch cat {
+	case "marketing":
+		return "Marketing"
+	case "utility":
+		return "Utility"
+	case "authentication":
+		return "Authentication"
+	case "service":
+		return "Service"
+	default:
+		return cat
+	}
 }
