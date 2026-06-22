@@ -88,7 +88,7 @@ func main() {
 		log.Printf("WARN: SMTP_HOST not set — password reset emails will not be sent")
 	}
 	authH       := handlers.NewAuthHandler(pool, jwtSecret, cfg.BaseURL, mailer)
-	teamH       := handlers.NewTeamHandler(pool, jwtSecret, cfg.BaseURL)
+	teamH       := handlers.NewTeamHandler(pool, jwtSecret, cfg.BaseURL, mailer)
 	settingsH   := handlers.NewSettingsHandler(pool, cfg.WA)
 	onboardingH := handlers.NewOnboardingHandler(pool, jwtSecret, cfg.WA.PhoneNumberID, cfg.WA.AccessToken)
 

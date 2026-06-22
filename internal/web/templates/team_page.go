@@ -27,9 +27,9 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 			}
 		}
 
-		flashHTML := ""
+		flashScript := ""
 		if flash != "" {
-			flashHTML = CalloutHTML("info", "Invite link — copy and share with the new member: "+flash)
+			flashScript = FlashScript(ToastSuccess, flash)
 		}
 
 		_, err := fmt.Fprintf(w, `
@@ -39,7 +39,7 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
     <h1 class="screen-title">Team</h1>
     <p class="screen-subtitle">%d active members</p>
   </div>
-  <button class="btn btn-primary" onclick="openModal('invite-modal',this)">+ Invite member</button>
+  <a class="btn btn-primary" href="/team/invite">+ Invite member</a>
 </div>
 %s
 <div class="team-layout">
@@ -54,7 +54,7 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
   <th></th>
 </tr>
 </thead>
-<tbody>`, activeCount, flashHTML)
+<tbody>`, activeCount, flashScript)
 		if err != nil {
 			return err
 		}
@@ -62,7 +62,7 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 		if len(agents) == 0 {
 			empty := EmptyStateHTML(EmptyIconContacts, "No team members yet",
 				"Invite your first team member to get started.",
-				[]EmptyAction{{Label: "Invite member", Primary: true, AtClick: "document.getElementById('invite-modal').showModal()"}})
+				[]EmptyAction{{Label: "Invite member", Primary: true, HREF: "/team/invite"}})
 			if _, err := fmt.Fprintf(w, `<tr><td colspan="5">%s</td></tr>`, empty); err != nil {
 				return err
 			}

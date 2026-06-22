@@ -140,6 +140,7 @@ func ShellOpen(agent *mw.AgentClaims, activePath, pageTitle, qualityRating strin
 <link rel="stylesheet" href="/static/campaigns.css"/>
 <link rel="stylesheet" href="/static/automation.css"/>
 <link rel="stylesheet" href="/static/analytics.css"/>
+<link rel="stylesheet" href="/static/invite.css"/>
 <script src="https://unpkg.com/htmx.org@2.0.3" defer></script>
 <script src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js" defer></script>
 </head>

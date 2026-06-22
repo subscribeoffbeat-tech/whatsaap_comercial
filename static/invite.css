@@ -1,0 +1,160 @@
+/* Invite team member page — layout + email preview card.
+   Radio card styles are shared from automation.css (.au-option-card etc.)
+   ------------------------------------------------------------------ */
+
+/* ── Page layout: form (left) + preview sidebar (right) ──────────── */
+.inv-page-wrap {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: var(--gutter);
+  align-items: start;
+  max-width: 960px;
+  margin: 0 auto;
+}
+@media (max-width: 860px) {
+  .inv-page-wrap { grid-template-columns: 1fr; }
+  .inv-preview    { display: none; }
+}
+
+/* ── Back button ─────────────────────────────────────────────────── */
+.inv-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+  margin-bottom: 20px;
+}
+.inv-back:hover { color: var(--text-primary); }
+.inv-back-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* ── Form card ───────────────────────────────────────────────────── */
+.inv-form-card { padding: 24px 28px; }
+.inv-form-hd   { margin-bottom: 22px; }
+.inv-form-title { font-size: 22px; font-weight: 700; color: var(--text-primary); }
+.inv-form-sub   { font-size: 13px; color: var(--text-muted); margin-top: 5px; }
+
+/* Two-field row: name + email */
+.inv-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 600px) { .inv-row-2 { grid-template-columns: 1fr; } }
+
+/* Role radio cards label */
+.inv-role-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+/* Role cards — reuse .au-option-card from automation.css */
+.inv-role-cards { display: flex; flex-direction: column; gap: 6px; }
+.inv-role-cards .au-option-card { padding: 12px 14px; }
+.inv-role-cards .au-option-icon { display: none; } /* no icon in role cards */
+.inv-role-cards .au-option-body { gap: 1px; }
+.inv-role-cards .au-option-title { font-size: 13.5px; font-weight: 700; }
+.inv-role-cards .au-option-desc  { font-size: 12.5px; }
+
+/* Personal message */
+.inv-form-card textarea.form-input { resize: vertical; min-height: 90px; }
+
+/* Form footer */
+.inv-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Preview sidebar ─────────────────────────────────────────────── */
+.inv-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: sticky;
+  top: 70px;
+}
+
+/* Email preview card */
+.inv-email-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+.inv-email-hd {
+  background: var(--success, #10b981);
+  color: #fff;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.inv-email-hd svg { flex-shrink: 0; opacity: .9; }
+.inv-email-body {
+  padding: 18px;
+  background: var(--bg-card);
+}
+.inv-email-msg {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.55;
+  margin-bottom: 14px;
+}
+.inv-email-cta {
+  display: block;
+  background: var(--success, #10b981);
+  color: #fff;
+  text-align: center;
+  padding: 12px;
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 10px;
+  cursor: default;
+}
+.inv-email-expiry {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Role permissions preview card */
+.inv-role-preview {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-card);
+}
+.inv-role-preview-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.inv-role-preview-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
