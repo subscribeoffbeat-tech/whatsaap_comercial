@@ -109,38 +109,39 @@ func (h *InboxHandler) GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	contactName := ""
-	var cName, cPhone, cRole, cCompany string
+	var cName, cPhone string
+	var cOptedIn bool
+	var cCreatedAt time.Time
 	err = h.pool.QueryRow(r.Context(),
-		`SELECT COALESCE(name,''), COALESCE(wa_phone,''),
-		        COALESCE(custom_fields->>'role',''),
-		        COALESCE(custom_fields->>'company','')
+		`SELECT COALESCE(name,''), COALESCE(wa_phone,''), opted_in, created_at
 		 FROM contacts WHERE id = $1::uuid`,
 		conv.ContactID,
-	).Scan(&cName, &cPhone, &cRole, &cCompany)
+	).Scan(&cName, &cPhone, &cOptedIn, &cCreatedAt)
 	if err != nil {
 		log.Printf("contact lookup for %s: %v", conv.ContactID, err)
 	}
-	contactName = cName
+
+	contactName := cName
 	if contactName == "" {
-		contactName = cPhone // phone-only contact: show number as name
+		contactName = cPhone
 	}
 	if contactName == "" {
 		contactName = "Unknown contact"
 	}
-	// Subtitle: role + company only — cPhone is intentionally excluded here so
-	// it never duplicates when it was already used as the display name above.
-	var parts []string
-	if cRole != "" {
-		parts = append(parts, cRole)
+
+	assignedName := ""
+	if conv.AssignedTo != nil && *conv.AssignedTo != "" {
+		_ = h.pool.QueryRow(r.Context(),
+			`SELECT name FROM agents WHERE id = $1::uuid`, *conv.AssignedTo,
+		).Scan(&assignedName)
 	}
-	if cCompany != "" && cCompany != "Your Business Name" {
-		parts = append(parts, "at "+cCompany)
-	}
-	contactSub := strings.Join(parts, " ")
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.MessageThread(conv, msgs, contactName, contactSub).Render(r.Context(), w); err != nil {
+	if err := templates.MessageThread(conv, msgs, contactName, cPhone).Render(r.Context(), w); err != nil {
 		log.Printf("message thread render: %v", err)
+	}
+	if err := templates.ContactPanel(conv.ContactID, contactName, cPhone, cOptedIn, cCreatedAt, assignedName).Render(r.Context(), w); err != nil {
+		log.Printf("contact panel render: %v", err)
 	}
 }
 
@@ -233,7 +234,7 @@ func (h *InboxHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := templates.MessageBubble(msg).Render(r.Context(), w); err != nil {
+	if err := templates.MessageBubble(msg, "", "").Render(r.Context(), w); err != nil {
 		log.Printf("message bubble render: %v", err)
 	}
 }

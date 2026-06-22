@@ -60,6 +60,59 @@ func initial(name string) string {
 	return strings.ToUpper(string(r[0]))
 }
 
+// twoInitials returns up to two uppercase initials: "Priya Sharma"→"PS", "Govind"→"G", "+919812…"→last 2 digits.
+func twoInitials(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "?"
+	}
+	if strings.HasPrefix(name, "+") {
+		r := []rune(name)
+		if len(r) >= 2 {
+			return string(r[len(r)-2:])
+		}
+		return "#"
+	}
+	words := strings.Fields(name)
+	if len(words) >= 2 {
+		r0 := []rune(words[0])
+		r1 := []rune(words[len(words)-1])
+		if len(r0) > 0 && len(r1) > 0 {
+			return strings.ToUpper(string(r0[0])) + strings.ToUpper(string(r1[0]))
+		}
+	}
+	r := []rune(words[0])
+	if len(r) > 0 {
+		return strings.ToUpper(string(r[0]))
+	}
+	return "?"
+}
+
+var avatarPalette = []string{
+	"av-purple", "av-blue", "av-green", "av-orange", "av-red",
+	"av-teal", "av-pink", "av-indigo", "av-amber", "av-cyan",
+}
+
+// avatarColor returns a stable CSS class from the palette based on the contact name.
+func avatarColor(name string) string {
+	if name == "" {
+		return "av-purple"
+	}
+	h := 0
+	for _, c := range name {
+		h = (h*31 + int(c)) % len(avatarPalette)
+	}
+	if h < 0 {
+		h += len(avatarPalette)
+	}
+	return avatarPalette[h]
+}
+
+// shortDate formats a time as "02 Jan 2006".
+func shortDate(t time.Time) string {
+	return t.Local().Format("02 Jan 2006")
+}
+
 func shortTime(t *time.Time) string {
 	if t == nil {
 		return ""
