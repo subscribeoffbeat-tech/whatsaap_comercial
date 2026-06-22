@@ -12,11 +12,12 @@ import (
 type AutomationRule struct {
 	ID           int64
 	Name         string
-	TriggerType  string  // keyword|welcome|away|stop
-	Keyword      *string // only for trigger_type=keyword
+	TriggerType  string  // keyword|welcome|away|stop|no_reply|new_conversation|opt_out
+	Keyword      *string // keyword(s) for trigger=keyword; hours for trigger=no_reply
 	KeywordMatch string  // exact|contains
 	TemplateID   *string // UUID as text
 	ResponseText *string
+	ActionType   string  // send_template|assign_agent|add_tag|remove_consent|webhook
 	Active       bool
 	Priority     int
 	CreatedAt    time.Time
@@ -27,14 +28,14 @@ type AutomationRule struct {
 func (r *AutomationRule) IsSystem() bool { return r.TriggerType == "stop" }
 
 const ruleColumns = `id, name, trigger_type, keyword, keyword_match,
-	template_id::text, response_text, active, priority, created_at, updated_at`
+	template_id::text, response_text, COALESCE(action_type,''), active, priority, created_at, updated_at`
 
 func scanRule(row rowScanner) (*AutomationRule, error) {
 	r := &AutomationRule{}
 	var keyword, templateID, responseText pgtype.Text
 	err := row.Scan(
 		&r.ID, &r.Name, &r.TriggerType, &keyword, &r.KeywordMatch,
-		&templateID, &responseText, &r.Active, &r.Priority,
+		&templateID, &responseText, &r.ActionType, &r.Active, &r.Priority,
 		&r.CreatedAt, &r.UpdatedAt,
 	)
 	if err != nil {
@@ -110,25 +111,33 @@ func GetRule(ctx context.Context, pool *pgxpool.Pool, id int64) (*AutomationRule
 
 // CreateRule inserts a new rule and populates r.ID / timestamps.
 func CreateRule(ctx context.Context, pool *pgxpool.Pool, r *AutomationRule) error {
+	var actionType *string
+	if r.ActionType != "" {
+		actionType = &r.ActionType
+	}
 	return pool.QueryRow(ctx, `
 		INSERT INTO automation_rules
-		  (name, trigger_type, keyword, keyword_match, template_id, response_text, active, priority)
-		VALUES ($1, $2, $3, $4, $5::uuid, $6, $7, $8)
+		  (name, trigger_type, keyword, keyword_match, template_id, response_text, action_type, active, priority)
+		VALUES ($1, $2, $3, $4, $5::uuid, $6, $7, $8, $9)
 		RETURNING id, created_at, updated_at
 	`, r.Name, r.TriggerType, r.Keyword, r.KeywordMatch,
-		r.TemplateID, r.ResponseText, r.Active, r.Priority,
+		r.TemplateID, r.ResponseText, actionType, r.Active, r.Priority,
 	).Scan(&r.ID, &r.CreatedAt, &r.UpdatedAt)
 }
 
 // UpdateRule updates a non-system rule.
 func UpdateRule(ctx context.Context, pool *pgxpool.Pool, r *AutomationRule) error {
+	var actionType *string
+	if r.ActionType != "" {
+		actionType = &r.ActionType
+	}
 	_, err := pool.Exec(ctx, `
 		UPDATE automation_rules
 		SET name=$1, trigger_type=$2, keyword=$3, keyword_match=$4,
-		    template_id=$5::uuid, response_text=$6, active=$7, priority=$8, updated_at=NOW()
-		WHERE id=$9 AND trigger_type != 'stop'
+		    template_id=$5::uuid, response_text=$6, action_type=$7, active=$8, priority=$9, updated_at=NOW()
+		WHERE id=$10 AND trigger_type != 'stop'
 	`, r.Name, r.TriggerType, r.Keyword, r.KeywordMatch,
-		r.TemplateID, r.ResponseText, r.Active, r.Priority, r.ID)
+		r.TemplateID, r.ResponseText, actionType, r.Active, r.Priority, r.ID)
 	return err
 }
 

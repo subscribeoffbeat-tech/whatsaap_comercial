@@ -161,6 +161,7 @@ func parseRuleForm(r *http.Request) (*db.AutomationRule, error) {
 		Name:         r.FormValue("name"),
 		TriggerType:  r.FormValue("trigger_type"),
 		KeywordMatch: r.FormValue("keyword_match"),
+		ActionType:   r.FormValue("action_type"),
 		Active:       r.FormValue("active") == "on" || r.FormValue("active") == "true",
 	}
 	if rule.KeywordMatch == "" {
@@ -169,14 +170,29 @@ func parseRuleForm(r *http.Request) (*db.AutomationRule, error) {
 	if p, err := strconv.Atoi(r.FormValue("priority")); err == nil {
 		rule.Priority = p
 	}
+	// keyword: used for keyword trigger (match words) and no_reply trigger (hours)
 	if kw := r.FormValue("keyword"); kw != "" {
 		rule.Keyword = &kw
 	}
-	if rt := r.FormValue("response_text"); rt != "" {
-		rule.ResponseText = &rt
-	}
-	if tid := r.FormValue("template_id"); tid != "" {
-		rule.TemplateID = &tid
+	// response_text and template_id: only set for the relevant action type
+	switch rule.ActionType {
+	case "send_template":
+		if tid := r.FormValue("template_id"); tid != "" {
+			rule.TemplateID = &tid
+		}
+	case "add_tag", "webhook":
+		if rt := r.FormValue("response_text"); rt != "" {
+			rule.ResponseText = &rt
+		}
+	// assign_agent and remove_consent need no extra fields
+	default:
+		// legacy form without action_type — preserve old behaviour
+		if tid := r.FormValue("template_id"); tid != "" {
+			rule.TemplateID = &tid
+		}
+		if rt := r.FormValue("response_text"); rt != "" {
+			rule.ResponseText = &rt
+		}
 	}
 	return rule, nil
 }

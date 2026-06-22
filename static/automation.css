@@ -1,97 +1,21 @@
-/* Automation page — v2 styles.
-   Shared components (btn, badge, form-input, empty-state) live in app.css.
-   Only automation-specific classes are defined here.
+/* Automation page — v3 styles.
+   Toggle switch, list table, two-panel radio-card builder form.
    ------------------------------------------------------------------ */
 
-/* ── Trigger filter tabs ─────────────────────────────────────────── */
-.au-tabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: var(--gutter);
-  flex-wrap: wrap;
-}
-.au-tab {
-  padding: 6px 16px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--duration-fast);
-}
-.au-tab:hover { border-color: var(--accent); color: var(--accent); }
-.au-tab.active { background: var(--accent); color: var(--text-on-fill); border-color: var(--accent); }
+/* Prevent Alpine x-cloak flash */
+[x-cloak] { display: none !important; }
 
-/* ── Rules table ─────────────────────────────────────────────────── */
-.au-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-.au-table th,
-.au-table td {
-  padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid var(--border-light);
-  text-align: left;
-  vertical-align: middle;
-}
-.au-table th {
-  background: var(--accent-lighter);
-  font-weight: 600;
-  color: var(--text-muted);
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-}
-.au-table tbody tr:last-child td { border-bottom: none; }
-.au-table tbody tr:hover td { background: var(--accent-lighter); }
-
-.au-system-row td {
-  background: var(--bg-page);
-  color: var(--text-muted);
-}
-.au-actions {
-  white-space: nowrap;
-  display: flex;
-  gap: 0.35rem;
-}
-
-/* ── Trigger type badges ─────────────────────────────────────────── */
-.badge-trigger-keyword  { background: var(--info-bg);       color: var(--info-text); }
-.badge-trigger-welcome  { background: var(--success-light); color: var(--success-strong); }
-.badge-trigger-away     { background: var(--warning-light); color: var(--warning-text); }
-.badge-trigger-stop     { background: var(--danger-light);  color: var(--danger-text); }
-.badge-trigger-system   { background: var(--accent-lighter);color: var(--text-muted); }
-
-/* ── Rule form ───────────────────────────────────────────────────── */
-.au-form-card {
-  max-width: 600px;
-}
-.au-form-card .form-group { margin-bottom: 0; }
-
-.au-fieldset {
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius);
-  padding: 0.75rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  background: var(--accent-lighter);
-}
-.au-fieldset legend {
-  font-weight: 600;
-  font-size: 0.875rem;
-  padding: 0 0.3rem;
-  color: var(--text-secondary);
-}
-
-/* ── Toggle switch (active column) ──────────────────────────────── */
+/* ── Toggle switch ───────────────────────────────────────────────── */
 .toggle-wrap {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
+}
+.au-toggle-btn {
+  background: none;
+  border: none;
+  padding: 0;
   cursor: pointer;
 }
 .toggle-sw {
@@ -115,26 +39,306 @@
   left: 3px;
   width: 18px;
   height: 18px;
-  background: var(--bg-surface-base_default);
+  background: var(--bg-surface-base_default, #fff);
   border-radius: 50%;
   box-shadow: var(--shadow-toggle);
   transition: transform var(--duration-base);
 }
 .toggle-sw input:checked ~ .toggle-thumb { transform: translateX(20px); }
 
-.back-link {
+/* ── List table ──────────────────────────────────────────────────── */
+.au-list-card { padding: 0; overflow: hidden; }
+
+.au-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.au-table th {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  background: var(--accent-lighter);
+}
+.au-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.au-table tbody tr:last-child td { border-bottom: none; }
+.au-table tbody tr:hover td { background: var(--accent-lighter); }
+
+.au-system-row td { color: var(--text-muted); }
+.au-rule-name  { font-weight: 600; }
+.au-kw-cell    { white-space: nowrap; }
+.au-action-cell { color: var(--text-secondary); font-size: 13px; }
+
+.au-kw-chip {
+  display: inline-block;
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  padding: 2px 7px;
+  background: var(--accent-lighter);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-right: 3px;
+  color: var(--text-primary);
+}
+.au-dash { color: var(--text-muted); }
+
+.au-row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+.au-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color .15s, background .15s;
+}
+.au-icon-btn:hover { background: var(--accent-lighter); color: var(--text-primary); }
+.au-icon-btn--danger:hover { background: var(--danger-light); color: var(--danger); }
+.au-icon-svg { width: 15px; height: 15px; display: block; }
+.au-system-lbl {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 2px 8px;
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+}
+
+/* ── Trigger badge classes ───────────────────────────────────────── */
+.au-badge-keyword         { background: var(--info-bg);       color: var(--info-text); }
+.au-badge-welcome         { background: var(--success-light); color: var(--success-strong); }
+.au-badge-away            { background: var(--warning-light); color: var(--warning-text); }
+.au-badge-stop            { background: var(--danger-light);  color: var(--danger-text); }
+.au-badge-no-reply        { background: var(--bg-page);       color: var(--text-secondary); border: 1px solid var(--border); }
+.au-badge-new-conversation{ background: var(--info-bg);       color: var(--info-text); }
+.au-badge-opt-out         { background: var(--danger-light);  color: var(--danger-text); }
+
+/* ── Form: back link ─────────────────────────────────────────────── */
+.au-back-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.875rem;
+  font-size: 13px;
   color: var(--text-muted);
   text-decoration: none;
-  margin-bottom: 0.75rem;
+  margin-top: 4px;
 }
-.back-link:hover { color: var(--text); }
+.au-back-link:hover { color: var(--text-primary); }
+
+/* ── Form: header bar ────────────────────────────────────────────── */
+.au-form-header {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: var(--gutter);
+}
+.au-name-group { flex: 1; min-width: 260px; margin-bottom: 0 !important; }
+.au-active-group { flex-shrink: 0; margin-bottom: 0 !important; }
+.au-active-lbl { font-size: 13px; color: var(--text-secondary); }
+
+/* ── Form: two-panel builder ─────────────────────────────────────── */
+.au-builder {
+  display: grid;
+  grid-template-columns: 1fr 40px 1fr;
+  gap: 0;
+  align-items: start;
+  margin-bottom: var(--gutter);
+}
+@media (max-width: 860px) {
+  .au-builder { grid-template-columns: 1fr; }
+  .au-builder-sep { display: none; }
+}
+
+.au-builder-panel {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.au-builder-sep {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+  color: var(--text-muted);
+}
+
+/* ── Panel header ────────────────────────────────────────────────── */
+.au-panel-hd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.au-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.au-step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--text-on-fill);
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.au-step-badge--2 {
+  background: var(--success);
+}
+
+/* ── Radio option cards ──────────────────────────────────────────── */
+.au-option-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  margin-bottom: 5px;
+  background: var(--bg-card);
+}
+.au-option-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-lighter);
+}
+.au-option-card--sel {
+  border-color: var(--accent);
+  background: var(--accent-lighter);
+}
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Icon square */
+.au-option-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.au-option-icon .au-icon-svg { width: 17px; height: 17px; }
+
+/* Icon color variants */
+.au-icon--keyword   { background: var(--info-bg);       color: var(--info-text); }
+.au-icon--contact   { background: var(--success-light); color: var(--success); }
+.au-icon--hours     { background: var(--warning-light); color: var(--warning-text); }
+.au-icon--reply     { background: var(--bg-page);       color: var(--text-secondary); border: 1px solid var(--border); }
+.au-icon--newconv   { background: var(--info-bg);       color: var(--info-text); }
+.au-icon--optout    { background: var(--danger-light);  color: var(--danger); }
+.au-icon--template  { background: var(--info-bg);       color: var(--info-text); }
+.au-icon--agent     { background: var(--success-light); color: var(--success); }
+.au-icon--tag       { background: var(--warning-light); color: var(--warning-text); }
+.au-icon--consent   { background: var(--danger-light);  color: var(--danger); }
+.au-icon--webhook   { background: var(--bg-page);       color: var(--text-secondary); border: 1px solid var(--border); }
+
+/* Card text */
+.au-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.au-option-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+.au-option-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Radio dot on the right */
+.au-option-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.au-option-check--on {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--bg-card);
+}
+
+/* ── Conditional config box ──────────────────────────────────────── */
+.au-config-box {
+  margin-top: 6px;
+  margin-bottom: 6px;
+  padding: 14px 16px;
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.au-config-box .form-group { margin-bottom: 0 !important; }
+.form-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.au-inline-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.au-input-suffix { font-size: 13px; color: var(--text-secondary); }
+
+/* ── Form footer ─────────────────────────────────────────────────── */
+.au-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 0 8px;
+}
 
 /* ── Responsive ─────────────────────────────────────────────────── */
 @media (max-width: 720px) {
-  .au-table-wrap, .card-static { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .au-actions { flex-direction: column; gap: 4px; }
+  .au-list-card { overflow-x: auto; }
+  .au-form-header { flex-direction: column; align-items: stretch; }
 }
