@@ -30,7 +30,6 @@ func TemplateNewPage(
 		}
 		slug := tnSlugify(prefillName)
 
-		// Page wrapper with Alpine x-data
 		if _, err := fmt.Fprintf(w, `<div class="page-wrap" x-data="%s">`,
 			tnXData(prefillName, slug, prefillCategory, prefillLanguage, prefillBody),
 		); err != nil {
@@ -51,15 +50,13 @@ func TemplateNewPage(
 			return err
 		}
 
-		// Error banner
 		if errMsg != "" {
-			if _, err := fmt.Fprintf(w, `<div class="form-banner form-banner--error">%s</div>`, html.EscapeString(errMsg)); err != nil {
-				return err
-			}
+			fmt.Fprintf(w, `<div class="form-banner form-banner--error">%s</div>`, html.EscapeString(errMsg))
 		}
 
+		// Form — multipart so files can be uploaded
 		if _, err := io.WriteString(w, `
-<form method="post" action="/templates/new">
+<form method="post" action="/templates/new" enctype="multipart/form-data">
 <div class="tmpl-fp-grid">
 <div class="tn-left-col">`); err != nil {
 			return err
@@ -135,14 +132,73 @@ func TemplateNewPage(
     <div class="form-group" style="margin:0">
       <label class="form-label">Header <span class="tn-label-hint">(optional)</span></label>
       <div class="tn-hdr-pills">
-        <label class="tn-hdr-pill" :class="{'tn-hdr-pill--sel':headerType==='none'}"><input type="radio" name="header_type" value="none" x-model="headerType" class="sr-only">None</label>
-        <label class="tn-hdr-pill" :class="{'tn-hdr-pill--sel':headerType==='text'}"><input type="radio" name="header_type" value="text" x-model="headerType" class="sr-only">Text</label>
-        <label class="tn-hdr-pill" :class="{'tn-hdr-pill--sel':headerType==='image'}"><input type="radio" name="header_type" value="image" x-model="headerType" class="sr-only">Image</label>
-        <label class="tn-hdr-pill" :class="{'tn-hdr-pill--sel':headerType==='video'}"><input type="radio" name="header_type" value="video" x-model="headerType" class="sr-only">Video</label>
-        <label class="tn-hdr-pill" :class="{'tn-hdr-pill--sel':headerType==='document'}"><input type="radio" name="header_type" value="document" x-model="headerType" class="sr-only">Document</label>
+        <label class="tn-hdr-pill" :class="{'tn-hdr-pill--sel':headerType==='none'}">
+          <input type="radio" name="header_type" value="none" x-model="headerType" @change="clearHeaderFile()" class="sr-only">None
+        </label>
+        <label class="tn-hdr-pill" :class="{'tn-hdr-pill--sel':headerType==='text'}">
+          <input type="radio" name="header_type" value="text" x-model="headerType" @change="clearHeaderFile()" class="sr-only">Text
+        </label>
+        <label class="tn-hdr-pill" :class="{'tn-hdr-pill--sel':headerType==='image'}">
+          <input type="radio" name="header_type" value="image" x-model="headerType" @change="clearHeaderFile()" class="sr-only">Image
+        </label>
+        <label class="tn-hdr-pill" :class="{'tn-hdr-pill--sel':headerType==='video'}">
+          <input type="radio" name="header_type" value="video" x-model="headerType" @change="clearHeaderFile()" class="sr-only">Video
+        </label>
+        <label class="tn-hdr-pill" :class="{'tn-hdr-pill--sel':headerType==='document'}">
+          <input type="radio" name="header_type" value="document" x-model="headerType" @change="clearHeaderFile()" class="sr-only">Document
+        </label>
       </div>
+
+      <!-- Text header input -->
       <div x-show="headerType==='text'" x-cloak style="margin-top:8px">
-        <input type="text" name="header_text" x-model="headerText" class="form-input" placeholder="Header text (max 60 chars)" maxlength="60" :disabled="headerType!=='text'">
+        <input type="text" name="header_text" x-model="headerText" class="form-input"
+          placeholder="Header text (max 60 chars)" maxlength="60"
+          :disabled="headerType!=='text'">
+      </div>
+
+      <!-- Media upload area -->
+      <div x-show="headerType==='image'||headerType==='video'||headerType==='document'" x-cloak style="margin-top:10px">
+        <div class="tn-upload-area"
+          :class="{'tn-upload-area--has': headerFileName}"
+          @click="$refs.hfile.click()"
+          @dragover.prevent
+          @drop.prevent="handleFileDrop($event)">
+          <!-- Hidden file input — accept changes based on header type -->
+          <input type="file" x-ref="hfile" name="header_file"
+            :accept="headerType==='image'?'image/jpeg,image/png,image/webp':headerType==='video'?'video/mp4,video/3gpp':'application/pdf'"
+            :disabled="headerType==='none'||headerType==='text'"
+            @change="previewHeaderFile($event)"
+            class="sr-only">
+
+          <!-- Empty state -->
+          <div x-show="!headerFileName">
+            <svg class="tn-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="32" height="32">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <p class="tn-upload-cta">Click to upload or drag &amp; drop</p>
+            <p class="tn-upload-hint"
+              x-text="headerType==='image'?'PNG, JPG, WebP — max 5 MB':headerType==='video'?'MP4, 3GP — max 16 MB':'PDF — max 100 MB'"></p>
+          </div>
+
+          <!-- Image preview -->
+          <div x-show="headerFileName && headerType==='image'">
+            <img :src="headerPreviewURL" class="tn-upload-thumb" alt="preview">
+            <p class="tn-upload-name" x-text="headerFileName"></p>
+            <p class="tn-upload-change">Click to change</p>
+          </div>
+
+          <!-- Video / document preview -->
+          <div x-show="headerFileName && headerType!=='image'">
+            <svg class="tn-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="28" height="28">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <p class="tn-upload-name" x-text="headerFileName"></p>
+            <p class="tn-upload-change">Click to change</p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -210,10 +266,14 @@ func TemplateNewPage(
         </div>
       </div>
       <div class="tn-wa-body">
+        <!-- Header previews -->
         <div x-show="headerType==='text'&&headerText" x-cloak class="tn-wa-hdr-text" x-text="headerText"></div>
-        <div x-show="headerType==='image'" x-cloak class="tn-wa-hdr-media">📷 Image</div>
-        <div x-show="headerType==='video'" x-cloak class="tn-wa-hdr-media">🎥 Video</div>
-        <div x-show="headerType==='document'" x-cloak class="tn-wa-hdr-media">📄 Document</div>
+        <div x-show="headerType==='image'&&headerPreviewURL" x-cloak class="tn-wa-hdr-img">
+          <img :src="headerPreviewURL" alt="header" style="width:100%;border-radius:6px 6px 0 0;display:block;max-height:140px;object-fit:cover">
+        </div>
+        <div x-show="headerType==='image'&&!headerPreviewURL" x-cloak class="tn-wa-hdr-media">📷 Image</div>
+        <div x-show="headerType==='video'" x-cloak class="tn-wa-hdr-media">🎥 <span x-text="headerFileName||'Video'"></span></div>
+        <div x-show="headerType==='document'" x-cloak class="tn-wa-hdr-media">📄 <span x-text="headerFileName||'Document'"></span></div>
         <div class="tn-wa-bub">
           <div class="preview-body-text" x-html="renderBody(body)"></div>
           <div x-show="footer" x-cloak class="preview-footer-text" x-text="footer"></div>
@@ -251,19 +311,29 @@ func TemplateNewPage(
 }
 
 // tnXData builds the Alpine x-data attribute value for the template form.
-// Returns an html-escaped string safe for use in x-data="...".
 func tnXData(name, slug, category, language, body string) string {
 	prefix := fmt.Sprintf(
-		`{name:%s,slug:%s,category:%s,language:%s,headerType:'none',headerText:'',body:%s,footer:'',buttons:[],`,
+		`{name:%s,slug:%s,category:%s,language:%s,headerType:'none',headerText:'',body:%s,footer:'',buttons:[],`+
+			`headerFileName:'',headerPreviewURL:'',`,
 		jsLit(name), jsLit(slug), jsLit(category), jsLit(language), jsLit(body),
 	)
-	// Raw string preserves backslashes for JS regex patterns without double-escaping.
 	suffix := `` +
 		`get varCount(){return(this.body.match(/\{\{\d+\}\}/g)||[]).length},` +
 		`get charCount(){return this.body.length},` +
 		`updateSlug(){this.slug=this.name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')},` +
 		`addButton(){if(this.buttons.length<3)this.buttons.push({type:'QUICK_REPLY',label:'',url:'',phone:''})},` +
 		`removeButton(i){this.buttons.splice(i,1)},` +
+		`clearHeaderFile(){this.headerFileName='';this.headerPreviewURL='';const el=this.$refs.hfile;if(el)el.value=''},` +
+		`previewHeaderFile(e){` +
+		`const f=e.target.files[0];if(!f)return;` +
+		`this.headerFileName=f.name;` +
+		`if(this.headerType==='image'){` +
+		`const r=new FileReader();r.onload=(ev)=>{this.headerPreviewURL=ev.target.result};r.readAsDataURL(f)` +
+		`}},` +
+		`handleFileDrop(e){` +
+		`const f=e.dataTransfer.files[0];if(!f)return;` +
+		`const dt=new DataTransfer();dt.items.add(f);` +
+		`const el=this.$refs.hfile;if(el){el.files=dt.files;el.dispatchEvent(new Event('change'))}},` +
 		`insert(txt){const ta=document.getElementById('tmpl-body-ta');if(!ta)return;` +
 		`const s=ta.selectionStart,e=ta.selectionEnd;` +
 		`this.body=this.body.slice(0,s)+txt+this.body.slice(e);` +
@@ -276,7 +346,6 @@ func tnXData(name, slug, category, language, body string) string {
 	return html.EscapeString(prefix + suffix)
 }
 
-// jsLit converts a Go string to a JavaScript single-quoted string literal.
 func jsLit(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `'`, `\'`)
@@ -285,7 +354,6 @@ func jsLit(s string) string {
 	return "'" + s + "'"
 }
 
-// tnSlugify converts a human-readable name to snake_case for use as template ID preview.
 func tnSlugify(s string) string {
 	s = strings.ToLower(s)
 	var b strings.Builder

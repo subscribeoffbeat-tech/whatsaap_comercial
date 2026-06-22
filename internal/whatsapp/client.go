@@ -220,6 +220,47 @@ func (c *Client) DownloadMedia(ctx context.Context, mediaURL string) ([]byte, er
 	return io.ReadAll(resp.Body)
 }
 
+// UploadMediaStream uploads an io.Reader as media to Meta and returns the media ID.
+// Use this when the file is already in memory (e.g. from a multipart form upload).
+func (c *Client) UploadMediaStream(ctx context.Context, r io.Reader, filename, mimeType string) (string, error) {
+	var buf bytes.Buffer
+	mpw := multipart.NewWriter(&buf)
+	_ = mpw.WriteField("messaging_product", "whatsapp")
+	fw, err := mpw.CreateFormFile("file", filename)
+	if err != nil {
+		return "", fmt.Errorf("create form file: %w", err)
+	}
+	if _, err := io.Copy(fw, r); err != nil {
+		return "", fmt.Errorf("write media to form: %w", err)
+	}
+	mpw.Close()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("%s/%s/media", metaBaseURL, c.phoneNumberID), &buf)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", mpw.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+c.accessToken)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("upload media stream: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", c.parseError(raw)
+	}
+	var out struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", fmt.Errorf("parse upload response: %w", err)
+	}
+	return out.ID, nil
+}
+
 // UploadMedia uploads a local file as media to Meta and returns the media ID.
 func (c *Client) UploadMedia(ctx context.Context, filePath, mimeType string) (mediaID string, err error) {
 	f, err := os.Open(filePath)

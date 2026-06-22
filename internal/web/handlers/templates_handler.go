@@ -66,9 +66,9 @@ func (h *TemplatesHandler) NewForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TemplatesHandler) CreateFromForm(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
+	// Accept both multipart (file upload) and URL-encoded (no file) forms.
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		_ = r.ParseForm()
 	}
 
 	rawName := strings.TrimSpace(r.FormValue("name"))
@@ -113,12 +113,24 @@ func (h *TemplatesHandler) CreateFromForm(w http.ResponseWriter, r *http.Request
 		if headerText != "" {
 			components = append(components, map[string]any{"type": "HEADER", "format": "TEXT", "text": headerText})
 		}
-	case "image":
-		components = append(components, map[string]any{"type": "HEADER", "format": "IMAGE"})
-	case "video":
-		components = append(components, map[string]any{"type": "HEADER", "format": "VIDEO"})
-	case "document":
-		components = append(components, map[string]any{"type": "HEADER", "format": "DOCUMENT"})
+	case "image", "video", "document":
+		format := strings.ToUpper(headerType)
+		hdrComp := map[string]any{"type": "HEADER", "format": format}
+		// Upload the file to Meta now so we can include the example handle.
+		if f, fh, ferr := r.FormFile("header_file"); ferr == nil {
+			defer f.Close()
+			mimeType := fh.Header.Get("Content-Type")
+			if mimeType == "" {
+				mimeType = "application/octet-stream"
+			}
+			if mediaID, uerr := h.waClient.UploadMediaStream(r.Context(), f, fh.Filename, mimeType); uerr != nil {
+				log.Printf("template header media upload: %v", uerr)
+				// Continue without example — save what we can
+			} else {
+				hdrComp["example"] = map[string]any{"header_handle": []string{mediaID}}
+			}
+		}
+		components = append(components, hdrComp)
 	}
 
 	components = append(components, map[string]any{"type": "BODY", "text": body})
