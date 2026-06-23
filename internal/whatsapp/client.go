@@ -10,8 +10,10 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -40,10 +42,18 @@ func IsPermanent(err error) bool {
 	var me *MetaAPIError
 	if errors.As(err, &me) {
 		switch me.Code {
-		case 131049, // contact not on WhatsApp
-			131026, // message undeliverable
-			132000, // template param mismatch
-			130472: // template rejected
+		case 131049, // not delivered (ecosystem engagement cap)
+			131026, // message undeliverable / not on WhatsApp
+			131051, // unsupported message type
+			131008, // required parameter missing
+			132000, // template param count mismatch
+			132001, // template does not exist
+			132005, // template text too long / hydration failed
+			132007, // template format character policy violated
+			132012, // template param format mismatch
+			132015, // template paused
+			132016, // template disabled
+			130472: // user in experiment / not delivered
 			return true
 		}
 	}
@@ -55,6 +65,7 @@ type Client struct {
 	phoneNumberID string
 	wabaID        string
 	accessToken   string
+	appID         string // resolved lazily via debug_token, cached
 	http          *http.Client
 }
 
@@ -324,6 +335,7 @@ func (c *Client) SubmitTemplate(ctx context.Context, req SubmitTemplateRequest) 
 	if err != nil {
 		return "", err
 	}
+	log.Printf("SubmitTemplate payload: %s", string(body))
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		fmt.Sprintf("%s/%s/message_templates", metaBaseURL, c.wabaID),
 		bytes.NewReader(body),
@@ -341,6 +353,7 @@ func (c *Client) SubmitTemplate(ctx context.Context, req SubmitTemplateRequest) 
 	defer resp.Body.Close()
 
 	raw, _ := io.ReadAll(resp.Body)
+	log.Printf("SubmitTemplate response %d: %s", resp.StatusCode, string(raw))
 	if resp.StatusCode != http.StatusOK {
 		return "", c.parseError(raw)
 	}
@@ -354,23 +367,237 @@ func (c *Client) SubmitTemplate(ctx context.Context, req SubmitTemplateRequest) 
 	return out.ID, nil
 }
 
+// PhoneNumberInfo is the live phone-number health from the Meta API.
+type PhoneNumberInfo struct {
+	QualityRating string `json:"quality_rating"`       // GREEN | YELLOW | RED | UNKNOWN
+	MessagingTier string `json:"messaging_limit_tier"` // TIER_1K | TIER_10K | ...
+	DisplayPhone  string `json:"display_phone_number"`
+}
+
+// GetPhoneNumberInfo fetches the phone number's current quality rating and
+// messaging tier from Meta. Used to keep the dashboard quality widget live.
+func (c *Client) GetPhoneNumberInfo(ctx context.Context) (*PhoneNumberInfo, error) {
+	u := fmt.Sprintf("%s/%s?fields=quality_rating,messaging_limit_tier,display_phone_number&access_token=%s",
+		metaBaseURL, c.phoneNumberID, url.QueryEscape(c.accessToken))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get phone info: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(raw)
+	}
+	var out PhoneNumberInfo
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("parse phone info: %w", err)
+	}
+	return &out, nil
+}
+
+// MetaTemplate is a template's live state as reported by the Meta API.
+type MetaTemplate struct {
+	Name           string `json:"name"`
+	Language       string `json:"language"`
+	Status         string `json:"status"`          // APPROVED|REJECTED|PENDING|PAUSED|...
+	Category       string `json:"category"`
+	RejectedReason string `json:"rejected_reason"` // e.g. INVALID_FORMAT, NONE
+}
+
+// ListTemplates fetches all templates and their current status from Meta. Used
+// to reconcile local status with Meta (a safety net for missed webhooks).
+func (c *Client) ListTemplates(ctx context.Context) ([]MetaTemplate, error) {
+	u := fmt.Sprintf("%s/%s/message_templates?fields=name,language,status,category,rejected_reason&limit=200&access_token=%s",
+		metaBaseURL, c.wabaID, url.QueryEscape(c.accessToken))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("list templates: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(raw)
+	}
+	var out struct {
+		Data []MetaTemplate `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("parse templates list: %w", err)
+	}
+	return out.Data, nil
+}
+
+// ── Resumable upload (for template header media samples) ───────────────────
+
+// AppID resolves and caches the Meta App ID for this token via the debug_token
+// endpoint. The Resumable Upload API is app-scoped, so we need the App ID.
+func (c *Client) AppID(ctx context.Context) (string, error) {
+	if c.appID != "" {
+		return c.appID, nil
+	}
+	u := fmt.Sprintf("%s/debug_token?input_token=%s&access_token=%s",
+		metaBaseURL, url.QueryEscape(c.accessToken), url.QueryEscape(c.accessToken))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("debug_token: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", c.parseError(raw)
+	}
+	var out struct {
+		Data struct {
+			AppID string `json:"app_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil || out.Data.AppID == "" {
+		return "", fmt.Errorf("app_id not found: %s", string(raw))
+	}
+	c.appID = out.Data.AppID
+	return c.appID, nil
+}
+
+// UploadResumable uploads a file via Meta's Resumable Upload API and returns the
+// file handle used as a template header sample (example.header_handle).
+// IMPORTANT: template header media require this handle — a Cloud API /media ID
+// is NOT accepted by the template-create endpoint.
+func (c *Client) UploadResumable(ctx context.Context, fileName, fileType string, data []byte) (string, error) {
+	appID, err := c.AppID(ctx)
+	if err != nil {
+		return "", fmt.Errorf("resolve app id: %w", err)
+	}
+
+	// 1. Start an upload session.
+	startURL := fmt.Sprintf("%s/%s/uploads?file_name=%s&file_length=%d&file_type=%s&access_token=%s",
+		metaBaseURL, appID, url.QueryEscape(fileName), len(data), url.QueryEscape(fileType), url.QueryEscape(c.accessToken))
+	startReq, err := http.NewRequestWithContext(ctx, http.MethodPost, startURL, nil)
+	if err != nil {
+		return "", err
+	}
+	startResp, err := c.http.Do(startReq)
+	if err != nil {
+		return "", fmt.Errorf("start upload session: %w", err)
+	}
+	defer startResp.Body.Close()
+	startRaw, _ := io.ReadAll(startResp.Body)
+	if startResp.StatusCode != http.StatusOK {
+		return "", c.parseError(startRaw)
+	}
+	var startOut struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(startRaw, &startOut); err != nil || startOut.ID == "" {
+		return "", fmt.Errorf("parse upload session: %s", string(startRaw))
+	}
+
+	// 2. Upload the bytes (single chunk at offset 0). Note: this endpoint uses
+	// the "OAuth <token>" auth scheme, not "Bearer".
+	upReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("%s/%s", metaBaseURL, startOut.ID), bytes.NewReader(data))
+	if err != nil {
+		return "", err
+	}
+	upReq.Header.Set("Authorization", "OAuth "+c.accessToken)
+	upReq.Header.Set("file_offset", "0")
+	upResp, err := c.http.Do(upReq)
+	if err != nil {
+		return "", fmt.Errorf("upload bytes: %w", err)
+	}
+	defer upResp.Body.Close()
+	upRaw, _ := io.ReadAll(upResp.Body)
+	if upResp.StatusCode != http.StatusOK {
+		return "", c.parseError(upRaw)
+	}
+	var upOut struct {
+		H string `json:"h"`
+	}
+	if err := json.Unmarshal(upRaw, &upOut); err != nil || upOut.H == "" {
+		return "", fmt.Errorf("parse upload handle: %s", string(upRaw))
+	}
+	// Guard against any stray whitespace/newlines — header_handle must be a
+	// single clean token, never two concatenated.
+	handle := strings.TrimSpace(upOut.H)
+	if i := strings.IndexAny(handle, "\r\n"); i >= 0 {
+		handle = handle[:i]
+	}
+	log.Printf("UploadResumable handle for %s: %s", fileName, handle)
+	return handle, nil
+}
+
+// EditTemplate edits an existing template in Meta (used to resubmit a rejected
+// template). Meta identifies the template by its own ID, and a successful edit
+// puts the template back into review. Name and language cannot be changed via
+// this endpoint — only category, components (header/body/footer/buttons).
+func (c *Client) EditTemplate(ctx context.Context, waTemplateID, category string, components []map[string]any) error {
+	payload := map[string]any{
+		"category":   category,
+		"components": components,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	log.Printf("EditTemplate %s payload: %s", waTemplateID, string(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("%s/%s", metaBaseURL, waTemplateID),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+c.accessToken)
+
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("edit template http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(resp.Body)
+	log.Printf("EditTemplate response %d: %s", resp.StatusCode, string(raw))
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(raw)
+	}
+	return nil
+}
+
 // ── Error parsing ─────────────────────────────────────────────────────────
 
 func (c *Client) parseError(body []byte) error {
 	var errResp struct {
 		Error struct {
-			Code    int    `json:"code"`
-			Type    string `json:"type"`
-			Message string `json:"message"`
+			Code        int    `json:"code"`
+			Type        string `json:"type"`
+			Message     string `json:"message"`
+			UserTitle   string `json:"error_user_title"`
+			UserMessage string `json:"error_user_msg"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(body, &errResp); err != nil {
 		return fmt.Errorf("http error (unparseable body): %s", string(body))
 	}
+	msg := errResp.Error.Message
+	if errResp.Error.UserMessage != "" {
+		msg = errResp.Error.UserTitle + ": " + errResp.Error.UserMessage
+	}
 	me := &MetaAPIError{
 		Code:    errResp.Error.Code,
 		Type:    errResp.Error.Type,
-		Message: errResp.Error.Message,
+		Message: msg,
 	}
 	// Surface known permanent errors as typed sentinels.
 	if me.Code == 131049 {

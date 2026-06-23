@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -57,7 +58,7 @@ func main() {
 	// Infrastructure
 	webhookStore := db.NewWebhookStore(pool)
 	proc         := whatsapp.NewProcessor(webhookStore)
-	hub          := ws.NewHub()
+	hub          := ws.NewHub(cfg.BaseURL)
 	waClient     := whatsapp.NewClient(cfg.WA.PhoneNumberID, cfg.WA.WABAID, cfg.WA.AccessToken)
 
 	// River queue
@@ -70,6 +71,9 @@ func main() {
 	}
 	defer riverClient.Stop(ctx)
 
+	// Background loop that starts scheduled campaigns when their time arrives.
+	campaigns.StartScheduledDispatcher(ctx, pool, riverClient, hub)
+
 	// Handlers
 	inboxH      := handlers.NewInboxHandler(pool, waClient, hub)
 	contactsH   := handlers.NewContactsHandler(pool)
@@ -77,7 +81,7 @@ func main() {
 	cmpgnsH     := handlers.NewCampaignHandler(pool, riverClient, hub)
 	automationH := handlers.NewAutomationHandler(pool)
 	analyticsH  := handlers.NewAnalyticsHandler(pool)
-	dashboardH  := handlers.NewDashboardHandler(pool)
+	dashboardH  := handlers.NewDashboardHandler(pool, waClient)
 	clicksH     := handlers.NewClickHandler(pool)
 	jwtSecret   := []byte(cfg.JWTSecret)
 	var mailer *email.Sender
@@ -93,8 +97,15 @@ func main() {
 	accountH    := handlers.NewAccountHandler(pool, jwtSecret)
 	onboardingH := handlers.NewOnboardingHandler(pool, jwtSecret, cfg.WA.PhoneNumberID, cfg.WA.AccessToken)
 
+	// Session cookies get the Secure flag when served over HTTPS.
+	mw.SetSecureCookies(strings.HasPrefix(cfg.BaseURL, "https"))
+
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
+	r.Use(mw.SecurityHeaders)
+	// Lightweight CSRF defense (Origin/Referer check) on mutating requests.
+	// The Meta webhook is cross-origin by design, so it's exempt.
+	r.Use(mw.CSRFGuard("/webhook"))
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {

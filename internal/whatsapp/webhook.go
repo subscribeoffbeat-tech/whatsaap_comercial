@@ -39,8 +39,9 @@ type ChangeValue struct {
 	MessageTemplateName     string `json:"message_template_name"`
 	MessageTemplateLanguage string `json:"message_template_language"`
 	Reason                  string `json:"reason"`
-	// business_capability_update fields
-	MaxDailyConversationPerPhone int64 `json:"max_daily_conversation_per_phone"`
+	// business_capability_update fields (legacy + v24+ rename)
+	MaxDailyConversationPerPhone    int64 `json:"max_daily_conversation_per_phone"`
+	MaxDailyConversationsPerBusiness int64 `json:"max_daily_conversations_per_business"`
 }
 
 // TemplateStatusUpdate carries a Meta template approval/rejection event.
@@ -253,11 +254,16 @@ func (p *Processor) ProcessRaw(ctx context.Context, payload []byte) (*ProcessRes
 						Reason:   change.Value.Reason,
 					})
 				}
-			case "account_update":
-				// business_capability_update: Meta sends the new daily tier.
-				// Store 90% of the tier as the daily send cap.
-				if change.Value.MaxDailyConversationPerPhone > 0 {
-					cap := int64(float64(change.Value.MaxDailyConversationPerPhone) * 0.9)
+			case "business_capability_update", "account_update":
+				// Meta sends the new daily messaging tier here. Store 90% of the
+				// tier as the daily send cap. Handle both the legacy field name
+				// and the v24+ rename.
+				tier := change.Value.MaxDailyConversationPerPhone
+				if tier == 0 {
+					tier = change.Value.MaxDailyConversationsPerBusiness
+				}
+				if tier > 0 {
+					cap := int64(float64(tier) * 0.9)
 					result.NewDailyCap = &cap
 				}
 			default:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	pgx "github.com/jackc/pgx/v5"
@@ -32,6 +33,7 @@ type SendMessageArgs struct {
 	LangCode       string
 	Category       string   // marketing|utility|authentication
 	Params         []string // resolved body variable values, index 0 = {{1}}
+	BodyText       string   // rendered message body (variables substituted) for the chat
 }
 
 func (SendMessageArgs) Kind() string { return "send_message" }
@@ -61,10 +63,30 @@ func NewSendMessageWorker(pool *pgxpool.Pool, waClient *whatsapp.Client, hub *ws
 func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessageArgs]) error {
 	args := job.Args
 
+	// Respect campaign control state: a cancelled campaign drops its remaining
+	// queued sends; a paused one defers them until resumed.
+	if camp, cerr := db.GetCampaign(ctx, w.pool, args.CampaignID); cerr == nil {
+		switch camp.Status {
+		case "cancelled":
+			return river.JobCancel(fmt.Errorf("campaign cancelled"))
+		case "paused":
+			return river.JobSnooze(2 * time.Minute)
+		}
+	}
+
+	// Honour quiet hours for marketing (business-initiated) sends — defer the
+	// job until the window passes. This also covers campaigns enqueued just
+	// before 9pm and "send now" campaigns started during quiet hours.
+	if args.Category == "marketing" && IsQuietHoursCfg(ctx, w.pool, time.Now()) {
+		return river.JobSnooze(15 * time.Minute)
+	}
+
 	// Daily limit guard — check before consuming the rate-limiter token.
 	sent, err := db.DailyMessagesSent(ctx, w.pool)
 	if err != nil {
-		log.Printf("campaign worker: daily check: %v", err)
+		// Fail closed: don't risk over-sending past the cap on a DB blip.
+		log.Printf("campaign worker: daily check: %v — deferring", err)
+		return river.JobSnooze(5 * time.Minute)
 	}
 	cap := db.DailyCap(ctx, w.pool)
 	if !LimitGuardCheck(sent, cap) {
@@ -106,23 +128,36 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 		return sendErr // transient: River retries with exponential backoff
 	}
 
-	// Get or create conversation for this contact.
+	// Get or create conversation for this contact. The Meta send has ALREADY
+	// succeeded by this point — returning an error here would make River retry
+	// and re-send a paid message. So on failure we log, count the send, and
+	// return nil (no retry) rather than risk a duplicate.
 	conv, convErr := db.GetOrCreateByContact(ctx, w.pool, args.ContactID)
 	if convErr != nil {
-		log.Printf("campaign worker: conversation for %s: %v", args.ContactID, convErr)
-		return convErr
+		log.Printf("campaign worker: conversation for %s (post-send, not retrying): %v", args.ContactID, convErr)
+		done, _ := db.IncrCampaignSent(ctx, w.pool, args.CampaignID, 0)
+		w.broadcastProgress(args.CampaignID)
+		if done {
+			_ = db.UpdateCampaignStatus(ctx, w.pool, args.CampaignID, "completed")
+		}
+		return nil
 	}
 
 	// Load rates for cost stamping.
 	rates := db.LoadRates(ctx, w.pool)
 	cost := CalcCost(args.Category, rates)
 
-	// Record the message row.
+	// Record the message row. Store the rendered body so the chat shows the
+	// actual message text (not just the template name).
+	content := map[string]any{"template": args.TemplateName}
+	if args.BodyText != "" {
+		content["body"] = args.BodyText
+	}
 	msg := &db.Message{
 		ConversationID: conv.ID,
 		Direction:      "outbound",
 		MessageType:    "template",
-		Content:        map[string]any{"template": args.TemplateName},
+		Content:        content,
 		WAMessageID:    &waID,
 		Status:         "sent",
 		Category:       &args.Category,
@@ -154,6 +189,30 @@ func (w *SendMessageWorker) broadcastProgress(campaignID string) {
 		Type: ws.EventCampaignProgress,
 		Data: map[string]any{"campaign_id": campaignID},
 	})
+}
+
+// templateBodyText extracts the BODY text (with {{N}} placeholders) from a template.
+func templateBodyText(t *db.Template) string {
+	for _, c := range t.Components {
+		if s, _ := c["type"].(string); strings.EqualFold(s, "BODY") {
+			if txt, ok := c["text"].(string); ok {
+				return txt
+			}
+		}
+	}
+	return ""
+}
+
+// renderTemplateBody substitutes resolved params into the raw body, producing the
+// exact text the recipient sees — stored on the message row for the chat thread.
+func renderTemplateBody(raw string, params []string) string {
+	if raw == "" {
+		return ""
+	}
+	for i, p := range params {
+		raw = strings.ReplaceAll(raw, fmt.Sprintf("{{%d}}", i+1), p)
+	}
+	return raw
 }
 
 func buildComponents(params []string) ([]whatsapp.TemplateComponent, error) {
@@ -251,6 +310,13 @@ func EnqueueCampaignJobs(ctx context.Context, pool *pgxpool.Pool, rc *river.Clie
 		return fmt.Errorf("load contacts for variable resolution: %w", err)
 	}
 
+	// Fetch the template's BODY text once so we can render the per-recipient
+	// message and store it on each message row (for the chat thread).
+	rawBody := ""
+	if tmpl, terr := db.GetTemplate(ctx, pool, campaign.TemplateID); terr == nil {
+		rawBody = templateBodyText(tmpl)
+	}
+
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -270,6 +336,7 @@ func EnqueueCampaignJobs(ctx context.Context, pool *pgxpool.Pool, rc *river.Clie
 			LangCode:       campaign.TemplateLanguage,
 			Category:       campaign.Category,
 			Params:         params,
+			BodyText:       renderTemplateBody(rawBody, params),
 		}
 
 		if _, err := rc.InsertTx(ctx, tx, args, &river.InsertOpts{

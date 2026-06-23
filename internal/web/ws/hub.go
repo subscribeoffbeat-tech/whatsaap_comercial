@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -43,11 +44,28 @@ type Hub struct {
 	upgrader websocket.Upgrader
 }
 
-func NewHub() *Hub {
+func NewHub(baseURL string) *Hub {
+	allowedHost := ""
+	if u, err := url.Parse(baseURL); err == nil {
+		allowedHost = u.Host
+	}
 	return &Hub{
 		clients: make(map[string]*client),
 		upgrader: websocket.Upgrader{
-			CheckOrigin:     func(r *http.Request) bool { return true }, // TODO: restrict in production
+			// Reject cross-site WebSocket connections: the Origin host must match
+			// the request host or the configured base URL (prevents cross-site
+			// WebSocket hijacking of the authenticated inbox stream).
+			CheckOrigin: func(r *http.Request) bool {
+				origin := r.Header.Get("Origin")
+				if origin == "" {
+					return true // non-browser client (no Origin header)
+				}
+				u, err := url.Parse(origin)
+				if err != nil {
+					return false
+				}
+				return u.Host == r.Host || (allowedHost != "" && u.Host == allowedHost)
+			},
 			ReadBufferSize:  1024,
 			WriteBufferSize: 4096,
 		},

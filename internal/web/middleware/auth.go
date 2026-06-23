@@ -18,6 +18,13 @@ import (
 const sessionCookie = "wt_session"
 const tokenTTL = 24 * time.Hour
 
+// secureCookies controls the Secure flag on the session cookie. Enabled in
+// production (HTTPS) via SetSecureCookies; off for local HTTP dev.
+var secureCookies = false
+
+// SetSecureCookies enables/disables the Secure flag on session cookies.
+func SetSecureCookies(on bool) { secureCookies = on }
+
 var jwtHeaderB64 = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
 
 // AgentClaims is stored in the JWT payload and injected into request context.
@@ -88,6 +95,7 @@ func SetSessionCookie(w http.ResponseWriter, token string) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   secureCookies,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(tokenTTL.Seconds()),
 	})
@@ -129,6 +137,55 @@ func RequireAuth(secret []byte) func(http.Handler) http.Handler {
 			}
 			ctx := context.WithValue(r.Context(), ctxAgentKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// SecurityHeaders sets baseline security response headers on every request.
+// (HSTS is left to the TLS-terminating reverse proxy.)
+func SecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "SAMEORIGIN")
+		h.Set("Referrer-Policy", "same-origin")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// CSRFGuard rejects state-changing requests (POST/PUT/PATCH/DELETE) whose Origin
+// (or Referer) host doesn't match the request host — a lightweight CSRF defense
+// layered on top of the SameSite=Lax session cookie. exemptPrefixes lists paths
+// that must skip the check (e.g. the Meta webhook, which is cross-origin).
+func CSRFGuard(exemptPrefixes ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			default:
+				next.ServeHTTP(w, r)
+				return
+			}
+			for _, p := range exemptPrefixes {
+				if strings.HasPrefix(r.URL.Path, p) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			// Determine the source host from Origin, falling back to Referer.
+			src := r.Header.Get("Origin")
+			if src == "" {
+				src = r.Header.Get("Referer")
+			}
+			if src != "" {
+				if u, err := url.Parse(src); err != nil || u.Host != r.Host {
+					http.Error(w, "cross-site request blocked", http.StatusForbidden)
+					return
+				}
+			}
+			// No Origin/Referer (e.g. some native clients): fall through to the
+			// SameSite=Lax cookie protection.
+			next.ServeHTTP(w, r)
 		})
 	}
 }
