@@ -41,6 +41,8 @@ func (h *InboxHandler) Mount(r chi.Router) {
 	r.Get("/convs/{id}", h.GetConversation)
 	r.Get("/convs/{id}/messages", h.GetMessages)
 	r.Post("/convs/{id}/messages", h.PostMessage)
+	r.Post("/convs/{id}/resolve", h.ResolveConversation)
+	r.Get("/convs/{id}/template-picker", h.TemplatePicker)
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────
@@ -63,6 +65,11 @@ func (h *InboxHandler) ListConversations(w http.ResponseWriter, r *http.Request)
 	case "unassigned":
 		empty := ""
 		filter.AssignedTo = &empty
+	case "me":
+		if agent := mw.AgentFromCtx(r.Context()); agent != nil {
+			id := agent.ID
+			filter.AssignedTo = &id
+		}
 	}
 
 	convs, err := db.ListConversations(r.Context(), h.pool, filter)
@@ -175,41 +182,83 @@ func (h *InboxHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enforce 24h window: only template sends are allowed outside the window.
-	if req.Type == "text" && !whatsapp.IsWindowOpen(conv.LastInboundAt) {
-		http.Error(w,
-			`{"error":"24h window closed — use a template message"}`,
-			http.StatusUnprocessableEntity,
-		)
-		return
+	// Attribute the send to the current agent, and enforce their monthly cap.
+	var sentBy *string
+	if agent := mw.AgentFromCtx(r.Context()); agent != nil {
+		id := agent.ID
+		sentBy = &id
+		if lim, _ := db.GetAgentLimits(r.Context(), h.pool, id); lim != nil && lim.MonthlyMsgCap > 0 {
+			used, _ := db.AgentMessagesThisMonth(r.Context(), h.pool, id)
+			if used >= int64(lim.MonthlyMsgCap) {
+				http.Error(w, `{"error":"Monthly message limit reached — ask your admin to raise it."}`, http.StatusUnprocessableEntity)
+				return
+			}
+		}
 	}
 
-	category := "service"
-	msg := &db.Message{
-		ConversationID: convID,
-		Direction:      "outbound",
-		MessageType:    "text",
-		Content:        map[string]any{"body": req.Body},
-		Status:         "pending",
-		Category:       &category,
-		// TODO: set SentBy from JWT session (Phase 6)
-	}
-	if err := db.InsertMessage(r.Context(), h.pool, msg); err != nil {
-		log.Printf("insert outbound message: %v", err)
-		http.Error(w, "db error", http.StatusInternalServerError)
-		return
-	}
-	_ = db.TouchLastMessage(r.Context(), h.pool, convID, msg.CreatedAt)
+	// Build the outbound message + Meta send for the chosen type.
+	var (
+		msg        *db.Message
+		waID       string
+		sendErr    error
+		templateNm string
+	)
 
-	// Attempt Meta send
-	var waID string
-	var sendErr error
-	switch req.Type {
-	case "text":
+	if req.Type == "template" {
+		tmpl, terr := db.GetTemplate(r.Context(), h.pool, req.TemplateID)
+		if terr != nil {
+			http.Error(w, `{"error":"template not found"}`, http.StatusNotFound)
+			return
+		}
+		templateNm = tmpl.Name
+		params := templateBodyParams(tmpl)
+		preview := substituteVars(templateBodyText(tmpl), params)
+		msg = &db.Message{
+			ConversationID: convID,
+			Direction:      "outbound",
+			MessageType:    "template",
+			Content:        map[string]any{"body": preview, "template": tmpl.Name},
+			Status:         "pending",
+			Category:       &tmpl.Category,
+			TemplateID:     &tmpl.ID,
+			SentBy:         sentBy,
+		}
+		if err := db.InsertMessage(r.Context(), h.pool, msg); err != nil {
+			log.Printf("insert outbound template: %v", err)
+			http.Error(w, "db error", http.StatusInternalServerError)
+			return
+		}
+		_ = db.TouchLastMessage(r.Context(), h.pool, convID, msg.CreatedAt)
+		waID, sendErr = h.waClient.SendTemplate(r.Context(), contact.WAPhone, tmpl.Name, tmpl.Language, inboxTemplateComponents(params))
+	} else {
+		// Free-form text: only allowed inside the 24h window.
+		if !whatsapp.IsWindowOpen(conv.LastInboundAt) {
+			http.Error(w, `{"error":"24h window closed — send an approved template instead"}`, http.StatusUnprocessableEntity)
+			return
+		}
+		if strings.TrimSpace(req.Body) == "" {
+			http.Error(w, `{"error":"empty message"}`, http.StatusUnprocessableEntity)
+			return
+		}
+		category := "service"
+		msg = &db.Message{
+			ConversationID: convID,
+			Direction:      "outbound",
+			MessageType:    "text",
+			Content:        map[string]any{"body": req.Body},
+			Status:         "pending",
+			Category:       &category,
+			SentBy:         sentBy,
+		}
+		if err := db.InsertMessage(r.Context(), h.pool, msg); err != nil {
+			log.Printf("insert outbound message: %v", err)
+			http.Error(w, "db error", http.StatusInternalServerError)
+			return
+		}
+		_ = db.TouchLastMessage(r.Context(), h.pool, convID, msg.CreatedAt)
 		waID, sendErr = h.waClient.SendText(r.Context(), contact.WAPhone, req.Body)
-	default:
-		sendErr = fmt.Errorf("unsupported message type %q (template sends coming in Phase 3)", req.Type)
 	}
+	_ = templateNm
 
 	if sendErr != nil {
 		errMsg := sendErr.Error()
@@ -239,6 +288,142 @@ func (h *InboxHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ── Resolve / close conversation ─────────────────────────────────────────
+
+func (h *InboxHandler) ResolveConversation(w http.ResponseWriter, r *http.Request) {
+	convID := chi.URLParam(r, "id")
+	if err := db.SetStatus(r.Context(), h.pool, convID, "closed"); err != nil {
+		log.Printf("resolve conversation %s: %v", convID, err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Replace the thread with an empty "resolved" state; the button also
+	// reloads the conversation list (client-side) so it drops off the Open tab.
+	fmt.Fprint(w, `<div class="th-wrap" id="thread"><div class="th-empty"><p>&#10003; Conversation resolved</p></div></div>`)
+}
+
+// ── Template picker (for sending outside the 24h window) ──────────────────
+
+func (h *InboxHandler) TemplatePicker(w http.ResponseWriter, r *http.Request) {
+	convID := chi.URLParam(r, "id")
+	all, err := db.ListTemplates(r.Context(), h.pool)
+	if err != nil {
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<div class="tpick-overlay" onclick="if(event.target===this)this.remove()">`+
+		`<div class="tpick-modal"><div class="tpick-hd"><strong>Send a template</strong>`+
+		`<button class="tpick-close" onclick="this.closest('.tpick-overlay').remove()">&times;</button></div>`+
+		`<div class="tpick-sub">Outside the 24-hour window, only approved templates can be sent.</div>`+
+		`<div class="tpick-list">`)
+	count := 0
+	for _, t := range all {
+		if t.Status != "approved" || templateHasMediaHeader(&t) {
+			continue // only approved, text-only templates are sendable from here
+		}
+		count++
+		preview := substituteVars(templateBodyText(&t), templateBodyParams(&t))
+		if len(preview) > 120 {
+			preview = preview[:120] + "…"
+		}
+		fmt.Fprintf(w,
+			`<button class="tpick-item" type="button" onclick="sendTemplate('%s','%s');this.closest('.tpick-overlay').remove()">`+
+				`<div class="tpick-name">%s</div><div class="tpick-body">%s</div></button>`,
+			convID, t.ID, htmlEscape(t.Name), htmlEscape(preview))
+	}
+	if count == 0 {
+		fmt.Fprint(w, `<div class="tpick-empty">No approved text templates available. Create &amp; get one approved under Templates.</div>`)
+	}
+	fmt.Fprint(w, `</div></div></div>`)
+}
+
+// ── Template helpers ──────────────────────────────────────────────────────
+
+// templateBodyText returns the raw BODY text (with {{N}} placeholders).
+func templateBodyText(t *db.Template) string {
+	for _, c := range t.Components {
+		if strings.EqualFold(toStr(c["type"]), "BODY") {
+			return toStr(c["text"])
+		}
+	}
+	return ""
+}
+
+// templateBodyParams returns the stored example values for the BODY variables,
+// in order — used as the parameters when sending the template.
+func templateBodyParams(t *db.Template) []string {
+	for _, c := range t.Components {
+		if !strings.EqualFold(toStr(c["type"]), "BODY") {
+			continue
+		}
+		ex, ok := c["example"].(map[string]any)
+		if !ok {
+			return nil
+		}
+		bt, ok := ex["body_text"].([]any)
+		if !ok || len(bt) == 0 {
+			return nil
+		}
+		row, ok := bt[0].([]any)
+		if !ok {
+			return nil
+		}
+		var out []string
+		for _, v := range row {
+			out = append(out, toStr(v))
+		}
+		return out
+	}
+	return nil
+}
+
+// templateHasMediaHeader reports whether the template uses an image/video/doc
+// header (those need a media parameter we don't collect in the inbox yet).
+func templateHasMediaHeader(t *db.Template) bool {
+	for _, c := range t.Components {
+		if strings.EqualFold(toStr(c["type"]), "HEADER") {
+			switch strings.ToUpper(toStr(c["format"])) {
+			case "IMAGE", "VIDEO", "DOCUMENT":
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// inboxTemplateComponents builds the body-parameter components for SendTemplate.
+func inboxTemplateComponents(params []string) []whatsapp.TemplateComponent {
+	if len(params) == 0 {
+		return nil
+	}
+	ps := make([]whatsapp.TemplateParameter, len(params))
+	for i, p := range params {
+		ps[i] = whatsapp.TemplateParameter{Type: "text", Text: p}
+	}
+	return []whatsapp.TemplateComponent{{Type: "body", Parameters: ps}}
+}
+
+// substituteVars replaces {{1}},{{2}}… in text with the given params (for display).
+func substituteVars(text string, params []string) string {
+	for i, p := range params {
+		text = strings.ReplaceAll(text, fmt.Sprintf("{{%d}}", i+1), p)
+	}
+	return text
+}
+
+func toStr(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+func htmlEscape(s string) string {
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
+}
+
 // ── Inbound event handler (called from webhook handler) ──────────────────
 
 // HandleInbound processes a genuinely new inbound WhatsApp message.
@@ -265,6 +450,33 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 	if msg.Text != nil {
 		content["body"] = msg.Text.Body
 	}
+	// Preserve inbound media metadata so the inbox shows the caption and the
+	// downloaded file keeps its original name / content-type. Without this the
+	// caption text and document filename were silently dropped.
+	var mediaMeta *whatsapp.MediaContent
+	switch {
+	case msg.Image != nil:
+		mediaMeta = msg.Image
+	case msg.Video != nil:
+		mediaMeta = msg.Video
+	case msg.Audio != nil:
+		mediaMeta = msg.Audio
+	case msg.Sticker != nil:
+		mediaMeta = msg.Sticker
+	case msg.Document != nil:
+		mediaMeta = &msg.Document.MediaContent
+		if msg.Document.Filename != "" {
+			content["filename"] = msg.Document.Filename
+		}
+	}
+	if mediaMeta != nil {
+		if mediaMeta.Caption != "" {
+			content["caption"] = mediaMeta.Caption
+		}
+		if mediaMeta.MimeType != "" {
+			content["mime_type"] = mediaMeta.MimeType
+		}
+	}
 
 	dbMsg := &db.Message{
 		ConversationID: conv.ID,
@@ -286,7 +498,7 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 	// STOP/UNSUBSCRIBE: opt-out write is SYNCHRONOUS. context.WithoutCancel ensures
 	// a Meta disconnect cannot abort the write; the 5s timeout prevents a stalled
 	// DB from hanging the webhook worker.
-	if msg.Text != nil && automation.IsStopKeyword(msg.Text.Body) {
+	if msg.Text != nil && automation.MatchesStopKeyword(msg.Text.Body, db.GetStopKeywords(ctx, h.pool)) {
 		phone := msg.From
 		if !strings.HasPrefix(phone, "+") {
 			phone = "+" + phone
@@ -302,8 +514,20 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 					log.Printf("STOP CONFIRMATION PANIC phone=%s: %v", phone, r)
 				}
 			}()
-			if _, err := h.waClient.SendText(context.Background(), phone, automation.StopConfirmMessage); err != nil {
-				log.Printf("stop confirm send %s: %v", phone, err)
+			// Retry the confirmation on transient send failures so the mandated
+			// opt-out acknowledgement isn't silently dropped on a single blip.
+			const attempts = 3
+			for attempt := 1; ; attempt++ {
+				_, err := h.waClient.SendText(context.Background(), phone, automation.StopConfirmMessage)
+				if err == nil {
+					return
+				}
+				if whatsapp.IsPermanent(err) || attempt >= attempts {
+					log.Printf("stop confirm send %s failed after %d attempt(s): %v", phone, attempt, err)
+					return
+				}
+				log.Printf("stop confirm send %s attempt %d/%d: %v — retrying", phone, attempt, attempts, err)
+				time.Sleep(time.Duration(attempt) * 2 * time.Second)
 			}
 		}()
 	} else {
@@ -322,13 +546,20 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 
 	// Download media immediately — Meta URLs expire in ~5 minutes.
 	if mediaID := msg.MediaID(); mediaID != "" {
+		origName, mime := "", ""
+		if msg.Document != nil {
+			origName = msg.Document.Filename
+		}
+		if mediaMeta != nil {
+			mime = mediaMeta.MimeType
+		}
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
 					log.Printf("downloadMedia panic: %v", r)
 				}
 			}()
-			h.downloadMedia(dbMsg.ID, mediaID)
+			h.downloadMedia(dbMsg.ID, mediaID, origName, mime)
 		}()
 	}
 
@@ -357,6 +588,13 @@ func (h *InboxHandler) HandleStatusUpdate(ctx context.Context, status whatsapp.M
 	if err := db.UpdateMessageStatus(ctx, h.pool, status.ID, status.Status, errCode, errMsg); err != nil {
 		log.Printf("update message status %s→%s: %v", status.ID, status.Status, err)
 	}
+	// If this message belongs to a campaign, roll the new delivery status (and
+	// any failure reason) up into the campaign's counters and recipient rows.
+	if cid, ok := db.GetMessageCampaignID(ctx, h.pool, status.ID); ok {
+		if err := db.SyncCampaignStats(ctx, h.pool, cid); err != nil {
+			log.Printf("sync campaign stats %s: %v", cid, err)
+		}
+	}
 	h.hub.BroadcastAll(ws.Event{
 		Type: ws.EventMessageStatus,
 		Data: map[string]string{"wa_message_id": status.ID, "status": status.Status},
@@ -379,24 +617,36 @@ func (h *InboxHandler) ensureContact(ctx context.Context, phone string) (string,
 	return id, err
 }
 
-func (h *InboxHandler) downloadMedia(messageID, mediaID string) {
+// downloadMedia fetches an inbound media file from Meta and stores it locally.
+// Meta media URLs expire in ~5 minutes and the resolution URL is single-shot, so
+// a transient failure means permanent data loss — we retry with backoff and
+// re-resolve the URL each attempt (the previous URL may have expired).
+func (h *InboxHandler) downloadMedia(messageID, mediaID, origName, mime string) {
 	ctx := context.Background()
-	url, _, err := h.waClient.GetMediaURL(ctx, mediaID)
-	if err != nil {
-		log.Printf("get media url %s: %v", mediaID, err)
-		return
-	}
-	data, err := h.waClient.DownloadMedia(ctx, url)
-	if err != nil {
-		log.Printf("download media %s: %v", mediaID, err)
-		return
+	const attempts = 3
+	var data []byte
+	for attempt := 1; ; attempt++ {
+		url, _, err := h.waClient.GetMediaURL(ctx, mediaID)
+		if err == nil {
+			data, err = h.waClient.DownloadMedia(ctx, url)
+		}
+		if err == nil {
+			break
+		}
+		if attempt >= attempts {
+			log.Printf("MEDIA DOWNLOAD FAILED permanently mediaID=%s msg=%s after %d attempts: %v",
+				mediaID, messageID, attempts, err)
+			return
+		}
+		log.Printf("download media %s attempt %d/%d: %v — retrying", mediaID, attempt, attempts, err)
+		time.Sleep(time.Duration(attempt) * 2 * time.Second)
 	}
 	dir := filepath.Join("media", mediaID[:2])
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		log.Printf("mkdir %s: %v", dir, err)
 		return
 	}
-	path := filepath.Join(dir, mediaID)
+	path := filepath.Join(dir, mediaID+mediaExt(origName, mime))
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		log.Printf("write media %s: %v", path, err)
 		return
@@ -404,6 +654,39 @@ func (h *InboxHandler) downloadMedia(messageID, mediaID string) {
 	if err := db.SetMediaPath(ctx, h.pool, messageID, path); err != nil {
 		log.Printf("set media path: %v", err)
 	}
+}
+
+// mediaExt picks a file extension from the original document name, falling back
+// to the MIME type, so stored media keeps a sensible extension for serving.
+func mediaExt(origName, mime string) string {
+	if origName != "" {
+		if e := filepath.Ext(origName); e != "" {
+			return e
+		}
+	}
+	switch {
+	case strings.Contains(mime, "jpeg"), strings.Contains(mime, "jpg"):
+		return ".jpg"
+	case strings.Contains(mime, "png"):
+		return ".png"
+	case strings.Contains(mime, "gif"):
+		return ".gif"
+	case strings.Contains(mime, "webp"):
+		return ".webp"
+	case strings.Contains(mime, "mp4"):
+		return ".mp4"
+	case strings.Contains(mime, "3gpp"):
+		return ".3gp"
+	case strings.Contains(mime, "ogg"):
+		return ".ogg"
+	case strings.Contains(mime, "mpeg"):
+		return ".mp3"
+	case strings.Contains(mime, "amr"):
+		return ".amr"
+	case strings.Contains(mime, "pdf"):
+		return ".pdf"
+	}
+	return ""
 }
 
 func strPtr(s string) *string { return &s }

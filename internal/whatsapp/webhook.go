@@ -40,8 +40,10 @@ type ChangeValue struct {
 	MessageTemplateLanguage string `json:"message_template_language"`
 	Reason                  string `json:"reason"`
 	// business_capability_update fields (legacy + v24+ rename)
-	MaxDailyConversationPerPhone    int64 `json:"max_daily_conversation_per_phone"`
+	MaxDailyConversationPerPhone     int64 `json:"max_daily_conversation_per_phone"`
 	MaxDailyConversationsPerBusiness int64 `json:"max_daily_conversations_per_business"`
+	// phone_number_quality_update fields
+	CurrentLimit string `json:"current_limit"` // e.g. TIER_1K
 }
 
 // TemplateStatusUpdate carries a Meta template approval/rejection event.
@@ -122,6 +124,11 @@ type MetaErrorObj struct {
 
 // VerifySignature validates the X-Hub-Signature-256 header sent by Meta.
 func VerifySignature(appSecret, body []byte, signatureHeader string) bool {
+	// Fail closed on a missing app secret: never accept a webhook when we have no
+	// key to verify it against (an empty-key HMAC would validate forged payloads).
+	if len(appSecret) == 0 {
+		return false
+	}
 	if !strings.HasPrefix(signatureHeader, "sha256=") {
 		return false
 	}
@@ -190,6 +197,12 @@ type ProcessResult struct {
 	// Non-nil means the caller should persist this as the new daily tier cap
 	// (already pre-multiplied to 90% of the tier value).
 	NewDailyCap *int64
+	// PhoneQualityEvent is set when Meta sends a phone_number_quality_update
+	// (e.g. FLAGGED / UNFLAGGED / DOWNGRADE / UPGRADE). Empty if none.
+	PhoneQualityEvent string
+	// PhoneCurrentLimit is the messaging tier reported alongside a quality
+	// update (e.g. TIER_1K). Empty if none.
+	PhoneCurrentLimit string
 }
 
 // ── Processor ─────────────────────────────────────────────────────────────
@@ -266,6 +279,12 @@ func (p *Processor) ProcessRaw(ctx context.Context, payload []byte) (*ProcessRes
 					cap := int64(float64(tier) * 0.9)
 					result.NewDailyCap = &cap
 				}
+			case "phone_number_quality_update":
+				// Meta pushes a quality state change (FLAGGED/UNFLAGGED/DOWNGRADE/
+				// UPGRADE) and the current messaging tier. Surface both so ops can
+				// watch quality without polling the API.
+				result.PhoneQualityEvent = change.Value.Event
+				result.PhoneCurrentLimit = change.Value.CurrentLimit
 			default:
 				for _, msg := range change.Value.Messages {
 					if newIDSet[msg.ID] {

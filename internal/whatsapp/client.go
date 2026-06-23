@@ -103,12 +103,22 @@ type TemplateComponent struct {
 	Parameters []TemplateParameter `json:"parameters"`
 }
 
+// MediaRef is a media reference for a template header parameter. Meta requires
+// an object ({"id":"..."} for an uploaded media ID, or {"link":"..."} for a URL),
+// not a bare string.
+type MediaRef struct {
+	ID   string `json:"id,omitempty"`
+	Link string `json:"link,omitempty"`
+}
+
 // TemplateParameter is one variable substitution in a template.
 type TemplateParameter struct {
-	Type     string `json:"type"`               // text|currency|date_time|image|document|video
-	Text     string `json:"text,omitempty"`
-	ImageID  string `json:"image,omitempty"`    // when type=image: {"id": "..."}
-	Payload  string `json:"payload,omitempty"`  // for quick_reply button
+	Type     string    `json:"type"`               // text|currency|date_time|image|document|video
+	Text     string    `json:"text,omitempty"`
+	Image    *MediaRef `json:"image,omitempty"`    // when type=image
+	Video    *MediaRef `json:"video,omitempty"`    // when type=video
+	Document *MediaRef `json:"document,omitempty"` // when type=document
+	Payload  string    `json:"payload,omitempty"`  // for quick_reply button
 }
 
 // SendTemplate sends an approved WhatsApp template message.
@@ -367,6 +377,18 @@ func (c *Client) SubmitTemplate(ctx context.Context, req SubmitTemplateRequest) 
 	return out.ID, nil
 }
 
+// redact strips the access token from an error so it can be safely logged.
+// Go transport errors (*url.Error) embed the full request URL, which can carry
+// the token in a query string; this guards against leaking it into logs.
+func (c *Client) redact(err error) error {
+	if err == nil || c.accessToken == "" {
+		return err
+	}
+	s := strings.ReplaceAll(err.Error(), c.accessToken, "***")
+	s = strings.ReplaceAll(s, url.QueryEscape(c.accessToken), "***")
+	return errors.New(s)
+}
+
 // PhoneNumberInfo is the live phone-number health from the Meta API.
 type PhoneNumberInfo struct {
 	QualityRating string `json:"quality_rating"`       // GREEN | YELLOW | RED | UNKNOWN
@@ -377,15 +399,16 @@ type PhoneNumberInfo struct {
 // GetPhoneNumberInfo fetches the phone number's current quality rating and
 // messaging tier from Meta. Used to keep the dashboard quality widget live.
 func (c *Client) GetPhoneNumberInfo(ctx context.Context) (*PhoneNumberInfo, error) {
-	u := fmt.Sprintf("%s/%s?fields=quality_rating,messaging_limit_tier,display_phone_number&access_token=%s",
-		metaBaseURL, c.phoneNumberID, url.QueryEscape(c.accessToken))
+	u := fmt.Sprintf("%s/%s?fields=quality_rating,messaging_limit_tier,display_phone_number",
+		metaBaseURL, c.phoneNumberID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Authorization", "Bearer "+c.accessToken)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("get phone info: %w", err)
+		return nil, fmt.Errorf("get phone info: %w", c.redact(err))
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
@@ -411,15 +434,16 @@ type MetaTemplate struct {
 // ListTemplates fetches all templates and their current status from Meta. Used
 // to reconcile local status with Meta (a safety net for missed webhooks).
 func (c *Client) ListTemplates(ctx context.Context) ([]MetaTemplate, error) {
-	u := fmt.Sprintf("%s/%s/message_templates?fields=name,language,status,category,rejected_reason&limit=200&access_token=%s",
-		metaBaseURL, c.wabaID, url.QueryEscape(c.accessToken))
+	u := fmt.Sprintf("%s/%s/message_templates?fields=name,language,status,category,rejected_reason&limit=200",
+		metaBaseURL, c.wabaID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Authorization", "Bearer "+c.accessToken)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("list templates: %w", err)
+		return nil, fmt.Errorf("list templates: %w", c.redact(err))
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
@@ -443,15 +467,18 @@ func (c *Client) AppID(ctx context.Context) (string, error) {
 	if c.appID != "" {
 		return c.appID, nil
 	}
-	u := fmt.Sprintf("%s/debug_token?input_token=%s&access_token=%s",
-		metaBaseURL, url.QueryEscape(c.accessToken), url.QueryEscape(c.accessToken))
+	// debug_token requires the token under inspection as input_token (it is our
+	// own token here); the authenticating token goes in the Authorization header.
+	u := fmt.Sprintf("%s/debug_token?input_token=%s",
+		metaBaseURL, url.QueryEscape(c.accessToken))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return "", err
 	}
+	req.Header.Set("Authorization", "Bearer "+c.accessToken)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("debug_token: %w", err)
+		return "", fmt.Errorf("debug_token: %w", c.redact(err))
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
@@ -481,15 +508,16 @@ func (c *Client) UploadResumable(ctx context.Context, fileName, fileType string,
 	}
 
 	// 1. Start an upload session.
-	startURL := fmt.Sprintf("%s/%s/uploads?file_name=%s&file_length=%d&file_type=%s&access_token=%s",
-		metaBaseURL, appID, url.QueryEscape(fileName), len(data), url.QueryEscape(fileType), url.QueryEscape(c.accessToken))
+	startURL := fmt.Sprintf("%s/%s/uploads?file_name=%s&file_length=%d&file_type=%s",
+		metaBaseURL, appID, url.QueryEscape(fileName), len(data), url.QueryEscape(fileType))
 	startReq, err := http.NewRequestWithContext(ctx, http.MethodPost, startURL, nil)
 	if err != nil {
 		return "", err
 	}
+	startReq.Header.Set("Authorization", "OAuth "+c.accessToken)
 	startResp, err := c.http.Do(startReq)
 	if err != nil {
-		return "", fmt.Errorf("start upload session: %w", err)
+		return "", fmt.Errorf("start upload session: %w", c.redact(err))
 	}
 	defer startResp.Body.Close()
 	startRaw, _ := io.ReadAll(startResp.Body)
@@ -514,7 +542,7 @@ func (c *Client) UploadResumable(ctx context.Context, fileName, fileType string,
 	upReq.Header.Set("file_offset", "0")
 	upResp, err := c.http.Do(upReq)
 	if err != nil {
-		return "", fmt.Errorf("upload bytes: %w", err)
+		return "", fmt.Errorf("upload bytes: %w", c.redact(err))
 	}
 	defer upResp.Body.Close()
 	upRaw, _ := io.ReadAll(upResp.Body)
@@ -599,11 +627,13 @@ func (c *Client) parseError(body []byte) error {
 		Type:    errResp.Error.Type,
 		Message: msg,
 	}
-	// Surface known permanent errors as typed sentinels.
-	if me.Code == 131049 {
-		return fmt.Errorf("%w: %s", ErrNotOnWhatsApp, me.Message)
-	}
-	if me.Code == 130429 || me.Code == 131048 {
+	// Surface known transient rate-limit / throttle errors as a typed sentinel.
+	// 130429: rate limit hit. 131048: spam-rate limit. 80007: business rate limit.
+	// 131049 is Meta's "healthy-ecosystem" marketing throttle — it is permanent
+	// for THIS send (retrying won't deliver it) but it is NOT an invalid number,
+	// so it stays a plain *MetaAPIError (IsPermanent handles it by code) rather
+	// than being mislabeled ErrNotOnWhatsApp.
+	if me.Code == 130429 || me.Code == 131048 || me.Code == 80007 {
 		return fmt.Errorf("%w: code %d", ErrRateLimit, me.Code)
 	}
 	return me

@@ -387,6 +387,25 @@ func FreqCappedContactIDs(ctx context.Context, pool *pgxpool.Pool, contactIDs []
 	return result, rows.Err()
 }
 
+// MarketingSentWithin reports whether a single contact received a marketing
+// outbound message in the last freqCapHours hours. Used as a send-time re-check
+// in the worker: the audience-build frequency filter can go stale while jobs
+// sit queued across quiet-hours/cap snoozes.
+func MarketingSentWithin(ctx context.Context, pool *pgxpool.Pool, contactID string, freqCapHours int) (bool, error) {
+	var exists bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM messages m
+			JOIN conversations cv ON cv.id = m.conversation_id
+			WHERE m.direction = 'outbound'
+			  AND m.category  = 'marketing'
+			  AND m.created_at > NOW() - ($2 * INTERVAL '1 hour')
+			  AND cv.contact_id = $1::uuid
+		)
+	`, contactID, freqCapHours).Scan(&exists)
+	return exists, err
+}
+
 // ── Campaign report ───────────────────────────────────────────────────────────
 
 // GetCampaignReport fetches a campaign + click stats.
@@ -401,6 +420,96 @@ func GetCampaignReport(ctx context.Context, pool *pgxpool.Pool, id string) (*Cam
 		FROM click_tracking WHERE campaign_id = $1::uuid
 	`, id).Scan(&clicks)
 	return &CampaignReport{Campaign: *c, ClickCount: clicks}, nil
+}
+
+// ListDueScheduledCampaigns returns the IDs of campaigns whose scheduled time
+// has arrived and are still in 'scheduled' status — for the dispatcher to start.
+func ListDueScheduledCampaigns(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]string, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id::text FROM campaigns
+		WHERE status = 'scheduled'
+		  AND scheduled_at IS NOT NULL
+		  AND scheduled_at <= $1
+		ORDER BY scheduled_at ASC
+		LIMIT 50
+	`, now)
+	if err != nil {
+		return nil, fmt.Errorf("list due scheduled campaigns: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// SyncCampaignStats recomputes a campaign's delivery counters from the messages
+// table (the source of truth, updated by delivery-status webhooks) and writes
+// each recipient's delivery status + failure reason back to campaign_recipients,
+// so the report shows accurate numbers and per-contact failure reasons.
+func SyncCampaignStats(ctx context.Context, pool *pgxpool.Pool, campaignID string) error {
+	if _, err := pool.Exec(ctx, `
+		UPDATE campaigns SET
+		  sent_count      = sub.sent,
+		  delivered_count = sub.delivered,
+		  read_count      = sub.rd,
+		  failed_count    = sub.failed,
+		  cost_total_inr  = sub.cost
+		FROM (
+		  SELECT
+		    COUNT(*) FILTER (WHERE status IN ('sent','delivered','read')) AS sent,
+		    COUNT(*) FILTER (WHERE status IN ('delivered','read'))        AS delivered,
+		    COUNT(*) FILTER (WHERE status = 'read')                       AS rd,
+		    COUNT(*) FILTER (WHERE status = 'failed')                     AS failed,
+		    COALESCE(SUM(cost_inr) FILTER (WHERE status <> 'failed'), 0)  AS cost
+		  FROM messages
+		  WHERE campaign_id = $1::uuid AND direction = 'outbound'
+		) sub
+		WHERE id = $1::uuid
+	`, campaignID); err != nil {
+		return fmt.Errorf("sync campaign counters: %w", err)
+	}
+
+	// Propagate each outbound message's delivery status + failure reason to its
+	// recipient row (matched via conversation → contact). For failures, store
+	// "code message" so the report can categorise and explain it.
+	if _, err := pool.Exec(ctx, `
+		UPDATE campaign_recipients cr SET
+		  status      = m.status,
+		  skip_reason = CASE WHEN m.status = 'failed'
+		                  THEN NULLIF(TRIM(COALESCE(m.error_code,'') || ' ' || COALESCE(m.error_message,'')), '')
+		                  ELSE cr.skip_reason END
+		FROM messages m
+		JOIN conversations conv ON conv.id = m.conversation_id
+		WHERE m.campaign_id = $1::uuid
+		  AND m.direction = 'outbound'
+		  AND m.status IN ('delivered','read','failed')
+		  AND cr.campaign_id = $1::uuid
+		  AND cr.contact_id = conv.contact_id
+	`, campaignID); err != nil {
+		return fmt.Errorf("sync recipient statuses: %w", err)
+	}
+	return nil
+}
+
+// GetMessageCampaignID returns the campaign_id of an outbound message by its
+// wa_message_id, and false if the message has no campaign (e.g. a normal chat).
+func GetMessageCampaignID(ctx context.Context, pool *pgxpool.Pool, waMessageID string) (string, bool) {
+	var cid pgtype.Text
+	if err := pool.QueryRow(ctx,
+		`SELECT campaign_id::text FROM messages WHERE wa_message_id = $1`, waMessageID,
+	).Scan(&cid); err != nil {
+		return "", false
+	}
+	if !cid.Valid || cid.String == "" {
+		return "", false
+	}
+	return cid.String, true
 }
 
 // GetCampaignRecipients returns all recipients for a campaign report.
@@ -449,10 +558,12 @@ func CategorizeFail(reason string) string {
 	switch {
 	case strings.Contains(r, "opted") || strings.Contains(r, "stop") || strings.Contains(r, "opt_out"):
 		return "opted_out"
-	case strings.Contains(r, "131049") || strings.Contains(r, "invalid") ||
-		strings.Contains(r, "not registered") || strings.Contains(r, "deactivat") || strings.Contains(r, "ported"):
+	case strings.Contains(r, "131026") || strings.Contains(r, "invalid") ||
+		strings.Contains(r, "not registered") || strings.Contains(r, "undeliverable") ||
+		strings.Contains(r, "deactivat") || strings.Contains(r, "ported"):
 		return "invalid_number"
-	case strings.Contains(r, "131048") || strings.Contains(r, "limit") || strings.Contains(r, "cap"):
+	case strings.Contains(r, "131049") || strings.Contains(r, "131048") ||
+		strings.Contains(r, "limit") || strings.Contains(r, "cap") || strings.Contains(r, "ecosystem"):
 		return "limit_reached"
 	case strings.Contains(r, "blocked") || strings.Contains(r, "131031"):
 		return "blocked"

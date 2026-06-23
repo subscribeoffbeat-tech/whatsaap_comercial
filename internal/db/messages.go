@@ -87,13 +87,26 @@ func SetMessageWAID(ctx context.Context, pool *pgxpool.Pool, localID, waMessageI
 
 // UpdateMessageStatus applies a delivery/read/failed status from a webhook
 // status-update event. errCode and errMsg are set only on failure.
+// A failed message has its cost zeroed — Meta does not bill for messages that
+// fail to deliver, so the optimistic cost stamped at send time is reversed.
+//
+// Status writes are monotonic: WhatsApp does not guarantee webhook ordering, so
+// a late 'delivered' can arrive after 'read'. We only advance the status forward
+// (sent < delivered < read) and never downgrade; 'failed' is terminal and always
+// applies (it carries the error reason).
 func UpdateMessageStatus(ctx context.Context, pool *pgxpool.Pool, waMessageID, status string, errCode, errMsg *string) error {
 	_, err := pool.Exec(ctx, `
 		UPDATE messages
 		SET status        = $2,
 		    error_code    = $3,
-		    error_message = $4
+		    error_message = $4,
+		    cost_inr      = CASE WHEN $2 = 'failed' THEN 0 ELSE cost_inr END
 		WHERE wa_message_id = $1
+		  AND (
+		    $2 = 'failed'
+		    OR (CASE $2     WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3 ELSE 0 END)
+		     > (CASE status WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3 WHEN 'failed' THEN 4 ELSE 0 END)
+		  )
 	`, waMessageID, status, errCode, errMsg)
 	return err
 }

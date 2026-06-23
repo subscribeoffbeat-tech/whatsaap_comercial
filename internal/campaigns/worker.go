@@ -94,6 +94,29 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 		return river.JobSnooze(10 * time.Minute)
 	}
 
+	// Send-time compliance re-check. Consent and the frequency cap are filtered
+	// when the audience is built, but jobs can sit queued for a long time across
+	// quiet-hours and cap snoozes. A contact may reply STOP (opt out) or hit the
+	// 24h marketing cap in that window, so re-validate per contact just before
+	// sending — otherwise we'd send to someone who opted out after enqueue.
+	contact, cerr := db.GetContact(ctx, w.pool, args.ContactID)
+	if cerr != nil {
+		// Fail closed: don't send blind if we can't confirm consent.
+		log.Printf("campaign worker: consent re-check for %s: %v — deferring", args.ContactID, cerr)
+		return river.JobSnooze(5 * time.Minute)
+	}
+	if !contact.OptedIn || contact.IsBlocked {
+		w.failRecipient(ctx, args, "contact opted out / blocked before send")
+		return river.JobCancel(fmt.Errorf("contact %s opted out or blocked before send", args.ContactID))
+	}
+	if args.Category == "marketing" {
+		hours := db.FreqCapHours(ctx, w.pool)
+		if capped, err := db.MarketingSentWithin(ctx, w.pool, args.ContactID, hours); err == nil && capped {
+			w.failRecipient(ctx, args, fmt.Sprintf("frequency cap: already received a marketing message in the last %dh", hours))
+			return river.JobCancel(fmt.Errorf("frequency cap hit for %s before send", args.ContactID))
+		}
+	}
+
 	// Acquire a send token (rate limiting — blocks until a slot is available).
 	if err := w.tb.Wait(ctx); err != nil {
 		return err // context cancelled
@@ -179,6 +202,18 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 	}
 
 	return nil
+}
+
+// failRecipient marks a recipient failed with a reason, bumps the campaign
+// failed counter, broadcasts progress, and completes the campaign if this was
+// the last outstanding send.
+func (w *SendMessageWorker) failRecipient(ctx context.Context, args SendMessageArgs, reason string) {
+	_ = db.UpdateRecipientFailed(ctx, w.pool, args.RecipientRowID, reason)
+	done, _ := db.IncrCampaignFailed(ctx, w.pool, args.CampaignID)
+	w.broadcastProgress(args.CampaignID)
+	if done {
+		_ = db.UpdateCampaignStatus(ctx, w.pool, args.CampaignID, "completed")
+	}
 }
 
 func (w *SendMessageWorker) broadcastProgress(campaignID string) {

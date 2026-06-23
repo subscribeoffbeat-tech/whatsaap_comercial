@@ -17,6 +17,21 @@ type ConfigRates struct {
 	GSTRate   float64
 }
 
+// GetConfigString reads a string app_config value by key (JSON-decoded).
+func GetConfigString(ctx context.Context, pool *pgxpool.Pool, key string) (string, error) {
+	var raw json.RawMessage
+	if err := pool.QueryRow(ctx,
+		`SELECT value FROM app_config WHERE key = $1`, key,
+	).Scan(&raw); err != nil {
+		return "", err
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return "", fmt.Errorf("parse config %q as string: %w", key, err)
+	}
+	return s, nil
+}
+
 // GetConfigFloat reads a numeric app_config value by key.
 func GetConfigFloat(ctx context.Context, pool *pgxpool.Pool, key string) (float64, error) {
 	var raw json.RawMessage
@@ -67,6 +82,23 @@ func GetConfigBool(ctx context.Context, pool *pgxpool.Pool, key string) (bool, e
 	return b, nil
 }
 
+// GetStopKeywords returns the admin-configured opt-out keywords from app_config
+// (key "stop_keywords"), or nil if unset. These are merged with the mandatory
+// built-in keywords by the STOP matcher.
+func GetStopKeywords(ctx context.Context, pool *pgxpool.Pool) []string {
+	var raw json.RawMessage
+	if err := pool.QueryRow(ctx,
+		`SELECT value FROM app_config WHERE key = 'stop_keywords'`,
+	).Scan(&raw); err != nil {
+		return nil
+	}
+	var list []string
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return nil
+	}
+	return list
+}
+
 // SetConfig upserts a config value by key.
 func SetConfig(ctx context.Context, pool *pgxpool.Pool, key string, value any) error {
 	raw, err := json.Marshal(value)
@@ -109,13 +141,24 @@ func DailyCap(ctx context.Context, pool *pgxpool.Pool) int64 {
 	return 900 // fallback: 90% of tier-1000
 }
 
-// DailyMessagesSent counts outbound messages sent since midnight UTC today.
+// DailyMessagesSent counts outbound messages sent since midnight IST today.
+// The cap window is anchored to the IST business day (and Meta's local-day tier
+// reset for this single-tenant India deployment), not UTC midnight (05:30 IST).
 func DailyMessagesSent(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
 	var n int64
 	err := pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM messages
 		WHERE direction = 'outbound'
-		  AND created_at >= (CURRENT_DATE AT TIME ZONE 'UTC')
+		  AND created_at >= ((now() AT TIME ZONE 'Asia/Kolkata')::date) AT TIME ZONE 'Asia/Kolkata'
 	`).Scan(&n)
 	return n, err
+}
+
+// FreqCapHours returns the configured marketing frequency-cap window in hours
+// (config key freq_cap_hours), defaulting to 24.
+func FreqCapHours(ctx context.Context, pool *pgxpool.Pool) int {
+	if v, err := GetConfigInt(ctx, pool, "freq_cap_hours"); err == nil && v > 0 {
+		return int(v)
+	}
+	return 24
 }

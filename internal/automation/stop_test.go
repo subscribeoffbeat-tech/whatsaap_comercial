@@ -30,11 +30,20 @@ func TestIsStopKeyword(t *testing.T) {
 		{"  STOP  ", true},
 		{"\tcancel\n", true},
 
+		// trailing/leading punctuation tolerated (regulators expect these)
+		{"STOP.", true},
+		{"Stop!", true},
+		{"stop?", true},
+		{"unsubscribe.", true},
+		{"(STOP)", true},
+		{"opt out.", true},
+
 		// NOT a match — partial or different
 		{"hello", false},
 		{"stop please", false},   // not exact
 		{"please stop", false},
 		{"re: stop", false},
+		{"stop sending so much", false}, // contains but isn't the keyword
 		{"", false},
 		{"START", false},
 	}
