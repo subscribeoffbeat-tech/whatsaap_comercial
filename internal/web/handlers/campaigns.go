@@ -650,6 +650,13 @@ func parseInt64Slice(ss []string) []int64 {
 	return out
 }
 
+// parseLocalDateTime parses the wizard's datetime-local value as IST wall-clock
+// time (the whole app schedules in IST). Without an explicit location time.Parse
+// would treat it as UTC, storing a time 5h30m later than the user intended.
 func parseLocalDateTime(s string) (time.Time, error) {
-	return time.Parse("2006-01-02T15:04", s)
+	loc, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		loc = time.FixedZone("IST", 5*60*60+30*60)
+	}
+	return time.ParseInLocation("2006-01-02T15:04", s, loc)
 }
