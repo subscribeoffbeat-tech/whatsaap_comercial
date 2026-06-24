@@ -213,6 +213,22 @@ func IncrCampaignFailed(ctx context.Context, pool *pgxpool.Pool, id string) (boo
 	return done, err
 }
 
+// IncrCampaignSkipped atomically increments skipped_count and returns done flag.
+// Used for send-time compliance skips (contact opted out / hit the frequency cap
+// after the campaign was queued) so they don't inflate the failed count.
+func IncrCampaignSkipped(ctx context.Context, pool *pgxpool.Pool, id string) (bool, error) {
+	var done bool
+	err := pool.QueryRow(ctx, `
+		UPDATE campaigns SET
+		    skipped_count = skipped_count + 1,
+		    updated_at    = NOW()
+		WHERE id = $1::uuid
+		RETURNING total_recipients > 0
+		      AND (sent_count + failed_count + skipped_count) >= total_recipients
+	`, id).Scan(&done)
+	return done, err
+}
+
 // ── Recipients ────────────────────────────────────────────────────────────────
 
 // CreateRecipients bulk-inserts pending campaign_recipients for eligible contacts
@@ -267,6 +283,18 @@ func UpdateRecipientSent(ctx context.Context, pool *pgxpool.Pool, id int64, mess
 		SET status = 'sent', message_id = $2::uuid, sent_at = NOW()
 		WHERE id = $1
 	`, id, messageID)
+	return err
+}
+
+// UpdateRecipientSkipped marks a recipient as skipped with a reason string.
+// Used for send-time compliance skips (opt-out / frequency cap after enqueue),
+// distinct from a genuine send failure.
+func UpdateRecipientSkipped(ctx context.Context, pool *pgxpool.Pool, id int64, reason string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE campaign_recipients
+		SET status = 'skipped', skip_reason = $2
+		WHERE id = $1
+	`, id, reason)
 	return err
 }
 

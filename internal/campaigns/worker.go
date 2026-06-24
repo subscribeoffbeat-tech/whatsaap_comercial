@@ -106,13 +106,13 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 		return river.JobSnooze(5 * time.Minute)
 	}
 	if !contact.OptedIn || contact.IsBlocked {
-		w.failRecipient(ctx, args, "contact opted out / blocked before send")
+		w.skipRecipient(ctx, args, "contact opted out / blocked before send")
 		return river.JobCancel(fmt.Errorf("contact %s opted out or blocked before send", args.ContactID))
 	}
 	if args.Category == "marketing" {
 		hours := db.FreqCapHours(ctx, w.pool)
 		if capped, err := db.MarketingSentWithin(ctx, w.pool, args.ContactID, hours); err == nil && capped {
-			w.failRecipient(ctx, args, fmt.Sprintf("frequency cap: already received a marketing message in the last %dh", hours))
+			w.skipRecipient(ctx, args, fmt.Sprintf("frequency cap: already received a marketing message in the last %dh", hours))
 			return river.JobCancel(fmt.Errorf("frequency cap hit for %s before send", args.ContactID))
 		}
 	}
@@ -210,6 +210,19 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 func (w *SendMessageWorker) failRecipient(ctx context.Context, args SendMessageArgs, reason string) {
 	_ = db.UpdateRecipientFailed(ctx, w.pool, args.RecipientRowID, reason)
 	done, _ := db.IncrCampaignFailed(ctx, w.pool, args.CampaignID)
+	w.broadcastProgress(args.CampaignID)
+	if done {
+		_ = db.UpdateCampaignStatus(ctx, w.pool, args.CampaignID, "completed")
+	}
+}
+
+// skipRecipient marks a recipient skipped with a reason (a deliberate compliance
+// exclusion such as a post-enqueue opt-out or frequency cap — not a delivery
+// failure), bumps the campaign skipped counter, broadcasts progress, and
+// completes the campaign if this was the last outstanding send.
+func (w *SendMessageWorker) skipRecipient(ctx context.Context, args SendMessageArgs, reason string) {
+	_ = db.UpdateRecipientSkipped(ctx, w.pool, args.RecipientRowID, reason)
+	done, _ := db.IncrCampaignSkipped(ctx, w.pool, args.CampaignID)
 	w.broadcastProgress(args.CampaignID)
 	if done {
 		_ = db.UpdateCampaignStatus(ctx, w.pool, args.CampaignID, "completed")

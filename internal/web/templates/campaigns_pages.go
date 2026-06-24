@@ -362,8 +362,7 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport, failed 
 <div class="rpt-sub">%s &nbsp;<code class="rpt-tmpl-slug">%s</code></div>
 </div>
 </div>
-<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export">
-<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export">` + ExportIconSVG + `
 Export
 </a>
 </div>`,
@@ -387,6 +386,16 @@ Export
 			readPct = fmt.Sprintf("%d%% read rate", report.ReadCount*100/report.SentCount)
 		}
 
+		// Skipped contacts (blocked before send, e.g. frequency cap) are shown as
+		// a card only when present, so a campaign where nothing reached anyone is
+		// obviously flagged rather than looking like a clean success.
+		skipCard := ""
+		if report.SkippedCount > 0 {
+			skipCard = fmt.Sprintf(
+				`<div class="rpt-stat-card rpt-stat-card--fail"><div class="rpt-stat-label">SKIPPED</div><div class="rpt-stat-val rpt-stat-val--fail">%s</div><div class="rpt-stat-sub">blocked before send</div></div>`,
+				fmtNum(report.SkippedCount))
+		}
+
 		_, err = fmt.Fprintf(w, `
 <div class="rpt-stat-row">
 <div class="rpt-stat-card"><div class="rpt-stat-label">TARGETED</div><div class="rpt-stat-val">%s</div><div class="rpt-stat-sub">total recipients</div></div>
@@ -394,12 +403,14 @@ Export
 <div class="rpt-stat-card"><div class="rpt-stat-label">DELIVERED</div><div class="rpt-stat-val">%s</div><div class="rpt-stat-sub">%s</div></div>
 <div class="rpt-stat-card rpt-stat-card--read"><div class="rpt-stat-label">READ</div><div class="rpt-stat-val rpt-stat-val--read">%s</div><div class="rpt-stat-sub">%s</div></div>
 <div class="rpt-stat-card rpt-stat-card--fail"><div class="rpt-stat-label">FAILED</div><div class="rpt-stat-val rpt-stat-val--fail">%s</div><div class="rpt-stat-sub">not delivered</div></div>
+%s
 </div>`,
 			fmtNum(report.TotalRecipients),
 			fmtNum(report.SentCount),
 			fmtNum(report.DeliveredCount), dlvPct,
 			fmtNum(report.ReadCount), readPct,
 			fmtNum(report.FailedCount),
+			skipCard,
 		)
 		if err != nil {
 			return err
@@ -618,8 +629,7 @@ Export
 <div class="rpt-card rpt-failed-section" x-data="{cat:'all'}">
 <div class="rpt-failed-hd">
 <div><span class="rpt-card-title">Failed &amp; undelivered contacts</span> <span class="rpt-failed-total">%d total</span></div>
-<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export?type=failed">
-<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export?type=failed">` + ExportIconSVG + `
 Export list</a>
 </div>`, len(failed), report.ID)
 			if err != nil {
@@ -749,7 +759,32 @@ func contactInitials(name string) string {
 
 
 // humanizeFailReason converts a raw skip_reason to a readable message.
+// Recognised Meta delivery error codes get a precise explanation.
 func humanizeFailReason(reason, category string) string {
+	r := strings.ToLower(reason)
+	switch {
+	case strings.Contains(r, "frequency cap") || strings.Contains(r, "last 24h"):
+		return "Skipped — already received a marketing message in the last 24h (frequency cap)"
+	case strings.Contains(r, "us (+1)") || strings.Contains(r, "+1) number"):
+		return "Skipped — US (+1) number, excluded from marketing"
+	case strings.Contains(r, "opted out"):
+		// Send-time skip: the contact opted out (STOP) or was blocked after the
+		// campaign was queued. Checked before the generic "blocked" case below,
+		// which refers to the user blocking the business number on WhatsApp.
+		return "Skipped — contact opted out (or was blocked) before send"
+	case strings.Contains(r, "131049"):
+		return "Blocked by Meta's per-user marketing limit (healthy-ecosystem cap) — try a smaller send or space out marketing messages"
+	case strings.Contains(r, "131026"):
+		return "Undeliverable — recipient can't receive this message (not on WhatsApp, or can't receive this template type)"
+	case strings.Contains(r, "131047"):
+		return "Re-engagement required — outside the 24-hour window with no template"
+	case strings.Contains(r, "131048"):
+		return "Spam-rate limit hit for this number"
+	case strings.Contains(r, "131031") || strings.Contains(r, "blocked"):
+		return "User has blocked the business number"
+	case strings.Contains(r, "470") || strings.Contains(r, "re-engagement"):
+		return "Message failed — outside the allowed messaging window"
+	}
 	switch category {
 	case "opted_out":
 		return "Contact opted out before send"
@@ -758,7 +793,7 @@ func humanizeFailReason(reason, category string) string {
 	case "blocked":
 		return "User has blocked the business number"
 	case "invalid_number":
-		if strings.Contains(strings.ToLower(reason), "deactivat") || strings.Contains(strings.ToLower(reason), "ported") {
+		if strings.Contains(r, "deactivat") || strings.Contains(r, "ported") {
 			return "Number deactivated or ported"
 		}
 		return "Number not registered on WhatsApp"
