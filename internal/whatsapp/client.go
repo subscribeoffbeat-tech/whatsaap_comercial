@@ -60,6 +60,24 @@ func IsPermanent(err error) bool {
 	return errors.Is(err, ErrNotOnWhatsApp)
 }
 
+// IsMediaError reports whether a send failed because of a bad/expired media
+// handle (e.g. a campaign header image whose Meta media ID went stale). The
+// caller can re-upload the stored file for a fresh ID and retry.
+func IsMediaError(err error) bool {
+	var me *MetaAPIError
+	if errors.As(err, &me) {
+		switch me.Code {
+		case 131052, // media download error
+			131053: // media upload error
+			return true
+		}
+		if strings.Contains(strings.ToLower(me.Message), "media") {
+			return true
+		}
+	}
+	return false
+}
+
 // Client wraps the Meta Cloud API v23.x.
 type Client struct {
 	phoneNumberID string
@@ -97,9 +115,9 @@ func (c *Client) SendText(ctx context.Context, to, body string) (waMessageID str
 
 // TemplateComponent is a component block for a template message.
 type TemplateComponent struct {
-	Type       string              `json:"type"`                 // header|body|button
-	SubType    string              `json:"sub_type,omitempty"`   // for button: url|quick_reply|call_to_action
-	Index      *int                `json:"index,omitempty"`      // for button
+	Type       string              `json:"type"`               // header|body|button
+	SubType    string              `json:"sub_type,omitempty"` // for button: url|quick_reply|call_to_action
+	Index      *int                `json:"index,omitempty"`    // for button
 	Parameters []TemplateParameter `json:"parameters"`
 }
 
@@ -113,7 +131,7 @@ type MediaRef struct {
 
 // TemplateParameter is one variable substitution in a template.
 type TemplateParameter struct {
-	Type     string    `json:"type"`               // text|currency|date_time|image|document|video
+	Type     string    `json:"type"` // text|currency|date_time|image|document|video
 	Text     string    `json:"text,omitempty"`
 	Image    *MediaRef `json:"image,omitempty"`    // when type=image
 	Video    *MediaRef `json:"video,omitempty"`    // when type=video
@@ -335,7 +353,7 @@ func (c *Client) UploadMedia(ctx context.Context, filePath, mimeType string) (me
 type SubmitTemplateRequest struct {
 	Name       string           `json:"name"`
 	Language   string           `json:"language"`
-	Category   string           `json:"category"`   // MARKETING|UTILITY|AUTHENTICATION (uppercase)
+	Category   string           `json:"category"` // MARKETING|UTILITY|AUTHENTICATION (uppercase)
 	Components []map[string]any `json:"components"`
 }
 
@@ -426,7 +444,7 @@ func (c *Client) GetPhoneNumberInfo(ctx context.Context) (*PhoneNumberInfo, erro
 type MetaTemplate struct {
 	Name           string `json:"name"`
 	Language       string `json:"language"`
-	Status         string `json:"status"`          // APPROVED|REJECTED|PENDING|PAUSED|...
+	Status         string `json:"status"` // APPROVED|REJECTED|PENDING|PAUSED|...
 	Category       string `json:"category"`
 	RejectedReason string `json:"rejected_reason"` // e.g. INVALID_FORMAT, NONE
 }

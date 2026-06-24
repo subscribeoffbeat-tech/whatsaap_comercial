@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"mime"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -25,7 +27,7 @@ const maxSendAttempts = 3
 // SendMessageArgs is the payload stored in the River job for each recipient.
 // Template variables are pre-resolved at enqueue time.
 type SendMessageArgs struct {
-	RecipientRowID int64    // campaign_recipients.id
+	RecipientRowID int64 // campaign_recipients.id
 	CampaignID     string
 	ContactID      string
 	WAPhone        string
@@ -63,15 +65,21 @@ func NewSendMessageWorker(pool *pgxpool.Pool, waClient *whatsapp.Client, hub *ws
 func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessageArgs]) error {
 	args := job.Args
 
+	// Load the campaign once: needed for control state AND for the header media
+	// (image/video/document templates). Fail closed if it can't be loaded — we
+	// must not send without knowing the campaign's current state/media.
+	camp, cerr := db.GetCampaign(ctx, w.pool, args.CampaignID)
+	if cerr != nil {
+		log.Printf("campaign worker: load campaign %s: %v — deferring", args.CampaignID, cerr)
+		return river.JobSnooze(2 * time.Minute)
+	}
 	// Respect campaign control state: a cancelled campaign drops its remaining
 	// queued sends; a paused one defers them until resumed.
-	if camp, cerr := db.GetCampaign(ctx, w.pool, args.CampaignID); cerr == nil {
-		switch camp.Status {
-		case "cancelled":
-			return river.JobCancel(fmt.Errorf("campaign cancelled"))
-		case "paused":
-			return river.JobSnooze(2 * time.Minute)
-		}
+	switch camp.Status {
+	case "cancelled":
+		return river.JobCancel(fmt.Errorf("campaign cancelled"))
+	case "paused":
+		return river.JobSnooze(2 * time.Minute)
 	}
 
 	// Honour quiet hours for marketing (business-initiated) sends — defer the
@@ -122,8 +130,9 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 		return err // context cancelled
 	}
 
-	// Build template body components from pre-resolved params.
-	components, compErr := buildComponents(args.Params)
+	// Build template components: header media (for image/video/document
+	// templates) + pre-resolved body params.
+	components, compErr := buildComponents(args.Params, camp.HeaderMediaType, camp.HeaderMediaID)
 	if compErr != nil {
 		_ = db.UpdateRecipientFailed(ctx, w.pool, args.RecipientRowID, compErr.Error())
 		done, _ := db.IncrCampaignFailed(ctx, w.pool, args.CampaignID)
@@ -138,6 +147,17 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 	waID, sendErr := w.waClient.SendTemplate(ctx, args.WAPhone, args.TemplateName, args.LangCode, components)
 
 	if sendErr != nil {
+		// Stale header-media ID: re-upload the stored file for a fresh ID and let
+		// River retry (the next attempt reloads the campaign with the new ID).
+		// Bounded by maxSendAttempts so a persistent media problem still fails.
+		if camp.HeaderMediaPath != "" && whatsapp.IsMediaError(sendErr) && job.Attempt < maxSendAttempts {
+			if newID, upErr := w.reuploadHeaderMedia(ctx, camp); upErr == nil {
+				log.Printf("campaign worker: re-uploaded stale header media for campaign %s → %s, retrying", camp.ID, newID)
+				return sendErr // transient: retry picks up the fresh media ID
+			} else {
+				log.Printf("campaign worker: header media re-upload failed for %s: %v", camp.ID, upErr)
+			}
+		}
 		isPermanent := whatsapp.IsPermanent(sendErr) || job.Attempt >= maxSendAttempts
 		if isPermanent {
 			_ = db.UpdateRecipientFailed(ctx, w.pool, args.RecipientRowID, sendErr.Error())
@@ -263,20 +283,76 @@ func renderTemplateBody(raw string, params []string) string {
 	return raw
 }
 
-func buildComponents(params []string) ([]whatsapp.TemplateComponent, error) {
-	if len(params) == 0 {
-		return nil, nil
-	}
-	ps := make([]whatsapp.TemplateParameter, len(params))
-	for i, p := range params {
-		if p == "" {
-			return nil, fmt.Errorf("variable {{%d}} resolved to empty string — set a fallback when building the campaign", i+1)
+func buildComponents(params []string, headerMediaType, headerMediaID string) ([]whatsapp.TemplateComponent, error) {
+	var comps []whatsapp.TemplateComponent
+
+	// Header media component for image/video/document templates. The media is
+	// referenced by its reusable Meta media ID (uploaded at campaign-build time).
+	if headerMediaType != "" && headerMediaID != "" {
+		p := whatsapp.TemplateParameter{Type: headerMediaType}
+		ref := &whatsapp.MediaRef{ID: headerMediaID}
+		switch headerMediaType {
+		case "image":
+			p.Image = ref
+		case "video":
+			p.Video = ref
+		case "document":
+			p.Document = ref
+		default:
+			return nil, fmt.Errorf("unsupported header media type %q", headerMediaType)
 		}
-		ps[i] = whatsapp.TemplateParameter{Type: "text", Text: p}
+		comps = append(comps, whatsapp.TemplateComponent{
+			Type:       "header",
+			Parameters: []whatsapp.TemplateParameter{p},
+		})
 	}
-	return []whatsapp.TemplateComponent{
-		{Type: "body", Parameters: ps},
-	}, nil
+
+	// Body text parameters.
+	if len(params) > 0 {
+		ps := make([]whatsapp.TemplateParameter, len(params))
+		for i, p := range params {
+			if p == "" {
+				return nil, fmt.Errorf("variable {{%d}} resolved to empty string — set a fallback when building the campaign", i+1)
+			}
+			ps[i] = whatsapp.TemplateParameter{Type: "text", Text: p}
+		}
+		comps = append(comps, whatsapp.TemplateComponent{Type: "body", Parameters: ps})
+	}
+
+	return comps, nil
+}
+
+// reuploadHeaderMedia re-uploads the campaign's stored header file to Meta for a
+// fresh media ID and persists it on the campaign.
+func (w *SendMessageWorker) reuploadHeaderMedia(ctx context.Context, camp *db.Campaign) (string, error) {
+	mime := mimeForMedia(camp.HeaderMediaPath, camp.HeaderMediaType)
+	newID, err := w.waClient.UploadMedia(ctx, camp.HeaderMediaPath, mime)
+	if err != nil {
+		return "", err
+	}
+	if err := db.SetCampaignHeaderMediaID(ctx, w.pool, camp.ID, newID); err != nil {
+		return "", err
+	}
+	return newID, nil
+}
+
+// mimeForMedia derives a MIME type from the stored file's extension, falling
+// back to a sensible default for the media type.
+func mimeForMedia(path, mediaType string) string {
+	if ext := strings.ToLower(filepath.Ext(path)); ext != "" {
+		if m := mime.TypeByExtension(ext); m != "" {
+			return m
+		}
+	}
+	switch mediaType {
+	case "image":
+		return "image/jpeg"
+	case "video":
+		return "video/mp4"
+	case "document":
+		return "application/pdf"
+	}
+	return "application/octet-stream"
 }
 
 // ── Token bucket ──────────────────────────────────────────────────────────────

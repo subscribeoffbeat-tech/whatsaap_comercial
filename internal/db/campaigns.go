@@ -19,8 +19,8 @@ type Campaign struct {
 	Name              string
 	TemplateID        string
 	TemplateName      string
-	TemplateLanguage  string // joined from templates
-	Category          string // joined from templates
+	TemplateLanguage  string            // joined from templates
+	Category          string            // joined from templates
 	TemplateVariables map[string]string // JSON: {"1": "name", "2": "custom_fields.order"}
 	Fallbacks         map[string]string // JSON: {"1": "there", "2": "N/A"}
 	SegmentTags       []int64
@@ -37,6 +37,10 @@ type Campaign struct {
 	SkippedCount      int
 	CostTotalINR      float64
 	CreatedAt         time.Time
+	// Header media (only for templates with an IMAGE/VIDEO/DOCUMENT header).
+	HeaderMediaPath string // local file path of the uploaded media
+	HeaderMediaID   string // reusable Meta media ID for sending
+	HeaderMediaType string // image | video | document
 }
 
 // CampaignRecipient mirrors the campaign_recipients table.
@@ -92,6 +96,27 @@ func CreateCampaign(ctx context.Context, pool *pgxpool.Pool, c *Campaign) error 
 	).Scan(&c.ID)
 }
 
+// SetCampaignHeaderMedia stores the uploaded header media's local path, Meta
+// media ID, and type on the campaign. Called after the media is stored on disk
+// and uploaded to Meta.
+func SetCampaignHeaderMedia(ctx context.Context, pool *pgxpool.Pool, id, path, mediaID, mediaType string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE campaigns
+		SET header_media_path = $2, header_media_id = $3, header_media_type = $4, updated_at = NOW()
+		WHERE id = $1::uuid
+	`, id, path, mediaID, mediaType)
+	return err
+}
+
+// SetCampaignHeaderMediaID updates only the Meta media ID (used when the worker
+// re-uploads from the stored file after the previous ID went stale).
+func SetCampaignHeaderMediaID(ctx context.Context, pool *pgxpool.Pool, id, mediaID string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE campaigns SET header_media_id = $2, updated_at = NOW() WHERE id = $1::uuid
+	`, id, mediaID)
+	return err
+}
+
 // GetCampaign fetches a campaign by UUID string.
 func GetCampaign(ctx context.Context, pool *pgxpool.Pool, id string) (*Campaign, error) {
 	return scanCampaign(pool.QueryRow(ctx, `
@@ -101,7 +126,8 @@ func GetCampaign(ctx context.Context, pool *pgxpool.Pool, id string) (*Campaign,
 		       c.scheduled_at, c.started_at, c.completed_at,
 		       c.total_recipients, c.sent_count, c.delivered_count,
 		       c.read_count, c.failed_count, c.skipped_count,
-		       c.cost_total_inr, c.created_at
+		       c.cost_total_inr, c.created_at,
+		       COALESCE(c.header_media_path,''), COALESCE(c.header_media_id,''), COALESCE(c.header_media_type,'')
 		FROM campaigns c
 		JOIN templates t ON t.id = c.template_id
 		WHERE c.id = $1::uuid
@@ -117,7 +143,8 @@ func ListCampaigns(ctx context.Context, pool *pgxpool.Pool) ([]Campaign, error) 
 		       c.scheduled_at, c.started_at, c.completed_at,
 		       c.total_recipients, c.sent_count, c.delivered_count,
 		       c.read_count, c.failed_count, c.skipped_count,
-		       c.cost_total_inr, c.created_at
+		       c.cost_total_inr, c.created_at,
+		       COALESCE(c.header_media_path,''), COALESCE(c.header_media_id,''), COALESCE(c.header_media_type,'')
 		FROM campaigns c
 		JOIN templates t ON t.id = c.template_id
 		ORDER BY c.created_at DESC
@@ -149,7 +176,8 @@ func ListRecentCampaigns(ctx context.Context, pool *pgxpool.Pool, n int) ([]Camp
 		       c.scheduled_at, c.started_at, c.completed_at,
 		       c.total_recipients, c.sent_count, c.delivered_count,
 		       c.read_count, c.failed_count, c.skipped_count,
-		       c.cost_total_inr, c.created_at
+		       c.cost_total_inr, c.created_at,
+		       COALESCE(c.header_media_path,''), COALESCE(c.header_media_id,''), COALESCE(c.header_media_type,'')
 		FROM campaigns c
 		JOIN templates t ON t.id = c.template_id
 		ORDER BY c.created_at DESC
@@ -704,6 +732,7 @@ func scanCampaign(row rowScanner) (*Campaign, error) {
 		&c.TotalRecipients, &c.SentCount, &c.DeliveredCount,
 		&c.ReadCount, &c.FailedCount, &c.SkippedCount,
 		&c.CostTotalINR, &c.CreatedAt,
+		&c.HeaderMediaPath, &c.HeaderMediaID, &c.HeaderMediaType,
 	)
 	if err != nil {
 		return nil, err

@@ -55,23 +55,25 @@ func ExtractVarNames(body string) []string {
 // WizardState carries campaign-creation state across wizard steps via a hidden
 // form field. Serialised as base64-encoded JSON.
 type WizardState struct {
-	Step           int
-	Name           string
-	Category       string // marketing | utility | authentication (from Basics step)
-	Notes          string // internal notes (from Basics step)
-	HasVars        bool   // template has {{N}} placeholders
-	TemplateID     string
-	VarMap         map[string]string
-	Fallbacks      map[string]string
-	UseAllContacts bool    // audience: all opted-in contacts (no tag filter)
-	SegmentTagIDs  []int64 // audience: selected tag IDs (union); nil = all
-	EligibleCount  int
-	SkipReport     campaigns.SkipReport
-	ScheduleType   string
-	ScheduledAt    *time.Time
-	EstCost        float64
-	DailyCap       int
-	DailySent      int
+	Step              int
+	Name              string
+	Category          string // marketing | utility | authentication (from Basics step)
+	Notes             string // internal notes (from Basics step)
+	HasVars           bool   // template has {{N}} placeholders
+	TemplateID        string
+	HasMediaHeader    bool   // template has an IMAGE/VIDEO/DOCUMENT header (needs upload)
+	MediaHeaderFormat string // image | video | document (when HasMediaHeader)
+	VarMap            map[string]string
+	Fallbacks         map[string]string
+	UseAllContacts    bool    // audience: all opted-in contacts (no tag filter)
+	SegmentTagIDs     []int64 // audience: selected tag IDs (union); nil = all
+	EligibleCount     int
+	SkipReport        campaigns.SkipReport
+	ScheduleType      string
+	ScheduledAt       *time.Time
+	EstCost           float64
+	DailyCap          int
+	DailySent         int
 }
 
 func encodeState(s WizardState) string {
@@ -362,7 +364,7 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport, failed 
 <div class="rpt-sub">%s &nbsp;<code class="rpt-tmpl-slug">%s</code></div>
 </div>
 </div>
-<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export">` + ExportIconSVG + `
+<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export">`+ExportIconSVG+`
 Export
 </a>
 </div>`,
@@ -629,7 +631,7 @@ Export
 <div class="rpt-card rpt-failed-section" x-data="{cat:'all'}">
 <div class="rpt-failed-hd">
 <div><span class="rpt-card-title">Failed &amp; undelivered contacts</span> <span class="rpt-failed-total">%d total</span></div>
-<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export?type=failed">` + ExportIconSVG + `
+<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export?type=failed">`+ExportIconSVG+`
 Export list</a>
 </div>`, len(failed), report.ID)
 			if err != nil {
@@ -757,7 +759,6 @@ func contactInitials(name string) string {
 	return strings.ToUpper(string(r0[0]))
 }
 
-
 // humanizeFailReason converts a raw skip_reason to a readable message.
 // Recognised Meta delivery error codes get a precise explanation.
 func humanizeFailReason(reason, category string) string {
@@ -864,15 +865,24 @@ func wizOpen(w io.Writer, agent *mw.AgentClaims, state WizardState, formAction, 
 		errBanner = `<div class="callout callout--warning" role="alert" style="margin-bottom:0">` + html.EscapeString(errMsg) + `</div>`
 	}
 
+	// Only the final review form (which posts to /campaigns → Create) carries the
+	// header-media file upload, so only it needs a multipart body. Earlier steps
+	// use ParseForm (urlencoded) and must NOT be multipart.
+	enctype := ""
+	if state.HasMediaHeader && formAction == "/campaigns" {
+		enctype = ` enctype="multipart/form-data"`
+	}
+
 	_, err := fmt.Fprintf(w, `
 <div class="wiz-fp-root">
 %s
-<form id="wiz-form" method="post" action="%s" class="wiz-fp-body" autocomplete="off">
+<form id="wiz-form" method="post" action="%s"%s class="wiz-fp-body" autocomplete="off">
 <input type="hidden" name="wizard_state" value="%s">
 <div class="wiz-fp-inner" id="wiz-inner">
 `,
 		sidebar,
 		html.EscapeString(formAction),
+		enctype,
 		html.EscapeString(encodeState(state)),
 	)
 	if err != nil {
@@ -1553,10 +1563,38 @@ function schedWiz() {
 
 // ── Wizard step 6: Review ─────────────────────────────────────────────────────
 
-func WizardReviewPage(agent *mw.AgentClaims, state WizardState, tmpl *db.Template) templ.Component {
+func WizardReviewPage(agent *mw.AgentClaims, state WizardState, tmpl *db.Template, errMsg string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		if err := wizOpen(w, agent, state, "/campaigns", ""); err != nil {
+		if err := wizOpen(w, agent, state, "/campaigns", errMsg); err != nil {
 			return err
+		}
+
+		// Header-media upload card (image/video/document templates only). The real
+		// media must be supplied at send time — the approved sample only got the
+		// template approved.
+		mediaUpload := ""
+		if state.HasMediaHeader {
+			accept := "image/*"
+			switch state.MediaHeaderFormat {
+			case "video":
+				accept = "video/*"
+			case "document":
+				accept = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,application/pdf"
+			}
+			mediaUpload = fmt.Sprintf(`
+<div class="card-static" style="display:flex;flex-direction:column;gap:8px;margin-top:16px;border:1px solid var(--accent,#2563eb)">
+  <label for="header_media" style="font-weight:600">Header %s <span style="color:var(--danger,#dc2626)">*</span></label>
+  <p style="font-size:13px;color:var(--text-secondary);margin:0">
+    This template has a %s header. Upload the %s to send with every message in this campaign.
+  </p>
+  <input type="file" id="header_media" name="header_media" accept="%s" required
+         style="font-size:13px;padding:8px;border:1px dashed var(--border);border-radius:var(--radius);background:var(--bg-surface)">
+</div>`,
+				html.EscapeString(state.MediaHeaderFormat),
+				html.EscapeString(state.MediaHeaderFormat),
+				html.EscapeString(state.MediaHeaderFormat),
+				accept,
+			)
 		}
 
 		schedInfo := "Send immediately"
@@ -1632,6 +1670,7 @@ func WizardReviewPage(agent *mw.AgentClaims, state WizardState, tmpl *db.Templat
   <div class="stt-info-row"><span class="stt-info-key">Scheduling</span><span class="stt-info-val">%s</span></div>
   <div class="stt-info-row" style="border-bottom:none"><span class="stt-info-key">Estimated cost</span><span class="stt-info-val">&#8377;%.2f</span></div>
 </div>
+%s
 </div>
 
 <div class="wiz-fp-aside">
@@ -1650,6 +1689,7 @@ func WizardReviewPage(agent *mw.AgentClaims, state WizardState, tmpl *db.Templat
 			state.EligibleCount,
 			html.EscapeString(schedInfo),
 			state.EstCost,
+			mediaUpload,
 			CalloutHTML("info", fmt.Sprintf("%.0f messages will be sent to opted-in contacts.", float64(state.EligibleCount))),
 			ModalShellRaw("confirm-launch", "confirm-dialog", "confirm-launch-title", confirmInner),
 		)

@@ -1,9 +1,17 @@
 package handlers
 
 import (
+	"bytes"
+	"context"
+	"encoding/csv"
+	"errors"
 	"fmt"
+	"io"
 	"log"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +26,7 @@ import (
 	mw "whatsapptool/internal/web/middleware"
 	"whatsapptool/internal/web/templates"
 	"whatsapptool/internal/web/ws"
+	"whatsapptool/internal/whatsapp"
 )
 
 // CampaignHandler handles all /campaigns routes.
@@ -25,10 +34,27 @@ type CampaignHandler struct {
 	pool        *pgxpool.Pool
 	riverClient *river.Client[pgx.Tx]
 	hub         *ws.Hub
+	waClient    *whatsapp.Client
 }
 
-func NewCampaignHandler(pool *pgxpool.Pool, rc *river.Client[pgx.Tx], hub *ws.Hub) *CampaignHandler {
-	return &CampaignHandler{pool: pool, riverClient: rc, hub: hub}
+func NewCampaignHandler(pool *pgxpool.Pool, rc *river.Client[pgx.Tx], hub *ws.Hub, wa *whatsapp.Client) *CampaignHandler {
+	return &CampaignHandler{pool: pool, riverClient: rc, hub: hub, waClient: wa}
+}
+
+// reviewErr re-renders the review step with an error message (used for
+// header-media validation failures), keeping the media-upload field visible.
+func (h *CampaignHandler) reviewErr(w http.ResponseWriter, r *http.Request, agent *mw.AgentClaims, state templates.WizardState, tmpl *db.Template, msg string) {
+	state.Step = 6
+	templates.WizardReviewPage(agent, state, tmpl, msg).Render(r.Context(), w)
+}
+
+// freqCapHours returns the admin-configured frequency-cap window (hours),
+// defaulting to 24 (the hard rule: 1 marketing message per contact per 24h).
+func (h *CampaignHandler) freqCapHours(ctx context.Context) int {
+	if v, err := db.GetConfigInt(ctx, h.pool, "freq_cap_hours"); err == nil && v > 0 {
+		return int(v)
+	}
+	return 24
 }
 
 func (h *CampaignHandler) Mount(r chi.Router) {
@@ -45,6 +71,7 @@ func (h *CampaignHandler) Mount(r chi.Router) {
 	r.Post("/{id}/cancel", h.Cancel)
 	r.Post("/{id}/pause", h.Pause)
 	r.Get("/{id}/recipients", h.RecipientsList)
+	r.Get("/{id}/export", h.Export)
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
@@ -137,6 +164,9 @@ func (h *CampaignHandler) WizardTemplate(w http.ResponseWriter, r *http.Request)
 	state.TemplateID = templateID
 	varNames := templates.ExtractVarNames(templates.TemplateBodyText(*tmpl))
 	state.HasVars = len(varNames) > 0
+	// Image/video/document templates need the real media uploaded before launch.
+	state.MediaHeaderFormat = tmpl.HeaderMediaFormat()
+	state.HasMediaHeader = state.MediaHeaderFormat != ""
 
 	if state.HasVars {
 		state.Step = 3
@@ -234,7 +264,7 @@ func (h *CampaignHandler) WizardAudience(w http.ResponseWriter, r *http.Request)
 		state.SegmentTagIDs = segTagIDs
 	}
 
-	eligible, report, err := campaigns.BuildAudienceAny(r.Context(), h.pool, state.SegmentTagIDs, state.Category, 24)
+	eligible, report, err := campaigns.BuildAudienceAny(r.Context(), h.pool, state.SegmentTagIDs, state.Category, h.freqCapHours(r.Context()))
 	if err != nil {
 		http.Error(w, "build audience: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -289,7 +319,7 @@ func (h *CampaignHandler) WizardSchedule(w http.ResponseWriter, r *http.Request)
 			templates.WizardSchedulePage(agent, state, "Invalid date format.").Render(r.Context(), w)
 			return
 		}
-		if campaigns.IsQuietHours(t) {
+		if campaigns.IsQuietHoursCfg(r.Context(), h.pool, t) {
 			templates.WizardSchedulePage(agent, state, "Quiet hours: 9 pm–9 am IST. Choose a time between 9 am and 9 pm IST.").Render(r.Context(), w)
 			return
 		}
@@ -306,13 +336,16 @@ func (h *CampaignHandler) WizardSchedule(w http.ResponseWriter, r *http.Request)
 	state.EstCost = campaigns.CalcTotalCost(tmpl.Category, state.EligibleCount, rates)
 	state.Step = 6
 
-	templates.WizardReviewPage(agent, state, tmpl).Render(r.Context(), w)
+	templates.WizardReviewPage(agent, state, tmpl, "").Render(r.Context(), w)
 }
 
 // ── Wizard step 6: Review / Create ───────────────────────────────────────────
 
 func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
+	// The schedule form is multipart when the template needs a header media
+	// upload, plain urlencoded otherwise. ParseMultipartForm populates r.Form
+	// either way; tolerate ErrNotMultipart so non-media campaigns still work.
+	if err := r.ParseMultipartForm(32 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
 		http.Error(w, "parse form", http.StatusBadRequest)
 		return
 	}
@@ -336,7 +369,7 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	eligible, skipReport, err := campaigns.BuildAudienceAny(ctx, h.pool, state.SegmentTagIDs, state.Category, 24)
+	eligible, skipReport, err := campaigns.BuildAudienceAny(ctx, h.pool, state.SegmentTagIDs, state.Category, h.freqCapHours(ctx))
 	if err != nil {
 		http.Error(w, "build audience: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -346,6 +379,57 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if !campaigns.LimitGuardCheck(sent, db.DailyCap(ctx, h.pool)) {
 		http.Error(w, "Daily send cap reached. Try again tomorrow.", http.StatusTooManyRequests)
 		return
+	}
+
+	// Header media: templates with an IMAGE/VIDEO/DOCUMENT header require the
+	// owner to upload the actual media now (the approved sample only gets the
+	// template approved — each send must carry the real media). Upload it to Meta
+	// up front so a bad file fails before we create an orphan campaign; the
+	// returned media ID is reused for every recipient.
+	mediaFormat := tmpl.HeaderMediaFormat()
+	var headerMediaID, headerMediaName string
+	var headerMediaBytes []byte
+	if mediaFormat != "" {
+		file, fh, ferr := r.FormFile("header_media")
+		if ferr != nil {
+			h.reviewErr(w, r, agent, state, tmpl, "Please upload the "+mediaFormat+" used in this template's header before launching.")
+			return
+		}
+		defer file.Close()
+
+		maxBytes := int64(5 << 20) // image: 5 MB
+		switch mediaFormat {
+		case "video":
+			maxBytes = 16 << 20 // 16 MB
+		case "document":
+			maxBytes = 100 << 20 // 100 MB
+		}
+		headerMediaBytes, err = io.ReadAll(io.LimitReader(file, maxBytes+1))
+		if err != nil {
+			h.reviewErr(w, r, agent, state, tmpl, "Could not read the uploaded file. Please try again.")
+			return
+		}
+		if len(headerMediaBytes) == 0 {
+			h.reviewErr(w, r, agent, state, tmpl, "The uploaded file is empty.")
+			return
+		}
+		if int64(len(headerMediaBytes)) > maxBytes {
+			h.reviewErr(w, r, agent, state, tmpl, fmt.Sprintf("File is too large for a %s header (max %d MB).", mediaFormat, maxBytes>>20))
+			return
+		}
+
+		headerMediaName = filepath.Base(fh.Filename)
+		mimeType := mime.TypeByExtension(strings.ToLower(filepath.Ext(headerMediaName)))
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
+		mid, uerr := h.waClient.UploadMediaStream(ctx, bytes.NewReader(headerMediaBytes), headerMediaName, mimeType)
+		if uerr != nil {
+			log.Printf("campaign header media upload to Meta failed: %v", uerr)
+			h.reviewErr(w, r, agent, state, tmpl, "Uploading the media to WhatsApp failed: "+uerr.Error())
+			return
+		}
+		headerMediaID = mid
 	}
 
 	status := "scheduled"
@@ -380,12 +464,48 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.CreateRecipients(ctx, h.pool, campaign.ID, eligibleIDs, nil); err != nil {
+	// Persist the header media: store the file on disk (so it can be re-uploaded
+	// if Meta's media ID later expires) and save the path + media ID + type on the
+	// campaign. The worker reads these at send time. Done before enqueuing so the
+	// media ID is present when the first job runs.
+	if mediaFormat != "" && headerMediaID != "" {
+		storedPath := ""
+		dir := filepath.Join("media", "campaigns", campaign.ID)
+		if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
+			log.Printf("campaign %s: mkdir header media dir: %v", campaign.ID, mkErr)
+		} else {
+			storedPath = filepath.Join(dir, headerMediaName)
+			if wErr := os.WriteFile(storedPath, headerMediaBytes, 0o644); wErr != nil {
+				log.Printf("campaign %s: store header media: %v", campaign.ID, wErr)
+				storedPath = "" // initial send still works via the media ID
+			}
+		}
+		if sErr := db.SetCampaignHeaderMedia(ctx, h.pool, campaign.ID, storedPath, headerMediaID, mediaFormat); sErr != nil {
+			log.Printf("campaign %s: save header media: %v", campaign.ID, sErr)
+		}
+	}
+
+	if err := db.CreateRecipients(ctx, h.pool, campaign.ID, eligibleIDs, skipReport.Skipped); err != nil {
 		http.Error(w, "create recipients: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if skipReport.Total > 0 {
+		if _, err := h.pool.Exec(ctx, `UPDATE campaigns SET skipped_count = $2 WHERE id = $1::uuid`,
+			campaign.ID, skipReport.Total); err != nil {
+			log.Printf("set skipped_count for campaign %s: %v", campaign.ID, err)
+		}
+	}
 
-	if status == "running" && h.riverClient != nil {
+	// If everyone was filtered out (e.g. all hit the 24h frequency cap), there's
+	// nothing to send — mark the campaign completed so it doesn't sit in
+	// "running" forever. The skipped recipients + reasons are in the report.
+	if status == "running" && len(eligible) == 0 {
+		if err := db.UpdateCampaignStatus(ctx, h.pool, campaign.ID, "completed"); err != nil {
+			log.Printf("complete empty campaign %s: %v", campaign.ID, err)
+		}
+	}
+
+	if status == "running" && len(eligible) > 0 && h.riverClient != nil {
 		pendingRecips, rErr := db.ListPendingRecipients(ctx, h.pool, campaign.ID)
 		if rErr != nil {
 			log.Printf("list pending for campaign %s: %v", campaign.ID, rErr)
@@ -411,6 +531,11 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *CampaignHandler) Report(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	// Recompute counters from the messages table so the report is fresh even if a
+	// delivery webhook was missed (best-effort).
+	if err := db.SyncCampaignStats(r.Context(), h.pool, id); err != nil {
+		log.Printf("report sync stats %s: %v", id, err)
+	}
 	report, err := db.GetCampaignReport(r.Context(), h.pool, id)
 	if err != nil {
 		http.Error(w, "load report: "+err.Error(), http.StatusInternalServerError)
@@ -451,6 +576,42 @@ func (h *CampaignHandler) Pause(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Campaign paused.", "", ""))
+}
+
+// Export streams the campaign's recipients as CSV. ?type=failed limits it to
+// failed/skipped recipients (used by the report's "export failed" button).
+func (h *CampaignHandler) Export(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	recipients, err := db.GetCampaignRecipients(r.Context(), h.pool, id, 100000)
+	if err != nil {
+		http.Error(w, "load recipients: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	onlyFailed := r.URL.Query().Get("type") == "failed"
+	filename := "campaign-recipients.csv"
+	if onlyFailed {
+		filename = "campaign-failed.csv"
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"name", "phone", "status", "reason", "sent_at"})
+	for _, rc := range recipients {
+		if onlyFailed && rc.Status != "failed" && rc.Status != "skipped" {
+			continue
+		}
+		reason := ""
+		if rc.SkipReason != nil {
+			reason = *rc.SkipReason
+		}
+		sentAt := ""
+		if rc.SentAt != nil {
+			sentAt = rc.SentAt.Format(time.RFC3339)
+		}
+		_ = cw.Write([]string{rc.Name, rc.WAPhone, rc.Status, reason, sentAt})
+	}
+	cw.Flush()
 }
 
 func (h *CampaignHandler) RecipientsList(w http.ResponseWriter, r *http.Request) {

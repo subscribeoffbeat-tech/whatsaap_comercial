@@ -78,7 +78,7 @@ func main() {
 	inboxH      := handlers.NewInboxHandler(pool, waClient, hub)
 	contactsH   := handlers.NewContactsHandler(pool)
 	tmplsH      := handlers.NewTemplatesHandler(pool, waClient)
-	cmpgnsH     := handlers.NewCampaignHandler(pool, riverClient, hub)
+	cmpgnsH     := handlers.NewCampaignHandler(pool, riverClient, hub, waClient)
 	automationH := handlers.NewAutomationHandler(pool)
 	analyticsH  := handlers.NewAnalyticsHandler(pool)
 	dashboardH  := handlers.NewDashboardHandler(pool, waClient)
