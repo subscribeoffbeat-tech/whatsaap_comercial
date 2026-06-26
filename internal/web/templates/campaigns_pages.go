@@ -352,6 +352,17 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport, failed 
 			badgeVariant = "warning"
 		case "scheduled":
 			badgeVariant = "pending"
+		case "draft":
+			badgeVariant = "neutral"
+		}
+
+		// Drafts can be launched (send now) from their own page.
+		launchBtn := ""
+		if report.Status == "draft" {
+			launchBtn = fmt.Sprintf(
+				`<form method="post" action="/campaigns/%s/launch" style="display:inline;margin-right:8px">`+
+					`<button type="submit" class="btn btn-primary btn-sm">Launch campaign</button></form>`,
+				report.ID)
 		}
 
 		_, err := fmt.Fprintf(w, `
@@ -364,7 +375,7 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport, failed 
 <div class="rpt-sub">%s &nbsp;<code class="rpt-tmpl-slug">%s</code></div>
 </div>
 </div>
-<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export">`+ExportIconSVG+`
+%s<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export">`+ExportIconSVG+`
 Export
 </a>
 </div>`,
@@ -372,6 +383,7 @@ Export
 			BadgeHTML(badgeVariant, report.Status),
 			dateStr,
 			html.EscapeString(report.TemplateName),
+			launchBtn,
 			report.ID,
 		)
 		if err != nil {
@@ -1758,6 +1770,8 @@ func WizardReviewPage(agent *mw.AgentClaims, state WizardState, tmpl *db.Templat
   <p style="font-size:13px;color:var(--text-secondary);line-height:1.5">
     Clicking <strong>Launch campaign</strong> will open a confirmation dialog before anything is sent.
   </p>
+  <button type="submit" form="wiz-form" name="action" value="draft" class="btn btn-secondary" style="width:100%%;margin-top:4px">Save as draft</button>
+  <p style="font-size:12px;color:var(--text-secondary);margin-top:6px">Saves without sending — launch it later from the campaign page.</p>
   %s
 </div>
 %s

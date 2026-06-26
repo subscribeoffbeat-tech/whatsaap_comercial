@@ -68,6 +68,7 @@ func (h *CampaignHandler) Mount(r chi.Router) {
 	r.Post("/", h.Create)
 	r.Get("/{id}/report", h.Report)
 	r.Get("/{id}/progress", h.ProgressPartial)
+	r.Post("/{id}/launch", h.Launch)
 	r.Post("/{id}/cancel", h.Cancel)
 	r.Post("/{id}/pause", h.Pause)
 	r.Get("/{id}/recipients", h.RecipientsList)
@@ -385,10 +386,14 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sent, _ := db.DailyMessagesSent(ctx, h.pool)
-	if !campaigns.LimitGuardCheck(sent, db.DailyCap(ctx, h.pool)) {
-		http.Error(w, "Daily send cap reached. Try again tomorrow.", http.StatusTooManyRequests)
-		return
+	// A draft isn't sending now, so the daily cap doesn't apply to it.
+	isDraft := r.FormValue("action") == "draft"
+	if !isDraft {
+		sent, _ := db.DailyMessagesSent(ctx, h.pool)
+		if !campaigns.LimitGuardCheck(sent, db.DailyCap(ctx, h.pool)) {
+			http.Error(w, "Daily send cap reached. Try again tomorrow.", http.StatusTooManyRequests)
+			return
+		}
 	}
 
 	// Header media: templates with an IMAGE/VIDEO/DOCUMENT header require the
@@ -445,6 +450,9 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 	status := "scheduled"
 	if state.ScheduleType == "now" {
 		status = "running"
+	}
+	if isDraft {
+		status = "draft" // saved for later; not scheduled, not sent
 	}
 
 	totalRecipients := len(eligible) + skipReport.Total
@@ -566,6 +574,52 @@ func (h *CampaignHandler) ProgressPartial(w http.ResponseWriter, r *http.Request
 		return
 	}
 	templates.CampaignProgressBar(*c).Render(r.Context(), w)
+}
+
+// Launch starts a draft campaign: it builds the send jobs for the draft's
+// pending recipients and flips it to running (send now). Only drafts can be
+// launched this way; anything else is a no-op redirect.
+func (h *CampaignHandler) Launch(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	ctx := r.Context()
+
+	camp, err := db.GetCampaign(ctx, h.pool, id)
+	if err != nil {
+		http.Error(w, "load campaign: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if camp.Status != "draft" {
+		http.Redirect(w, r, "/campaigns/"+id+"/report", http.StatusSeeOther)
+		return
+	}
+
+	// Respect the daily cap at launch (a draft may sit for days).
+	sent, _ := db.DailyMessagesSent(ctx, h.pool)
+	if !campaigns.LimitGuardCheck(sent, db.DailyCap(ctx, h.pool)) {
+		http.Error(w, "Daily send cap reached. Try again tomorrow.", http.StatusTooManyRequests)
+		return
+	}
+
+	pending, err := db.ListPendingRecipients(ctx, h.pool, id)
+	if err != nil {
+		http.Error(w, "list recipients: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(pending) == 0 {
+		_ = db.UpdateCampaignStatus(ctx, h.pool, id, "completed")
+		http.Redirect(w, r, "/campaigns/"+id+"/report", http.StatusSeeOther)
+		return
+	}
+	if err := db.UpdateCampaignStatus(ctx, h.pool, id, "running"); err != nil {
+		http.Error(w, "launch: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if h.riverClient != nil {
+		if err := campaigns.EnqueueCampaignJobs(ctx, h.pool, h.riverClient, *camp, pending); err != nil {
+			log.Printf("launch enqueue %s: %v", id, err)
+		}
+	}
+	http.Redirect(w, r, "/campaigns/"+id+"/report", http.StatusSeeOther)
 }
 
 func (h *CampaignHandler) Cancel(w http.ResponseWriter, r *http.Request) {
