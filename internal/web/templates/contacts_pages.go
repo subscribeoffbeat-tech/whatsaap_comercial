@@ -36,12 +36,17 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
 			industryOpts += fmt.Sprintf(`<option value="%s">%s</option>`, html.EscapeString(ind), html.EscapeString(ind))
 		}
 
-		// Tag pills for filter bar
-		tagPills := `<button class="ct-tag-pill active" onclick="setTagFilter(0,this)">All</button>`
-		for _, t := range tags {
-			tagPills += fmt.Sprintf(`<button class="ct-tag-pill" onclick="setTagFilter(%d,this)">%s</button>`,
-				t.ID, html.EscapeString(t.Name))
+		// Tags as a JSON array for the searchable filter dropdown (scales to many tags).
+		var tagsJSB strings.Builder
+		tagsJSB.WriteString("[")
+		for i, t := range tags {
+			if i > 0 {
+				tagsJSB.WriteString(",")
+			}
+			fmt.Fprintf(&tagsJSB, `{"id":%d,"name":"%s"}`, t.ID, jsStr(t.Name))
 		}
+		tagsJSB.WriteString("]")
+		tagsJS := tagsJSB.String()
 
 		ncInner := fmt.Sprintf(
 			`<div class="modal-gradient-hd" style="background:var(--avatar-gradient);padding:28px 24px;text-align:center;position:relative;border-radius:12px 12px 0 0">`+
@@ -130,7 +135,24 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
 </div>
 
 <div class="ct-filter-row">
-  <div class="ct-tag-pills" id="ct-tag-pills">%s</div>
+  <div x-data="tagFilter()" class="ct-tagfilter">
+    <button type="button" @click="open=!open" class="ct-tagfilter-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;opacity:.6"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.95 4.45A2.5 2.5 0 0 1 4.45 1.95h7.57c.8 0 1.56.32 2.12.88l7.9 7.9a3.58 3.58 0 0 1 0 5.06l-5.66 5.66a3.58 3.58 0 0 1-5.06 0l-7.9-7.9a3 3 0 0 1-.88-2.12V4.45ZM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>
+      <span x-text="selectedName || 'Filter by tag'" :style="selectedName ? '' : 'color:var(--text-secondary)'"></span>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="margin-left:auto;flex-shrink:0"><path d="M3 4.5L6 7.5l3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button type="button" x-show="selectedId" x-cloak @click="pick(0,'')" class="ct-tagfilter-clear" title="Clear filter">&times;</button>
+    <div x-show="open" x-cloak @click.outside="open=false" class="ct-tagfilter-pop">
+      <input type="text" x-model="q" @click.stop placeholder="Search %d tags…" class="ct-tagfilter-search">
+      <div class="ct-tagfilter-list">
+        <button type="button" @click="pick(0,'')" class="ct-tagfilter-opt" :class="{'is-sel':!selectedId}">All contacts</button>
+        <template x-for="t in filtered()" :key="t.id">
+          <button type="button" @click="pick(t.id,t.name)" class="ct-tagfilter-opt" :class="{'is-sel':selectedId===t.id}" x-text="t.name"></button>
+        </template>
+        <div x-show="filtered().length===0" class="ct-tagfilter-empty">No tags match.</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <input type="hidden" id="ct-tag-input" name="tag" value="">
@@ -152,12 +174,21 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
 </div>
 
 <script>
-function setTagFilter(tagID, el) {
-  document.querySelectorAll('.ct-tag-pill').forEach(function(b){b.classList.remove('active')});
-  if(el) el.classList.add('active');
-  document.getElementById('ct-tag-input').value = tagID || '';
-  htmx.ajax('GET', '/contacts/table', {target:'#contacts-table', swap:'innerHTML',
-    values: { tag: tagID || '', search: document.getElementById('ct-search')?.value || '' }});
+var CT_TAGS = %s;
+function tagFilter() {
+  return {
+    open:false, q:'', selectedId:0, selectedName:'', tags: CT_TAGS,
+    filtered() {
+      var q = this.q.trim().toLowerCase();
+      return q ? this.tags.filter(function(t){return t.name.toLowerCase().indexOf(q) >= 0}) : this.tags;
+    },
+    pick(id, name) {
+      this.selectedId = id; this.selectedName = id ? name : ''; this.open = false; this.q = '';
+      document.getElementById('ct-tag-input').value = id || '';
+      htmx.ajax('GET', '/contacts/table', {target:'#contacts-table', swap:'innerHTML',
+        values: { tag: id || '', search: (document.getElementById('ct-search')||{}).value || '' }});
+    }
+  };
 }
 function openContactPanel() {
   document.getElementById('ct-panel').classList.add('open');
@@ -168,7 +199,7 @@ function closeContactPanel() {
   document.getElementById('ct-panel-overlay').style.display = 'none';
 }
 </script>`,
-			tagPills, SkeletonRows(6), ncDialogHTML)
+			len(tags), SkeletonRows(6), ncDialogHTML, tagsJS)
 		if err != nil {
 			return err
 		}
