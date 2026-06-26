@@ -843,7 +843,7 @@ func ImportMapColumns(headers []string, csvData string, rowCount int) templ.Comp
 </div>
 <div class="form-group">
 <label class="form-label">Also tag everyone <span style="color:var(--text-secondary);font-weight:400">(applied to all rows)</span></label>
-<input class="form-input" type="text" name="tags" placeholder="newsletter, promo">
+<input class="form-input" type="text" name="tags" placeholder="e.g. Technology, Real Estate">
 </div>
 <label class="imp-opted-in-row">
 <input type="checkbox" name="mark_opted_in">

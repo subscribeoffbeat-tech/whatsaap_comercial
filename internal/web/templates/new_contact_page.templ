@@ -61,9 +61,10 @@ templ NewContactPage(agent *mw.AgentClaims, tags []db.Tag, errMsg string) {
 						</div>
 						<!-- Type a custom tag and press Enter to add it (created automatically on save) -->
 						<input class="form-input" type="text" x-model="tagInput"
-							placeholder="Type a tag and press Enter"
+							placeholder="Type a new tag and press Enter — e.g. Technology, Real Estate"
 							@keydown.enter.prevent="addTag(tagInput); tagInput=''"
 							autocomplete="off"/>
+						<div style="font-size:12px;color:var(--text-secondary);margin-top:4px">A tag that doesn't exist yet is created automatically.</div>
 						if len(tags) > 0 {
 							<div class="nc-tag-pills" style="margin-top:8px">
 								<span style="color:var(--text-secondary);font-size:12px;width:100%">Quick-pick existing:</span>

@@ -806,7 +806,7 @@ func (h *ContactsHandler) ImportPage(w http.ResponseWriter, r *http.Request) {
 func (h *ContactsHandler) ImportSample(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="contacts_sample.csv"`)
-	fmt.Fprint(w, "name,phone,email,city,tags,consent\nPriya Sharma,+919876543210,priya@mail.com,Mumbai,\"VIP, Enterprise\",yes\nRaj Patel,+918765432109,,Delhi,Lead,yes\n")
+	fmt.Fprint(w, "name,phone,email,city,tags,consent\nPriya Sharma,+919876543210,priya@mail.com,Mumbai,\"Technology, Consumer Brands\",yes\nRaj Patel,+918765432109,,Delhi,Healthcare & Pharma,yes\n")
 }
 
 const maxUploadBytes = 5 << 20 // 5 MB
