@@ -1196,6 +1196,93 @@ func WizardTemplPage(agent *mw.AgentClaims, state WizardState, tmpls []db.Templa
 
 // ── Wizard step 3: Variables ──────────────────────────────────────────────────
 
+// varFieldOption is one selectable contact/agency field for a template variable.
+type varFieldOption struct{ Value, Label string }
+
+// varFieldGroups lists the fields offered for template-variable mapping. Agency
+// fields resolve to custom_fields.<key>; the "__custom__" option lets the user
+// type any custom field key of their own.
+var varFieldGroups = []struct {
+	Label   string
+	Options []varFieldOption
+}{
+	{"Contact", []varFieldOption{
+		{"first_name", "First name"},
+		{"name", "Full name"},
+		{"wa_phone", "WhatsApp phone"},
+		{"email", "Email"},
+		{"industry", "Industry / Vertical"},
+		{"custom_fields.city", "City"},
+	}},
+	{"Agency fields", []varFieldOption{
+		{"custom_fields.brand", "Brand / Company"},
+		{"custom_fields.designation", "Designation"},
+		{"custom_fields.service", "Service / Package"},
+		{"custom_fields.account_manager", "Account Manager"},
+		{"custom_fields.campaign", "Campaign name"},
+		{"custom_fields.platform", "Platform"},
+		{"custom_fields.ad_budget", "Ad budget"},
+		{"custom_fields.reporting_month", "Reporting month"},
+		{"custom_fields.invoice_amount", "Invoice amount"},
+		{"custom_fields.due_date", "Due date"},
+		{"custom_fields.payment_link", "Payment link"},
+	}},
+}
+
+func knownVarField(value string) bool {
+	for _, g := range varFieldGroups {
+		for _, o := range g.Options {
+			if o.Value == value {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// varFieldSelect renders the grouped field <select> for variable index n, plus a
+// "Custom field…" text input shown (via Alpine) when the custom option is chosen.
+func varFieldSelect(n, existingVar string) string {
+	selected := "first_name"
+	customKey := ""
+	isCustom := false
+	if existingVar != "" {
+		if knownVarField(existingVar) {
+			selected = existingVar
+		} else {
+			isCustom = true
+			selected = "__custom__"
+			customKey = strings.TrimPrefix(existingVar, "custom_fields.")
+		}
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, `<div x-data="{ f: %s }">`, jsLit(selected))
+	fmt.Fprintf(&b, `<select name="var_%s" class="form-input" style="font-size:13px" x-model="f">`, html.EscapeString(n))
+	for _, g := range varFieldGroups {
+		fmt.Fprintf(&b, `<optgroup label="%s">`, html.EscapeString(g.Label))
+		for _, o := range g.Options {
+			sel := ""
+			if o.Value == selected {
+				sel = " selected"
+			}
+			fmt.Fprintf(&b, `<option value="%s"%s>%s</option>`, html.EscapeString(o.Value), sel, html.EscapeString(o.Label))
+		}
+		b.WriteString(`</optgroup>`)
+	}
+	customSel := ""
+	if isCustom {
+		customSel = " selected"
+	}
+	fmt.Fprintf(&b, `<option value="__custom__"%s>Custom field…</option></select>`, customSel)
+	fmt.Fprintf(&b,
+		`<input type="text" name="customkey_%s" class="form-input" style="margin-top:6px;font-size:13px" `+
+			`placeholder="your field key, e.g. brand" value="%s" x-show="f==='__custom__'" x-cloak>`,
+		html.EscapeString(n), html.EscapeString(customKey))
+	b.WriteString(`</div>`)
+	return b.String()
+}
+
 func WizardVarsPage(agent *mw.AgentClaims, state WizardState, tmpl db.Template, varNames []string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if err := wizOpen(w, agent, state, "/campaigns/wizard/vars", ""); err != nil {
@@ -1272,11 +1359,7 @@ func WizardVarsPage(agent *mw.AgentClaims, state WizardState, tmpl db.Template, 
   </div>
   <div class="field" style="margin:0">
     <label style="font-size:12px;color:var(--text-secondary)">Contact field to use</label>
-    <select name="var_%s" class="form-input" style="font-size:13px">
-      <option value="name"%s>Contact name</option>
-      <option value="wa_phone"%s>WhatsApp phone</option>
-      <option value="email"%s>Email</option>
-    </select>
+    %s
   </div>
   <div class="field" style="margin:0">
     <label style="font-size:12px;color:var(--text-secondary)">Fallback (used when field is empty)</label>
@@ -1293,10 +1376,7 @@ func WizardVarsPage(agent *mw.AgentClaims, state WizardState, tmpl db.Template, 
   <div class="wiz-var-mapsto">Maps to <code>{{%s}}</code> in the template</div>
 </div>`,
 				n, n,
-				n,
-				sel(existingVar, "name"),
-				sel(existingVar, "wa_phone"),
-				sel(existingVar, "email"),
+				varFieldSelect(n, existingVar),
 				n,
 				html.EscapeString(sampleVal),
 				html.EscapeString(existingFallback),

@@ -203,7 +203,17 @@ func (h *CampaignHandler) WizardVars(w http.ResponseWriter, r *http.Request) {
 	fallbacks := map[string]string{}
 	for k, vs := range r.Form {
 		if strings.HasPrefix(k, "var_") && len(vs) > 0 && vs[0] != "" {
-			varMap[strings.TrimPrefix(k, "var_")] = vs[0]
+			idx := strings.TrimPrefix(k, "var_")
+			val := vs[0]
+			// "Custom field…" — combine with the typed key into a custom_fields path.
+			if val == "__custom__" {
+				ck := sanitizeFieldKey(r.FormValue("customkey_" + idx))
+				if ck == "" {
+					continue // no key typed → leave unmapped; the fallback is used
+				}
+				val = "custom_fields." + ck
+			}
+			varMap[idx] = val
 		}
 		if strings.HasPrefix(k, "fallback_") && len(vs) > 0 && vs[0] != "" {
 			fallbacks[strings.TrimPrefix(k, "fallback_")] = vs[0]
@@ -648,6 +658,23 @@ func parseInt64Slice(ss []string) []int64 {
 		}
 	}
 	return out
+}
+
+// sanitizeFieldKey normalises a user-typed custom field key: lowercased, spaces
+// and dashes become underscores, and anything outside [a-z0-9_] is dropped. This
+// keeps the stored custom_fields path safe and matches CSV-import key handling.
+func sanitizeFieldKey(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
+			b.WriteRune(r)
+		case r == ' ' || r == '-':
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
 }
 
 // parseLocalDateTime parses the wizard's datetime-local value as IST wall-clock

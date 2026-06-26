@@ -45,6 +45,11 @@ func resolveFieldPath(c db.Contact, path string) string {
 	switch path {
 	case "name":
 		return c.Name
+	case "first_name":
+		if parts := strings.Fields(c.Name); len(parts) > 0 {
+			return parts[0]
+		}
+		return ""
 	case "wa_phone":
 		return c.WAPhone
 	case "email":
@@ -52,6 +57,8 @@ func resolveFieldPath(c db.Contact, path string) string {
 			return *c.Email
 		}
 		return ""
+	case "industry":
+		return c.Industry
 	}
 	if strings.HasPrefix(path, "custom_fields.") {
 		key := strings.TrimPrefix(path, "custom_fields.")
