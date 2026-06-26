@@ -119,7 +119,7 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
 </div>
 
 <div class="ct-search-bar">
-  <svg class="ct-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="var(--text-secondary)" stroke-width="1.5"/><path d="M10.5 10.5l3 3" stroke="var(--text-secondary)" stroke-width="1.5" stroke-linecap="round"/></svg>
+  <svg class="ct-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
   <input type="search" placeholder="Search by name or phone..."
     class="ct-search-input"
     hx-get="/contacts/table" hx-trigger="input changed delay:300ms"
@@ -177,7 +177,6 @@ function closeContactPanel() {
 	})
 }
 
-
 func contactAvatarInitials(name, phone string) string {
 	name = strings.TrimSpace(name)
 	if name != "" {
@@ -228,7 +227,7 @@ func ContactTable(contacts []db.Contact, total int, offset, limit int, searchAct
 <thead><tr>
 <th>NAME</th><th>PHONE</th><th>TAGS</th><th>CONSENT</th><th>LAST MESSAGE</th><th>CITY</th><th></th>
 </tr></thead>
-<tbody>`, ); err != nil {
+<tbody>`); err != nil {
 			return err
 		}
 
@@ -267,11 +266,8 @@ func ContactTable(contacts []db.Contact, total int, offset, limit int, searchAct
 			}
 
 			if _, err := fmt.Fprintf(w,
-				`<tr class="ct-row"`+
-					` hx-get="/contacts/%s"`+
-					` hx-target="#ct-panel-body"`+
-					` hx-swap="innerHTML"`+
-					` hx-on::after-request="if(event.detail.successful)openContactPanel()">`+
+				`<tr class="ct-row" style="cursor:pointer"`+
+					` onclick="window.location.href='/contacts/%s/view'">`+
 					`<td><div class="td-name-cell">`+
 					`<div class="ct-av %s">%s</div>`+
 					`<div class="ct-name">%s</div>`+
@@ -357,6 +353,49 @@ func relTime(t *time.Time) string {
 	}
 }
 
+// ContactEditForm renders the inline edit form shown in the contact panel.
+func ContactEditForm(c *db.Contact, errMsg string) templ.Component {
+	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		email := ""
+		if c.Email != nil {
+			email = *c.Email
+		}
+		checked := ""
+		if c.OptedIn {
+			checked = " checked"
+		}
+		errHTML := ""
+		if errMsg != "" {
+			errHTML = `<div class="callout callout--danger" style="margin:0 0 10px">` + html.EscapeString(errMsg) + `</div>`
+		}
+		_, err := fmt.Fprintf(w, `
+<div class="ct-panel-details">
+<div class="ct-detail-label">EDIT CONTACT</div>
+%s
+<form hx-put="/contacts/%s" hx-target="#ct-panel-body" hx-swap="innerHTML" hx-disabled-elt="find button[type='submit']">
+<label class="field"><span>Name</span><input type="text" name="name" value="%s" class="form-input" autocomplete="off"></label>
+<label class="field"><span>Phone <span style="font-weight:400;font-size:12px;color:var(--text-muted)">(with country code)</span></span><input type="text" name="phone" value="%s" class="form-input" required autocomplete="off"></label>
+<label class="field"><span>Email</span><input type="email" name="email" value="%s" class="form-input" autocomplete="off"></label>
+<label class="field"><span>Industry</span><input type="text" name="industry" value="%s" class="form-input" autocomplete="off"></label>
+<label class="field" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="opted_in"%s style="width:auto"> <span style="font-weight:400">Opted in to receive messages</span></label>
+<div class="form-btns" style="margin-top:12px">
+<button class="btn btn-sm btn-primary" type="submit">Save changes</button>
+<button class="btn btn-sm btn-secondary" type="button" hx-get="/contacts/%s" hx-target="#ct-panel-body" hx-swap="innerHTML">Cancel</button>
+</div>
+</form>
+</div>`,
+			errHTML, c.ID,
+			html.EscapeString(c.Name),
+			html.EscapeString(c.WAPhone),
+			html.EscapeString(email),
+			html.EscapeString(c.Industry),
+			checked,
+			c.ID,
+		)
+		return err
+	})
+}
+
 func ContactDetail(c *db.Contact, tags []db.Tag, notes []db.ContactNote, allTags []db.Tag) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		optedBadge := `<span class="ct-badge ct-badge-off">Not opted in</span>`
@@ -404,12 +443,15 @@ func ContactDetail(c *db.Contact, tags []db.Tag, notes []db.ContactNote, allTags
 				`%s%s`+
 				`<div class="ct-panel-actions">`+
 				`<a href="/inbox" class="ct-panel-act-btn ct-panel-act-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M2.2928 21.292L2.28337 21.3026C1.97175 21.6227 1.91001 22.1115 2.1337 22.4995C2.35966 22.8914 2.82058 23.0828 3.25769 22.9662L9.05302 21.4208C10.1339 21.7963 11.2942 22 12.5 22C18.299 22 23 17.299 23 11.5C23 5.70101 18.299 1 12.5 1C6.70103 1 2.00002 5.70101 2.00002 11.5C2.00002 13.6029 2.61921 15.5638 3.6852 17.2072C3.65453 17.5251 3.60229 17.8896 3.51944 18.3039C3.28993 19.4515 2.95112 20.2289 2.68837 20.7019C2.55663 20.939 2.44292 21.1015 2.36973 21.1972C2.3331 21.2451 2.30653 21.2764 2.2928 21.292Z" fill="currentColor"/></svg> Message</a>`+
+				`<button class="ct-panel-act-btn" hx-get="/contacts/%s/edit" hx-target="#ct-panel-body" hx-swap="innerHTML">&#9998; Edit</button>`+
+				`<a class="ct-panel-act-btn" href="/contacts/%s/view">&#128196; Profile</a>`+
 				`</div></div>`,
 			html.EscapeString(grad),
 			html.EscapeString(initials),
 			html.EscapeString(displayName),
 			subtitleHTML,
 			industryChipHTML,
+			c.ID, c.ID,
 		); err != nil {
 			return err
 		}
@@ -641,7 +683,7 @@ func ImportPage(agent *mw.AgentClaims) templ.Component {
     </a>
     <div>
       <div class="imp-pg-title">Import Contacts</div>
-      <div class="imp-pg-sub">Upload a CSV or Excel file to bulk-add contacts</div>
+      <div class="imp-pg-sub">Upload a CSV file to bulk-add contacts</div>
     </div>
   </div>
   <div class="imp-pg-body">
@@ -715,13 +757,13 @@ func importUploadHTML() string {
       @drop.prevent="dragging=false;let f=$event.dataTransfer.files[0];if(f){$refs.fi.files=$event.dataTransfer.files;filename=f.name;htmx.trigger($refs.form,'submit')}"
       @click="$refs.fi.click()">
       <div class="imp-drop-icon">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="4" y="4" width="24" height="24" rx="8" fill="var(--bg-surface)"/><path d="M16 20V12M16 12l-3 3M16 12l3 3" stroke="var(--text-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 22h12" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="4" y="4" width="24" height="24" rx="8" fill="var(--bg-surface)"/><path d="M16 20V12M16 12l-3 3M16 12l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 22h12" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/></svg>
       </div>
       <div class="imp-drop-title" x-text="filename || 'Drag &amp; drop your CSV here'"></div>
-      <div class="imp-drop-sub" x-show="!filename">or <span class="imp-browse-link">browse file</span> &mdash; CSV or Excel, max 10 MB</div>
+      <div class="imp-drop-sub" x-show="!filename">or <span class="imp-browse-link">browse file</span> &mdash; CSV only, max 5 MB</div>
       <div x-show="filename" class="imp-drop-sub" style="color:var(--accent)">File selected. Uploading&hellip;</div>
     </div>
-    <input type="file" name="csv_file" accept=".csv,.xlsx,.xls" x-ref="fi"
+    <input type="file" name="csv_file" accept=".csv" x-ref="fi"
       class="imp-file-hidden"
       @change="if($el.files[0]){filename=$el.files[0].name;htmx.trigger(document.getElementById('imp-upload-form'),'submit')}">
     <div class="imp-upload-actions">
@@ -749,10 +791,27 @@ func importUploadHTML() string {
 
 func ImportMapColumns(headers []string, csvData string, rowCount int) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		opts := `<option value="">&#8212; skip &#8212;</option>`
-		for i, h := range headers {
-			opts += fmt.Sprintf(`<option value="%d">%s</option>`, i, html.EscapeString(h))
+		// Build options, auto-selecting the column whose header matches the field.
+		colOpts := func(keywords ...string) string {
+			s := `<option value="">&#8212; skip &#8212;</option>`
+			for i, h := range headers {
+				sel := ""
+				lh := strings.ToLower(strings.TrimSpace(h))
+				for _, k := range keywords {
+					if strings.Contains(lh, k) {
+						sel = " selected"
+						break
+					}
+				}
+				s += fmt.Sprintf(`<option value="%d"%s>%s</option>`, i, sel, html.EscapeString(h))
+			}
+			return s
 		}
+		phoneOpts := colOpts("phone", "mobile", "number", "whatsapp")
+		nameOpts := colOpts("name")
+		emailOpts := colOpts("email", "mail")
+		cityOpts := colOpts("city", "town", "location")
+		tagsOpts := colOpts("tag", "category", "segment")
 
 		_, err := fmt.Fprintf(w, `
 <div class="imp-step-hd">
@@ -775,7 +834,15 @@ func ImportMapColumns(headers []string, csvData string, rowCount int) templ.Comp
 <select class="form-input" name="email_col">%s</select>
 </div>
 <div class="form-group">
-<label class="form-label">Apply tags <span style="color:var(--text-secondary);font-weight:400">(comma-separated)</span></label>
+<label class="form-label">City column</label>
+<select class="form-input" name="city_col">%s</select>
+</div>
+<div class="form-group">
+<label class="form-label">Tags column <span style="color:var(--text-secondary);font-weight:400">(per row; comma-separated in the cell)</span></label>
+<select class="form-input" name="tags_col">%s</select>
+</div>
+<div class="form-group">
+<label class="form-label">Also tag everyone <span style="color:var(--text-secondary);font-weight:400">(applied to all rows)</span></label>
 <input class="form-input" type="text" name="tags" placeholder="newsletter, promo">
 </div>
 <label class="imp-opted-in-row">
@@ -788,12 +855,12 @@ func ImportMapColumns(headers []string, csvData string, rowCount int) templ.Comp
 </div>
 </form>
 <div id="import-sidebar" hx-swap-oob="true">%s</div>
-`, rowCount, html.EscapeString(csvData), opts, opts, opts, importSidebarInner(2))
+`, rowCount, html.EscapeString(csvData), phoneOpts, nameOpts, emailOpts, cityOpts, tagsOpts, importSidebarInner(2))
 		return err
 	})
 }
 
-func ImportPreview(rows []ImportPreviewRow, total int, csvData string, phoneCol, nameCol, emailCol int, tags string, optedIn bool) templ.Component {
+func ImportPreview(rows []ImportPreviewRow, total int, csvData string, phoneCol, nameCol, emailCol, cityCol, tagsCol int, tags string, optedIn bool) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		optedInVal := "false"
 		if optedIn {
@@ -828,6 +895,8 @@ func ImportPreview(rows []ImportPreviewRow, total int, csvData string, phoneCol,
 <input type="hidden" name="phone_col" value="%s">
 <input type="hidden" name="name_col" value="%s">
 <input type="hidden" name="email_col" value="%s">
+<input type="hidden" name="city_col" value="%s">
+<input type="hidden" name="tags_col" value="%s">
 <input type="hidden" name="tags" value="%s">
 <input type="hidden" name="mark_opted_in" value="%s">
 <div class="imp-step-footer">
@@ -837,7 +906,7 @@ func ImportPreview(rows []ImportPreviewRow, total int, csvData string, phoneCol,
 <div id="import-sidebar" hx-swap-oob="true">%s</div>
 `,
 			html.EscapeString(csvData),
-			strconv.Itoa(phoneCol), strconv.Itoa(nameCol), strconv.Itoa(emailCol),
+			strconv.Itoa(phoneCol), strconv.Itoa(nameCol), strconv.Itoa(emailCol), strconv.Itoa(cityCol), strconv.Itoa(tagsCol),
 			html.EscapeString(tags), optedInVal, total,
 			importSidebarInner(3),
 		)
@@ -868,4 +937,3 @@ func ImportResult(inserted, skipped, invalidCount int) templ.Component {
 		return err
 	})
 }
-

@@ -219,9 +219,105 @@ func UpdateContact(ctx context.Context, pool *pgxpool.Pool, c *Contact) error {
 	custom, _ := json.Marshal(c.CustomFields)
 	_, err := pool.Exec(ctx, `
 		UPDATE contacts
-		SET name = $2, email = $3, industry = $4, custom_fields = $5::jsonb, opted_in = $6, updated_at = NOW()
+		SET name = $2, email = $3, industry = $4, custom_fields = $5::jsonb, opted_in = $6,
+		    wa_phone = $7, updated_at = NOW()
 		WHERE id = $1::uuid
-	`, c.ID, c.Name, c.Email, c.Industry, string(custom), c.OptedIn)
+	`, c.ID, c.Name, c.Email, c.Industry, string(custom), c.OptedIn, c.WAPhone)
+	return err
+}
+
+// ContactMessageRow is a lightweight message row for the contact activity feed.
+type ContactMessageRow struct {
+	Direction   string
+	Body        string
+	Status      string
+	MessageType string
+	IsCampaign  bool
+	CreatedAt   time.Time
+}
+
+// ListContactMessages returns this contact's messages (both directions) newest
+// first, for the activity timeline.
+func ListContactMessages(ctx context.Context, pool *pgxpool.Pool, contactID string, limit int) ([]ContactMessageRow, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT m.direction, COALESCE(m.content->>'body', m.content->>'caption', ''),
+		       m.status, m.message_type, (m.campaign_id IS NOT NULL), m.created_at
+		FROM messages m
+		JOIN conversations conv ON conv.id = m.conversation_id
+		WHERE conv.contact_id = $1::uuid
+		ORDER BY m.created_at DESC
+		LIMIT $2
+	`, contactID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list contact messages: %w", err)
+	}
+	defer rows.Close()
+	var out []ContactMessageRow
+	for rows.Next() {
+		var m ContactMessageRow
+		if err := rows.Scan(&m.Direction, &m.Body, &m.Status, &m.MessageType, &m.IsCampaign, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// ContactCampaign is one row of a contact's campaign history.
+type ContactCampaign struct {
+	CampaignName string
+	TemplateName string
+	Status       string // message delivery status, or recipient status (e.g. skipped)
+	SkipReason   string
+	SentAt       time.Time
+}
+
+// ListContactCampaigns returns every campaign this contact was enrolled in, with
+// the resulting message status (or skip reason), newest first.
+func ListContactCampaigns(ctx context.Context, pool *pgxpool.Pool, contactID string) ([]ContactCampaign, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT camp.name,
+		       COALESCE(t.name, ''),
+		       COALESCE(m.status, cr.status),
+		       COALESCE(cr.skip_reason, ''),
+		       COALESCE(cr.sent_at, camp.created_at)
+		FROM campaign_recipients cr
+		JOIN campaigns camp ON camp.id = cr.campaign_id
+		LEFT JOIN templates t ON t.id = camp.template_id
+		LEFT JOIN messages m ON m.id = cr.message_id
+		WHERE cr.contact_id = $1::uuid
+		ORDER BY camp.created_at DESC
+	`, contactID)
+	if err != nil {
+		return nil, fmt.Errorf("list contact campaigns: %w", err)
+	}
+	defer rows.Close()
+	var out []ContactCampaign
+	for rows.Next() {
+		var c ContactCampaign
+		if err := rows.Scan(&c.CampaignName, &c.TemplateName, &c.Status, &c.SkipReason, &c.SentAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// SetContactConsent flips a contact's marketing opt-in, stamping the
+// source/timestamp so the consent record stays auditable.
+func SetContactConsent(ctx context.Context, pool *pgxpool.Pool, id string, optedIn bool) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE contacts
+		SET opted_in      = $2,
+		    opt_in_source = CASE WHEN $2 THEN 'manual_admin' ELSE opt_in_source END,
+		    opt_in_at     = CASE WHEN $2 AND opt_in_at IS NULL THEN NOW() ELSE opt_in_at END,
+		    opt_out_at    = CASE WHEN $2 THEN NULL ELSE NOW() END,
+		    updated_at    = NOW()
+		WHERE id = $1::uuid
+	`, id, optedIn)
 	return err
 }
 
@@ -269,6 +365,30 @@ func BulkInsertContacts(ctx context.Context, pool *pgxpool.Pool, contacts []Cont
 		}
 	}
 	return inserted, skipped, tx.Commit(ctx)
+}
+
+// GetContactIDMapByPhones returns a phone→contact-id map for the given phones
+// (used by CSV import to apply per-row tags to the right contact).
+func GetContactIDMapByPhones(ctx context.Context, pool *pgxpool.Pool, phones []string) (map[string]string, error) {
+	if len(phones) == 0 {
+		return nil, nil
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT wa_phone, id::text FROM contacts WHERE wa_phone = ANY($1::text[])
+	`, phones)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := map[string]string{}
+	for rows.Next() {
+		var phone, id string
+		if err := rows.Scan(&phone, &id); err != nil {
+			return nil, err
+		}
+		m[phone] = id
+	}
+	return m, rows.Err()
 }
 
 // GetContactIDsByPhones returns contact IDs for the given E.164 phone numbers.
