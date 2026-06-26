@@ -64,6 +64,7 @@ func (h *CampaignHandler) Mount(r chi.Router) {
 	r.Post("/wizard/template", h.WizardTemplate)
 	r.Post("/wizard/vars", h.WizardVars)
 	r.Post("/wizard/audience", h.WizardAudience)
+	r.Post("/wizard/audience-preview", h.AudiencePreview)
 	r.Post("/wizard/schedule", h.WizardSchedule)
 	r.Post("/", h.Create)
 	r.Get("/{id}/report", h.Report)
@@ -230,6 +231,32 @@ func (h *CampaignHandler) WizardVars(w http.ResponseWriter, r *http.Request) {
 
 // ── Wizard step 4: Audience ───────────────────────────────────────────────────
 
+// AudiencePreview returns the live contact checklist for the currently-selected
+// segments — the HTMX fragment for the audience step's right panel.
+func (h *CampaignHandler) AudiencePreview(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "parse form", http.StatusBadRequest)
+		return
+	}
+	useAll := r.FormValue("use_all_contacts") == "1"
+	tagIDs := parseInt64Slice(r.Form["segment_tag_ids"])
+
+	var contacts []db.Contact
+	var err error
+	switch {
+	case useAll:
+		contacts, err = db.GetAudienceContactsAny(r.Context(), h.pool, nil)
+	case len(tagIDs) > 0:
+		contacts, err = db.GetAudienceContactsAny(r.Context(), h.pool, tagIDs)
+	}
+	if err != nil {
+		http.Error(w, "load contacts: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = io.WriteString(w, templates.AudiencePreviewHTML(contacts))
+}
+
 func (h *CampaignHandler) WizardAudience(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "parse form", http.StatusBadRequest)
@@ -275,7 +302,27 @@ func (h *CampaignHandler) WizardAudience(w http.ResponseWriter, r *http.Request)
 		state.SegmentTagIDs = segTagIDs
 	}
 
-	eligible, report, err := campaigns.BuildAudienceAny(r.Context(), h.pool, state.SegmentTagIDs, state.Category, h.freqCapHours(r.Context()))
+	// Per-contact refinement: if the owner used the contact checklist, honour the
+	// kept (checked) contacts; unchecked ones are excluded. Otherwise fall back to
+	// the whole tag-based audience.
+	if r.FormValue("contacts_refined") == "1" {
+		state.IncludeContactIDs = r.Form["include_contact"]
+		if len(state.IncludeContactIDs) == 0 {
+			tags, totalOptedIn, _ := db.ListTagsWithOptedInCount(r.Context(), h.pool)
+			templates.WizardAudiencePage(agent, state, tags, totalOptedIn, "Select at least one contact to send to.").Render(r.Context(), w)
+			return
+		}
+	} else {
+		state.IncludeContactIDs = nil
+	}
+
+	var eligible []campaigns.Recipient
+	var report campaigns.SkipReport
+	if len(state.IncludeContactIDs) > 0 {
+		eligible, report, err = campaigns.BuildAudienceFromIDs(r.Context(), h.pool, state.IncludeContactIDs, state.Category, h.freqCapHours(r.Context()))
+	} else {
+		eligible, report, err = campaigns.BuildAudienceAny(r.Context(), h.pool, state.SegmentTagIDs, state.Category, h.freqCapHours(r.Context()))
+	}
 	if err != nil {
 		http.Error(w, "build audience: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -380,7 +427,13 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	eligible, skipReport, err := campaigns.BuildAudienceAny(ctx, h.pool, state.SegmentTagIDs, state.Category, h.freqCapHours(ctx))
+	var eligible []campaigns.Recipient
+	var skipReport campaigns.SkipReport
+	if len(state.IncludeContactIDs) > 0 {
+		eligible, skipReport, err = campaigns.BuildAudienceFromIDs(ctx, h.pool, state.IncludeContactIDs, state.Category, h.freqCapHours(ctx))
+	} else {
+		eligible, skipReport, err = campaigns.BuildAudienceAny(ctx, h.pool, state.SegmentTagIDs, state.Category, h.freqCapHours(ctx))
+	}
 	if err != nil {
 		http.Error(w, "build audience: "+err.Error(), http.StatusInternalServerError)
 		return

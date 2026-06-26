@@ -65,8 +65,9 @@ type WizardState struct {
 	MediaHeaderFormat string // image | video | document (when HasMediaHeader)
 	VarMap            map[string]string
 	Fallbacks         map[string]string
-	UseAllContacts    bool    // audience: all opted-in contacts (no tag filter)
-	SegmentTagIDs     []int64 // audience: selected tag IDs (union); nil = all
+	UseAllContacts    bool     // audience: all opted-in contacts (no tag filter)
+	SegmentTagIDs     []int64  // audience: selected tag IDs (union); nil = all
+	IncludeContactIDs []string // audience refinement: explicit kept contacts (excluded = omitted)
 	EligibleCount     int
 	SkipReport        campaigns.SkipReport
 	ScheduleType      string
@@ -1442,6 +1443,41 @@ func WizardVarsPage(agent *mw.AgentClaims, state WizardState, tmpl db.Template, 
 
 // ── Wizard step 4: Audience ───────────────────────────────────────────────────
 
+// AudiencePreviewHTML renders the live contact checklist for the audience step.
+// Each contact is checked by default; unchecking excludes it. The fragment carries
+// its own Alpine scope so the live count works regardless of the page's grid
+// columns. Swapped in via HTMX (#contact-preview, outerHTML).
+func AudiencePreviewHTML(contacts []db.Contact) string {
+	if len(contacts) == 0 {
+		return `<div id="contact-preview" class="reach-summary">` +
+			`<div class="reach-summary-title">Recipients</div>` +
+			`<p style="font-size:13px;color:var(--text-secondary);margin:8px 0 0">Select a segment to see and refine the contacts who'll receive this.</p>` +
+			`</div>`
+	}
+	n := strconv.Itoa(len(contacts))
+	var b strings.Builder
+	b.WriteString(`<div id="contact-preview" x-data="{n:` + n +
+		`,recount(){this.n=$el.querySelectorAll('input[name=include_contact]:checked').length}}" x-init="recount()">`)
+	b.WriteString(`<input type="hidden" name="contacts_refined" value="1">`)
+	b.WriteString(`<div class="reach-summary"><div class="reach-summary-title">Recipients</div>` +
+		`<div class="reach-count" x-text="n">` + n + `</div>` +
+		`<div class="reach-label">selected — uncheck to exclude</div></div>`)
+	b.WriteString(`<div style="display:flex;flex-direction:column;gap:6px;margin-top:12px;max-height:42vh;overflow:auto">`)
+	for _, c := range contacts {
+		name := c.Name
+		if name == "" {
+			name = c.WAPhone
+		}
+		fmt.Fprintf(&b, `<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;cursor:pointer">`+
+			`<input type="checkbox" name="include_contact" value="%s" checked @change="recount()">`+
+			`<span style="flex:1;min-width:0"><span style="font-weight:600">%s</span><br>`+
+			`<span style="color:var(--text-secondary);font-size:12px">%s</span></span></label>`,
+			html.EscapeString(c.ID), html.EscapeString(name), html.EscapeString(c.WAPhone))
+	}
+	b.WriteString(`</div></div>`)
+	return b.String()
+}
+
 func WizardAudiencePage(agent *mw.AgentClaims, state WizardState, tags []db.TagWithCount, totalOptedIn int, errMsg string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if err := wizOpen(w, agent, state, "/campaigns/wizard/audience", errMsg); err != nil {
@@ -1491,7 +1527,9 @@ func WizardAudiencePage(agent *mw.AgentClaims, state WizardState, tags []db.TagW
 
 <div class="seg-list">
   <label class="seg-item">
-    <input type="checkbox" name="use_all_contacts" value="1" x-model="allSel" @change="if(allSel){tagSel=Object.fromEntries(Object.keys(tagSel).map(k=>[k,false]))}">
+    <input type="checkbox" name="use_all_contacts" value="1" x-model="allSel" @change="if(allSel){tagSel=Object.fromEntries(Object.keys(tagSel).map(k=>[k,false]))}"
+      hx-post="/campaigns/wizard/audience-preview" hx-trigger="change" hx-target="#contact-preview" hx-swap="outerHTML"
+      hx-include="[name='segment_tag_ids'],[name='use_all_contacts']">
     <div class="seg-item-body">
       <div class="seg-item-name">All contacts</div>
       <div class="seg-item-desc">All opted-in contacts in your directory</div>
@@ -1512,7 +1550,9 @@ func WizardAudiencePage(agent *mw.AgentClaims, state WizardState, tags []db.TagW
   <label class="seg-item" :class="{'seg-item--selected':tagSel[%s]}">
     <input type="checkbox" name="segment_tag_ids" value="%s"
       x-model="tagSel[%s]"
-      @change="if(tagSel[%s])allSel=false">
+      @change="if(tagSel[%s])allSel=false"
+      hx-post="/campaigns/wizard/audience-preview" hx-trigger="change" hx-target="#contact-preview" hx-swap="outerHTML"
+      hx-include="[name='segment_tag_ids'],[name='use_all_contacts']">
     <div class="seg-item-body">
       <div class="seg-item-name">%s</div>
       <div class="seg-item-desc">Contacts tagged %s</div>
@@ -1535,19 +1575,15 @@ func WizardAudiencePage(agent *mw.AgentClaims, state WizardState, tags []db.TagW
 </div>
 
 <div class="wiz-fp-aside">
-  <div class="reach-summary">
-    <div class="reach-summary-title">Reach summary</div>
-    <div class="reach-count" x-text="reach">0</div>
-    <div class="reach-label">contacts selected</div>
-  </div>
+  %s
   %s
 </div>
-`, tierNote)
+`, AudiencePreviewHTML(nil), tierNote)
 		if err != nil {
 			return err
 		}
 
-		return wizClose(w, state, "Back", "Continue →", "reach===0", "")
+		return wizClose(w, state, "Back", "Continue →", "", "")
 	})
 }
 

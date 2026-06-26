@@ -4,6 +4,7 @@ package campaigns
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,13 +24,64 @@ func init() {
 	}
 }
 
-// IsQuietHours reports whether t falls in the quiet window (21:00–09:00 IST).
-// Business-initiated sends (campaigns) are blocked during quiet hours.
+// IsQuietHours reports whether t falls in the default quiet window (21:00–09:00
+// IST). Business-initiated sends (campaigns) are blocked during quiet hours.
+// Prefer IsQuietHoursCfg where a DB pool is available so the admin-configured
+// window is honoured.
 func IsQuietHours(t time.Time) bool {
+	return InQuietWindow(t, 21*60, 9*60)
+}
+
+// IsQuietHoursCfg reports whether t is in the admin-configured quiet window
+// (config keys quiet_hours_start_ist / quiet_hours_end_ist, "HH:MM"), falling
+// back to 21:00–09:00 IST if unset or unparseable.
+func IsQuietHoursCfg(ctx context.Context, pool *pgxpool.Pool, t time.Time) bool {
+	start, end := quietWindow(ctx, pool)
+	return InQuietWindow(t, start, end)
+}
+
+// quietWindow returns the configured quiet-hours start/end as minutes-of-day.
+func quietWindow(ctx context.Context, pool *pgxpool.Pool) (startMin, endMin int) {
+	startMin, endMin = 21*60, 9*60 // defaults
+	if s, err := db.GetConfigString(ctx, pool, "quiet_hours_start_ist"); err == nil {
+		if m, ok := parseHHMM(s); ok {
+			startMin = m
+		}
+	}
+	if s, err := db.GetConfigString(ctx, pool, "quiet_hours_end_ist"); err == nil {
+		if m, ok := parseHHMM(s); ok {
+			endMin = m
+		}
+	}
+	return startMin, endMin
+}
+
+// InQuietWindow reports whether t (in IST) falls within [startMin, endMin),
+// handling windows that wrap past midnight (e.g. 21:00 → 09:00).
+func InQuietWindow(t time.Time, startMin, endMin int) bool {
 	ist := t.In(istLoc)
 	h, m, _ := ist.Clock()
 	mins := h*60 + m
-	return mins >= 21*60 || mins < 9*60
+	if startMin == endMin {
+		return false // no quiet window
+	}
+	if startMin < endMin {
+		return mins >= startMin && mins < endMin
+	}
+	return mins >= startMin || mins < endMin // wraps midnight
+}
+
+func parseHHMM(s string) (int, bool) {
+	parts := strings.SplitN(strings.TrimSpace(s), ":", 2)
+	if len(parts) != 2 {
+		return 0, false
+	}
+	h, e1 := strconv.Atoi(parts[0])
+	m, e2 := strconv.Atoi(parts[1])
+	if e1 != nil || e2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, false
+	}
+	return h*60 + m, true
 }
 
 // IsUSNumber reports whether phone is a +1 (US/Canada) number.
@@ -53,6 +105,9 @@ type SkipReport struct {
 	USNumber   int // +1 numbers excluded from marketing
 	FreqCap    int // contacted within freqCapHours
 	Total      int // sum of all skipped
+	// Skipped maps a skipped contact ID to a human-readable reason, so the
+	// skipped recipients can be recorded and shown in the campaign report.
+	Skipped map[string]string
 }
 
 // Recipient is an eligible campaign recipient after all filters pass.
@@ -68,16 +123,19 @@ type Recipient struct {
 // freqCapped is a set of contact IDs that received a marketing message
 // within the configured frequency cap window.
 func FilterAudience(contacts []db.Contact, freqCapped map[string]bool, category string) (eligible []Recipient, report SkipReport) {
+	report.Skipped = map[string]string{}
 	for _, c := range contacts {
 		if category == "marketing" {
 			if IsUSNumber(c.WAPhone) {
 				report.USNumber++
 				report.Total++
+				report.Skipped[c.ID] = "US (+1) number — excluded from marketing since Apr 2025"
 				continue
 			}
 			if freqCapped[c.ID] {
 				report.FreqCap++
 				report.Total++
+				report.Skipped[c.ID] = "Frequency cap — already received a marketing message in the last 24h"
 				continue
 			}
 		}
@@ -89,6 +147,33 @@ func FilterAudience(contacts []db.Contact, freqCapped map[string]bool, category 
 		})
 	}
 	return
+}
+
+// BuildAudienceFromIDs builds the eligible audience from an explicit set of
+// contact IDs (the owner's refined selection on the audience step). It applies
+// the same compliance filters (opted-in at the DB layer, US/frequency in
+// FilterAudience) so a hand-picked list can't bypass the hard rules.
+func BuildAudienceFromIDs(
+	ctx context.Context, pool *pgxpool.Pool,
+	contactIDs []string, category string, freqCapHours int,
+) (eligible []Recipient, report SkipReport, err error) {
+	contacts, err := db.GetAudienceContactsByIDs(ctx, pool, contactIDs)
+	if err != nil {
+		return nil, report, err
+	}
+	var freqCapped map[string]bool
+	if category == "marketing" && len(contacts) > 0 {
+		ids := make([]string, len(contacts))
+		for i, c := range contacts {
+			ids[i] = c.ID
+		}
+		freqCapped, err = db.FreqCappedContactIDs(ctx, pool, ids, freqCapHours)
+		if err != nil {
+			return nil, report, err
+		}
+	}
+	eligible, report = FilterAudience(contacts, freqCapped, category)
+	return eligible, report, nil
 }
 
 // BuildAudienceAny is like BuildAudience but matches contacts with ANY of the

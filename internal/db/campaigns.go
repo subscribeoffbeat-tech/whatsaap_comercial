@@ -382,6 +382,34 @@ func GetAudienceContacts(ctx context.Context, pool *pgxpool.Pool, segmentTags, e
 	return cs, rows.Err()
 }
 
+// GetAudienceContactsByIDs returns the opted-in, non-blocked contacts among the
+// given IDs (used when the owner refines the audience down to specific contacts).
+func GetAudienceContactsByIDs(ctx context.Context, pool *pgxpool.Pool, ids []string) ([]Contact, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	q := `SELECT c.id::text, c.wa_phone, c.name, c.email, c.industry, c.custom_fields::text,
+	             c.opted_in, c.opt_in_source, c.opt_in_at, c.opt_out_at, c.is_blocked,
+	             c.created_at, c.updated_at
+	      FROM contacts c
+	      WHERE c.opted_in = true AND c.is_blocked = false AND c.id = ANY($1::uuid[])
+	      ORDER BY c.created_at`
+	rows, err := pool.Query(ctx, q, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var cs []Contact
+	for rows.Next() {
+		c, err := scanContact(rows)
+		if err != nil {
+			return nil, err
+		}
+		cs = append(cs, *c)
+	}
+	return cs, rows.Err()
+}
+
 // GetAudienceContactsAny returns opted-in, non-blocked contacts with ANY of the
 // given tag IDs. If tagIDs is nil or empty, all opted-in non-blocked contacts
 // are returned (equivalent to "All contacts").
