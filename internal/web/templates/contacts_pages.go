@@ -811,7 +811,7 @@ func ImportMapColumns(headers []string, csvData string, rowCount int) templ.Comp
 		nameOpts := colOpts("name")
 		emailOpts := colOpts("email", "mail")
 		cityOpts := colOpts("city", "town", "location")
-		tagsOpts := colOpts("tag", "category", "segment")
+		tagsOpts := colOpts("tag", "category", "categories", "segment", "label", "vertical", "sector", "industry")
 
 		_, err := fmt.Fprintf(w, `
 <div class="imp-step-hd">

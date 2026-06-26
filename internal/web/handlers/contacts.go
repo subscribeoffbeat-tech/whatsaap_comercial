@@ -1096,6 +1096,9 @@ func (h *ContactsHandler) ImportConfirm(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	log.Printf("csv import: inserted=%d skipped=%d invalid=%d tags_col=%d per_row_tagged=%d batch_tags=%d",
+		inserted, skipped, invalidCount, m.TagsCol, len(tagsByPhone), len(m.Tags))
+
 	w.Header().Set("HX-Trigger", "contactsUpdated")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	templates.ImportResult(inserted, skipped, invalidCount).Render(r.Context(), w)
