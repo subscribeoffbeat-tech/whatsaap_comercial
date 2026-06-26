@@ -984,54 +984,16 @@ func WizardBasicsPage(agent *mw.AgentClaims, state WizardState, rates db.ConfigR
 			return err
 		}
 
-		mktRate := fmtRate(rates.Marketing, rates.GSTRate)
-		utlRate := fmtRate(rates.Utility, rates.GSTRate)
-		authRate := fmtRate(rates.Auth, rates.GSTRate)
-
-		mktSel := selAttr(state.Category, "marketing")
-		utlSel := selAttr(state.Category, "utility")
-		authSel := selAttr(state.Category, "authentication")
-
 		_, err := fmt.Fprintf(w, `
 <div class="wiz-fp-form wiz-fp-form--full">
 <div class="wiz-fp-hd">
   <h2>Campaign basics</h2>
-  <p>Name your campaign and set its type.</p>
+  <p>Name your campaign. Its type (marketing / utility / authentication) is taken from the template you pick next.</p>
 </div>
 
 <div class="field">
   <label for="cmp-name">Campaign name <span style="color:var(--danger)">*</span></label>
   <input id="cmp-name" type="text" name="name" value="%s" required placeholder="e.g. Diwali Sale 2026" autofocus>
-</div>
-
-<div>
-  <label class="form-label" style="margin-bottom:10px;display:block">Campaign type</label>
-  <div class="ctype-cards">
-    <label class="ctype-card">
-      <input class="ctype-card-radio" type="radio" name="category" value="marketing"%s>
-      <div class="ctype-card-body">
-        <div class="ctype-card-name">Marketing</div>
-        <div class="ctype-card-desc">Promotions, offers, announcements</div>
-      </div>
-      <span class="ctype-card-price">%s</span>
-    </label>
-    <label class="ctype-card">
-      <input class="ctype-card-radio" type="radio" name="category" value="utility"%s>
-      <div class="ctype-card-body">
-        <div class="ctype-card-name">Utility</div>
-        <div class="ctype-card-desc">Order updates, reminders, alerts</div>
-      </div>
-      <span class="ctype-card-price">%s</span>
-    </label>
-    <label class="ctype-card">
-      <input class="ctype-card-radio" type="radio" name="category" value="authentication"%s>
-      <div class="ctype-card-body">
-        <div class="ctype-card-name">Authentication</div>
-        <div class="ctype-card-desc">OTPs and verification codes</div>
-      </div>
-      <span class="ctype-card-price">%s</span>
-    </label>
-  </div>
 </div>
 
 <div class="field">
@@ -1041,9 +1003,6 @@ func WizardBasicsPage(agent *mw.AgentClaims, state WizardState, rates db.ConfigR
 </div>
 `,
 			html.EscapeString(state.Name),
-			mktSel, mktRate,
-			utlSel, utlRate,
-			authSel, authRate,
 			html.EscapeString(state.Notes),
 		)
 		if err != nil {

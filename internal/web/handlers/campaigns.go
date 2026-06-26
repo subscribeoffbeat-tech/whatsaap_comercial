@@ -109,16 +109,11 @@ func (h *CampaignHandler) WizardBasics(w http.ResponseWriter, r *http.Request) {
 	rates := db.LoadRates(r.Context(), h.pool)
 
 	name := strings.TrimSpace(r.FormValue("name"))
-	category := r.FormValue("category")
 	notes := strings.TrimSpace(r.FormValue("notes"))
 
-	switch category {
-	case "marketing", "utility", "authentication":
-	default:
-		category = "marketing"
-	}
-
-	state := templates.WizardState{Step: 1, Name: name, Category: category, Notes: notes}
+	// Category is not chosen here — it's derived from the approved template the
+	// owner selects in the next step (it's a fixed property of the template).
+	state := templates.WizardState{Step: 1, Name: name, Notes: notes}
 
 	if name == "" {
 		templates.WizardBasicsPage(agent, state, rates, "Campaign name is required.").Render(r.Context(), w)
@@ -166,6 +161,9 @@ func (h *CampaignHandler) WizardTemplate(w http.ResponseWriter, r *http.Request)
 	}
 
 	state.TemplateID = templateID
+	// Category is a fixed property of the approved template — use it (drives cost,
+	// US exclusion, frequency cap, and quiet hours).
+	state.Category = tmpl.Category
 	varNames := templates.ExtractVarNames(templates.TemplateBodyText(*tmpl))
 	state.HasVars = len(varNames) > 0
 	// Image/video/document templates need the real media uploaded before launch.
