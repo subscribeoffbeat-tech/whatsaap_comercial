@@ -138,24 +138,30 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
   <div x-data="tagFilter()" class="ct-tagfilter">
     <button type="button" @click="open=!open" class="ct-tagfilter-btn">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;opacity:.6"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.95 4.45A2.5 2.5 0 0 1 4.45 1.95h7.57c.8 0 1.56.32 2.12.88l7.9 7.9a3.58 3.58 0 0 1 0 5.06l-5.66 5.66a3.58 3.58 0 0 1-5.06 0l-7.9-7.9a3 3 0 0 1-.88-2.12V4.45ZM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>
-      <span x-text="selectedName || 'Filter by tag'" :style="selectedName ? '' : 'color:var(--text-secondary)'"></span>
+      <span x-text="label()" :style="selected.length ? '' : 'color:var(--text-secondary)'"></span>
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="margin-left:auto;flex-shrink:0"><path d="M3 4.5L6 7.5l3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
-    <button type="button" x-show="selectedId" x-cloak @click="pick(0,'')" class="ct-tagfilter-clear" title="Clear filter">&times;</button>
+    <button type="button" x-show="selected.length" x-cloak @click="clear()" class="ct-tagfilter-clear" title="Clear filter">&times;</button>
     <div x-show="open" x-cloak @click.outside="open=false" class="ct-tagfilter-pop">
       <input type="text" x-model="q" @click.stop placeholder="Search %d tags…" class="ct-tagfilter-search">
       <div class="ct-tagfilter-list">
-        <button type="button" @click="pick(0,'')" class="ct-tagfilter-opt" :class="{'is-sel':!selectedId}">All contacts</button>
         <template x-for="t in filtered()" :key="t.id">
-          <button type="button" @click="pick(t.id,t.name)" class="ct-tagfilter-opt" :class="{'is-sel':selectedId===t.id}" x-text="t.name"></button>
+          <label class="ct-tagfilter-opt" :class="{'is-sel':selected.includes(t.id)}">
+            <input type="checkbox" :value="t.id" x-model.number="selected" @change="apply()" style="margin:0">
+            <span x-text="t.name"></span>
+          </label>
         </template>
         <div x-show="filtered().length===0" class="ct-tagfilter-empty">No tags match.</div>
+      </div>
+      <div class="ct-tagfilter-foot" x-show="selected.length">
+        <span x-text="selected.length + ' selected — showing any match'"></span>
+        <button type="button" @click="clear()">Clear</button>
       </div>
     </div>
   </div>
 </div>
 
-<input type="hidden" id="ct-tag-input" name="tag" value="">
+<input type="hidden" id="ct-tag-input" name="tags" value="">
 
 <div id="contacts-table"
   hx-get="/contacts/table"
@@ -177,16 +183,26 @@ func ContactsPage(agent *mw.AgentClaims, tags []db.Tag, industries []string) tem
 var CT_TAGS = %s;
 function tagFilter() {
   return {
-    open:false, q:'', selectedId:0, selectedName:'', tags: CT_TAGS,
+    open:false, q:'', selected:[], tags: CT_TAGS,
     filtered() {
       var q = this.q.trim().toLowerCase();
       return q ? this.tags.filter(function(t){return t.name.toLowerCase().indexOf(q) >= 0}) : this.tags;
     },
-    pick(id, name) {
-      this.selectedId = id; this.selectedName = id ? name : ''; this.open = false; this.q = '';
-      document.getElementById('ct-tag-input').value = id || '';
+    label() {
+      if (!this.selected.length) return 'Filter by tag';
+      if (this.selected.length === 1) {
+        var id = this.selected[0];
+        var t = this.tags.filter(function(x){return x.id === id})[0];
+        return t ? t.name : '1 tag';
+      }
+      return this.selected.length + ' tags selected';
+    },
+    clear() { this.selected = []; this.apply(); },
+    apply() {
+      var val = this.selected.join(',');
+      document.getElementById('ct-tag-input').value = val;
       htmx.ajax('GET', '/contacts/table', {target:'#contacts-table', swap:'innerHTML',
-        values: { tag: id || '', search: (document.getElementById('ct-search')||{}).value || '' }});
+        values: { tags: val, search: (document.getElementById('ct-search')||{}).value || '' }});
     }
   };
 }

@@ -203,7 +203,14 @@ func (h *ContactsHandler) Table(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	offset, _ := strconv.Atoi(q.Get("offset"))
 	f := db.ListContactsFilter{Search: q.Get("search"), Offset: offset, Limit: 50}
-	if tagStr := q.Get("tag"); tagStr != "" {
+	// Multi-tag filter (comma-separated IDs) — show contacts with ANY selected tag.
+	if tagsStr := q.Get("tags"); tagsStr != "" {
+		for _, p := range strings.Split(tagsStr, ",") {
+			if id, err := strconv.ParseInt(strings.TrimSpace(p), 10, 64); err == nil {
+				f.TagIDs = append(f.TagIDs, id)
+			}
+		}
+	} else if tagStr := q.Get("tag"); tagStr != "" {
 		if id, err := strconv.ParseInt(tagStr, 10, 64); err == nil {
 			f.TagID = &id
 		}
@@ -224,7 +231,7 @@ func (h *ContactsHandler) Table(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	searchActive := q.Get("search") != "" || q.Get("tag") != "" || q.Get("opted_in_filter") != "" || q.Get("industry_filter") != ""
+	searchActive := q.Get("search") != "" || q.Get("tag") != "" || q.Get("tags") != "" || q.Get("opted_in_filter") != "" || q.Get("industry_filter") != ""
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := templates.ContactTable(contacts, total, offset, 50, searchActive).Render(r.Context(), w); err != nil {
 		log.Printf("contact table render: %v", err)

@@ -45,11 +45,12 @@ type ContactNote struct {
 
 // ListContactsFilter controls which contacts ListContacts returns.
 type ListContactsFilter struct {
-	Search   string // ILIKE match on wa_phone or name; "" = all
-	TagID    *int64 // filter by tag presence
-	OptedIn  *bool  // nil = all
-	Industry string // "" = all
-	Limit    int    // 0 → 50
+	Search   string  // ILIKE match on wa_phone or name; "" = all
+	TagID    *int64  // filter by single tag presence (legacy)
+	TagIDs   []int64 // filter by ANY of these tags (multi-select); takes precedence
+	OptedIn  *bool   // nil = all
+	Industry string  // "" = all
+	Limit    int     // 0 → 50
 	Offset   int
 }
 
@@ -96,6 +97,14 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 	if f.Industry != "" {
 		industry = &f.Industry
 	}
+	// Effective tag set: prefer the multi-select list; fall back to single TagID.
+	// nil → no tag filter (encoded as SQL NULL).
+	var tagIDs []int64
+	if len(f.TagIDs) > 0 {
+		tagIDs = f.TagIDs
+	} else if f.TagID != nil {
+		tagIDs = []int64{*f.TagID}
+	}
 
 	// Count query
 	var total int
@@ -103,12 +112,12 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 		SELECT COUNT(*)
 		FROM contacts c
 		WHERE ($1::text IS NULL OR c.wa_phone ILIKE $1 OR c.name ILIKE $1)
-		  AND ($2::bigint IS NULL OR EXISTS (
-		        SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag_id = $2
+		  AND ($2::bigint[] IS NULL OR EXISTS (
+		        SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag_id = ANY($2::bigint[])
 		      ))
 		  AND ($3::boolean IS NULL OR c.opted_in = $3)
 		  AND ($4::text IS NULL OR c.industry = $4)
-	`, search, f.TagID, f.OptedIn, industry).Scan(&total)
+	`, search, tagIDs, f.OptedIn, industry).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count contacts: %w", err)
 	}
@@ -126,15 +135,15 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 		LEFT JOIN tags t ON t.id = ct.tag_id
 		LEFT JOIN conversations conv ON conv.contact_id = c.id
 		WHERE ($1::text IS NULL OR c.wa_phone ILIKE $1 OR c.name ILIKE $1)
-		  AND ($2::bigint IS NULL OR EXISTS (
-		        SELECT 1 FROM contact_tags ct2 WHERE ct2.contact_id = c.id AND ct2.tag_id = $2
+		  AND ($2::bigint[] IS NULL OR EXISTS (
+		        SELECT 1 FROM contact_tags ct2 WHERE ct2.contact_id = c.id AND ct2.tag_id = ANY($2::bigint[])
 		      ))
 		  AND ($3::boolean IS NULL OR c.opted_in = $3)
 		  AND ($4::text IS NULL OR c.industry = $4)
 		GROUP BY c.id, conv.last_message_at
 		ORDER BY c.created_at DESC
 		LIMIT $5 OFFSET $6
-	`, search, f.TagID, f.OptedIn, industry, limit, f.Offset)
+	`, search, tagIDs, f.OptedIn, industry, limit, f.Offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list contacts: %w", err)
 	}

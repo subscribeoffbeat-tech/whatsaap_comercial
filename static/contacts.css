@@ -791,10 +791,13 @@
 .ct-tagfilter-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 50; width: 300px; background: var(--bg-card, #fff); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 8px; }
 .ct-tagfilter-search { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; margin-bottom: 6px; box-sizing: border-box; background: var(--bg-surface); color: var(--text-primary); }
 .ct-tagfilter-list { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-.ct-tagfilter-opt { text-align: left; padding: 8px 10px; border: none; background: none; border-radius: 6px; font-size: 13px; cursor: pointer; color: var(--text-primary); }
+.ct-tagfilter-opt { display: flex; align-items: center; gap: 8px; text-align: left; padding: 8px 10px; border: none; background: none; border-radius: 6px; font-size: 13px; cursor: pointer; color: var(--text-primary); }
 .ct-tagfilter-opt:hover { background: var(--bg-surface); }
 .ct-tagfilter-opt.is-sel { background: var(--accent-light, #e6f9f0); color: var(--accent); font-weight: 600; }
+.ct-tagfilter-opt input { accent-color: var(--accent); cursor: pointer; }
 .ct-tagfilter-empty { padding: 10px; font-size: 13px; color: var(--text-secondary); text-align: center; }
+.ct-tagfilter-foot { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px 2px; margin-top: 4px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); }
+.ct-tagfilter-foot button { border: none; background: none; color: var(--accent); cursor: pointer; font-size: 12px; font-weight: 600; }
 
 /* Table */
 .ct-tbl-wrap { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-card); }
