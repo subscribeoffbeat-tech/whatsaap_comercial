@@ -331,6 +331,10 @@ func (h *CampaignHandler) WizardAudience(w http.ResponseWriter, r *http.Request)
 	}
 	state.EligibleCount = len(eligible)
 	state.SkipReport = report
+	// Compute the estimated cost now so the Schedule page shows it (it was only
+	// being calculated on the way to Review, leaving Schedule showing ₹0).
+	rates := db.LoadRates(r.Context(), h.pool)
+	state.EstCost = campaigns.CalcTotalCost(state.Category, state.EligibleCount, rates)
 
 	dailySent, _ := db.DailyMessagesSent(r.Context(), h.pool)
 	dailyCap := db.DailyCap(r.Context(), h.pool)
