@@ -56,6 +56,7 @@ func ExtractVarNames(body string) []string {
 // form field. Serialised as base64-encoded JSON.
 type WizardState struct {
 	Step              int
+	EditingID         string // non-empty when editing an existing draft
 	Name              string
 	Category          string // marketing | utility | authentication (from Basics step)
 	Notes             string // internal notes (from Basics step)
@@ -124,7 +125,7 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign, dailyCap int64) temp
 			}
 		} else {
 			// Status tabs: map DB statuses to display tabs.
-			counts := map[string]int{"all": len(cs), "completed": 0, "sending": 0, "scheduled": 0, "paused": 0}
+			counts := map[string]int{"all": len(cs), "draft": 0, "completed": 0, "sending": 0, "scheduled": 0, "paused": 0}
 			for _, c := range cs {
 				switch c.Status {
 				case "completed":
@@ -135,6 +136,8 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign, dailyCap int64) temp
 					counts["scheduled"]++
 				case "paused":
 					counts["paused"]++
+				case "draft":
+					counts["draft"]++
 				}
 			}
 
@@ -142,6 +145,7 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign, dailyCap int64) temp
 <div x-data="{tab:'all'}" class="cmp-list-wrap">
 <div class="cmp-tabs" role="tablist">
 <button class="cmp-tab" role="tab" :class="{active:tab==='all'}" @click="tab='all'" type="button">All</button>
+<button class="cmp-tab" role="tab" :class="{active:tab==='draft'}" @click="tab='draft'" type="button">Drafts</button>
 <button class="cmp-tab" role="tab" :class="{active:tab==='completed'}" @click="tab='completed'" type="button">Completed</button>
 <button class="cmp-tab" role="tab" :class="{active:tab==='sending'}" @click="tab='sending'" type="button">Sending</button>
 <button class="cmp-tab" role="tab" :class="{active:tab==='scheduled'}" @click="tab='scheduled'" type="button">Scheduled</button>
@@ -357,13 +361,17 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport, failed 
 			badgeVariant = "neutral"
 		}
 
-		// Drafts can be launched (send now) from their own page.
+		// Draft controls: edit, launch (send now), and delete. Cancelled campaigns
+		// can also be deleted. Live/completed campaigns are kept for their reports.
+		editBtn := fmt.Sprintf(`<a href="/campaigns/%s/edit" class="btn btn-secondary btn-sm" style="margin-right:8px">Edit</a>`, report.ID)
+		launchForm := fmt.Sprintf(`<form method="post" action="/campaigns/%s/launch" style="display:inline;margin-right:8px"><button type="submit" class="btn btn-primary btn-sm">Launch campaign</button></form>`, report.ID)
+		deleteForm := fmt.Sprintf(`<form method="post" action="/campaigns/%s/delete" style="display:inline;margin-right:8px" onsubmit="return confirm('Delete this campaign? This cannot be undone.')"><button type="submit" class="btn btn-secondary btn-sm" style="color:var(--danger,#dc2626)">Delete</button></form>`, report.ID)
 		launchBtn := ""
-		if report.Status == "draft" {
-			launchBtn = fmt.Sprintf(
-				`<form method="post" action="/campaigns/%s/launch" style="display:inline;margin-right:8px">`+
-					`<button type="submit" class="btn btn-primary btn-sm">Launch campaign</button></form>`,
-				report.ID)
+		switch report.Status {
+		case "draft":
+			launchBtn = editBtn + launchForm + deleteForm
+		case "cancelled":
+			launchBtn = deleteForm
 		}
 
 		_, err := fmt.Fprintf(w, `

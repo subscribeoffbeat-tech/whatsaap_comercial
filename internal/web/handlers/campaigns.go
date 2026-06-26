@@ -67,6 +67,8 @@ func (h *CampaignHandler) Mount(r chi.Router) {
 	r.Post("/wizard/audience-preview", h.AudiencePreview)
 	r.Post("/wizard/schedule", h.WizardSchedule)
 	r.Post("/", h.Create)
+	r.Get("/{id}/edit", h.EditDraft)
+	r.Post("/{id}/delete", h.Delete)
 	r.Get("/{id}/report", h.Report)
 	r.Get("/{id}/progress", h.ProgressPartial)
 	r.Post("/{id}/launch", h.Launch)
@@ -530,7 +532,19 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ScheduledAt:       state.ScheduledAt,
 		TotalRecipients:   totalRecipients,
 	}
-	if err := db.CreateCampaign(ctx, h.pool, campaign); err != nil {
+	// Editing an existing draft updates it in place (and replaces its recipients);
+	// otherwise a new campaign is created.
+	if state.EditingID != "" {
+		campaign.ID = state.EditingID
+		if err := db.UpdateCampaignConfig(ctx, h.pool, campaign); err != nil {
+			http.Error(w, "update campaign: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := db.DeleteRecipients(ctx, h.pool, campaign.ID); err != nil {
+			http.Error(w, "reset recipients: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else if err := db.CreateCampaign(ctx, h.pool, campaign); err != nil {
 		http.Error(w, "create campaign: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -627,6 +641,68 @@ func (h *CampaignHandler) ProgressPartial(w http.ResponseWriter, r *http.Request
 		return
 	}
 	templates.CampaignProgressBar(*c).Render(r.Context(), w)
+}
+
+// EditDraft re-opens a draft in the wizard, pre-filled from the saved config.
+// On save (Create with action), the existing draft is updated, not duplicated.
+func (h *CampaignHandler) EditDraft(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	ctx := r.Context()
+	agent := mw.AgentFromCtx(ctx)
+
+	camp, err := db.GetCampaign(ctx, h.pool, id)
+	if err != nil {
+		http.Error(w, "load campaign: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if camp.Status != "draft" {
+		http.Redirect(w, r, "/campaigns/"+id+"/report", http.StatusSeeOther)
+		return
+	}
+	tmpl, err := db.GetTemplate(ctx, h.pool, camp.TemplateID)
+	if err != nil {
+		http.Error(w, "load template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	varNames := templates.ExtractVarNames(templates.TemplateBodyText(*tmpl))
+
+	state := templates.WizardState{
+		Step:              1,
+		EditingID:         id,
+		Name:              camp.Name,
+		Category:          camp.Category,
+		TemplateID:        camp.TemplateID,
+		HasVars:           len(varNames) > 0,
+		MediaHeaderFormat: tmpl.HeaderMediaFormat(),
+		HasMediaHeader:    tmpl.HeaderMediaFormat() != "",
+		VarMap:            camp.TemplateVariables,
+		Fallbacks:         camp.Fallbacks,
+		SegmentTagIDs:     camp.SegmentTags,
+		UseAllContacts:    len(camp.SegmentTags) == 0,
+	}
+	rates := db.LoadRates(ctx, h.pool)
+	templates.WizardBasicsPage(agent, state, rates, "").Render(ctx, w)
+}
+
+// Delete removes a draft (or cancelled) campaign. Live/sent campaigns are kept
+// to preserve their reports — those should be cancelled, not deleted.
+func (h *CampaignHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	ctx := r.Context()
+	camp, err := db.GetCampaign(ctx, h.pool, id)
+	if err != nil {
+		http.Error(w, "load campaign: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if camp.Status != "draft" && camp.Status != "cancelled" {
+		http.Error(w, "only draft or cancelled campaigns can be deleted", http.StatusForbidden)
+		return
+	}
+	if err := db.DeleteCampaign(ctx, h.pool, id); err != nil {
+		http.Error(w, "delete: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/campaigns", http.StatusSeeOther)
 }
 
 // Launch starts a draft campaign: it builds the send jobs for the draft's

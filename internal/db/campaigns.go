@@ -198,6 +198,43 @@ func ListRecentCampaigns(ctx context.Context, pool *pgxpool.Pool, n int) ([]Camp
 	return cs, rows.Err()
 }
 
+// DeleteCampaign removes a campaign. Its recipients cascade-delete; sent message
+// rows keep their history (the FK sets their campaign_id to NULL).
+func DeleteCampaign(ctx context.Context, pool *pgxpool.Pool, id string) error {
+	_, err := pool.Exec(ctx, `DELETE FROM campaigns WHERE id = $1::uuid`, id)
+	return err
+}
+
+// DeleteRecipients removes all recipients of a campaign (used before recreating
+// them when an edited draft's audience changes).
+func DeleteRecipients(ctx context.Context, pool *pgxpool.Pool, campaignID string) error {
+	_, err := pool.Exec(ctx, `DELETE FROM campaign_recipients WHERE campaign_id = $1::uuid`, campaignID)
+	return err
+}
+
+// UpdateCampaignConfig overwrites an existing campaign's editable configuration
+// (used when saving an edited draft).
+func UpdateCampaignConfig(ctx context.Context, pool *pgxpool.Pool, c *Campaign) error {
+	tvars := map[string]any{}
+	for k, v := range c.TemplateVariables {
+		tvars[k] = v
+	}
+	if len(c.Fallbacks) > 0 {
+		tvars["_fallbacks"] = c.Fallbacks
+	}
+	varJSON, _ := json.Marshal(tvars)
+	tagJSON, _ := json.Marshal(c.SegmentTags)
+	exclJSON, _ := json.Marshal(c.ExcludeTags)
+	_, err := pool.Exec(ctx, `
+		UPDATE campaigns SET
+		    name = $2, template_id = $3::uuid, template_variables = $4,
+		    segment_tags = $5, exclude_tags = $6, status = $7,
+		    scheduled_at = $8, total_recipients = $9, updated_at = NOW()
+		WHERE id = $1::uuid
+	`, c.ID, c.Name, c.TemplateID, varJSON, tagJSON, exclJSON, c.Status, c.ScheduledAt, c.TotalRecipients)
+	return err
+}
+
 // UpdateCampaignStatus updates status and timestamps accordingly.
 func UpdateCampaignStatus(ctx context.Context, pool *pgxpool.Pool, id, status string) error {
 	_, err := pool.Exec(ctx, `
