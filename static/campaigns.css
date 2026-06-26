@@ -906,7 +906,6 @@
 .cmp-dash { color: var(--text-secondary); }
 .cmp-tier-bar { display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: color-mix(in srgb,var(--accent) 6%,transparent); border: 1px solid color-mix(in srgb,var(--accent) 20%,transparent); border-radius: var(--radius); font-size: 14px; color: var(--text); }
 .cmp-tier-bar svg { color: var(--accent); flex-shrink: 0; }
-.badge-sending { background: color-mix(in srgb,var(--accent) 12%,transparent); color: var(--accent); border: 1.5px solid color-mix(in srgb,var(--accent) 30%,transparent); font-weight: 600; }
 .badge-warning { background: #fef9c3; color: #854d0e; border: 1.5px solid #fde68a; }
 .badge-purple { background: #f3e8ff; color: #6b21a8; }
 
@@ -916,6 +915,7 @@
 /* Header */
 .rpt-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .rpt-hd-left { display: flex; align-items: flex-start; gap: 12px; }
+.rpt-hd-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .rpt-back { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-card); flex-shrink: 0; margin-top: 4px; }
 .rpt-back:hover { background: var(--bg-surface); }
 .rpt-title { font-size: 22px; font-weight: 800; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

@@ -363,9 +363,9 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport, failed 
 
 		// Draft controls: edit, launch (send now), and delete. Cancelled campaigns
 		// can also be deleted. Live/completed campaigns are kept for their reports.
-		editBtn := fmt.Sprintf(`<a href="/campaigns/%s/edit" class="btn btn-secondary btn-sm" style="margin-right:8px">Edit</a>`, report.ID)
-		launchForm := fmt.Sprintf(`<form method="post" action="/campaigns/%s/launch" style="display:inline;margin-right:8px"><button type="submit" class="btn btn-primary btn-sm">Launch campaign</button></form>`, report.ID)
-		deleteForm := fmt.Sprintf(`<form method="post" action="/campaigns/%s/delete" style="display:inline;margin-right:8px" onsubmit="return confirm('Delete this campaign? This cannot be undone.')"><button type="submit" class="btn btn-secondary btn-sm" style="color:var(--danger,#dc2626)">Delete</button></form>`, report.ID)
+		editBtn := fmt.Sprintf(`<a href="/campaigns/%s/edit" class="btn btn-secondary btn-sm">Edit</a>`, report.ID)
+		launchForm := fmt.Sprintf(`<form method="post" action="/campaigns/%s/launch" style="margin:0"><button type="submit" class="btn btn-primary btn-sm">Launch campaign</button></form>`, report.ID)
+		deleteForm := fmt.Sprintf(`<form method="post" action="/campaigns/%s/delete" style="margin:0" onsubmit="return confirm('Delete this campaign? This cannot be undone.')"><button type="submit" class="btn btn-secondary btn-sm" style="color:var(--danger,#dc2626)">Delete</button></form>`, report.ID)
 		launchBtn := ""
 		switch report.Status {
 		case "draft":
@@ -384,9 +384,9 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport, failed 
 <div class="rpt-sub">%s &nbsp;<code class="rpt-tmpl-slug">%s</code></div>
 </div>
 </div>
-%s<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export">`+ExportIconSVG+`
+<div class="rpt-hd-actions">%s<a class="btn btn-secondary btn-sm" href="/campaigns/%s/export">`+ExportIconSVG+`
 Export
-</a>
+</a></div>
 </div>`,
 			html.EscapeString(report.Name),
 			BadgeHTML(badgeVariant, report.Status),
