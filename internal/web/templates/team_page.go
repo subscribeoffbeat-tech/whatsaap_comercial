@@ -109,7 +109,7 @@ func TeamPage(agents []*db.Agent, limits map[string]*db.AgentLimit, auditLog []*
 				html.EscapeString(a.Email),
 				teamRoleBadge(a.Role),
 				statusHTML,
-				a.CreatedAt.Format("02 Jan 2006"),
+				istFmt(a.CreatedAt, "02 Jan 2006"),
 				editBtn,
 			)
 			if err != nil {
@@ -306,7 +306,7 @@ func timeAgo(t time.Time) string {
 	case d < 7*24*time.Hour:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	default:
-		return t.Format("02 Jan")
+		return istFmt(t, "02 Jan")
 	}
 }
 

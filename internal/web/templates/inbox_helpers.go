@@ -12,6 +12,18 @@ import (
 	"whatsapptool/internal/whatsapp"
 )
 
+// winBadgeClass returns the 24h-window badge class based on urgency: green while
+// there's plenty of time, amber under 2 hours, red once the window has closed.
+func winBadgeClass(lastInboundAt *time.Time) string {
+	if !whatsapp.IsWindowOpen(lastInboundAt) {
+		return "win-badge win-closed"
+	}
+	if whatsapp.TimeUntilExpiry(lastInboundAt) < 2*time.Hour {
+		return "win-badge win-soon"
+	}
+	return "win-badge win-open"
+}
+
 // ── SVG status-tick string constants ─────────────────────────────────────────
 // Referenced by the msgStatus templ component (via @templ.Raw) and by
 // msgStatusHTML (server-side render used after live WS status updates via JS).
@@ -41,6 +53,25 @@ func msgStatusHTML(status string) string {
 		return `<span class="stat stat--queued" role="img" aria-label="Queued">` + svgQueued + `</span>`
 	}
 }
+
+// TickDataScript returns an inline <script> block that seeds the browser-side
+// msgStatusSVG() function with the server-side SVG constants. Both the initial
+// server render and live WebSocket status updates derive from the same strings,
+// so SVG paths are defined exactly once (here) instead of twice.
+func TickDataScript() string {
+	return `<script id="tick-data">` +
+		`var _tickSpan={` +
+		`sent:` + tickQ(`<span class="stat stat--sent" role="img" aria-label="Sent">`+svgSent+`</span>`) + `,` +
+		`delivered:` + tickQ(`<span class="stat stat--delivered" role="img" aria-label="Delivered">`+svgDouble+`</span>`) + `,` +
+		`read:` + tickQ(`<span class="stat stat--read" role="img" aria-label="Read">`+svgDouble+`</span>`) + `,` +
+		`failed:` + tickQ(`<span class="stat stat--failed" role="img" aria-label="Failed to send">`+svgFailed+`</span>`) + `,` +
+		`queued:` + tickQ(`<span class="stat stat--queued" role="img" aria-label="Queued">`+svgQueued+`</span>`) +
+		`};</script>`
+}
+
+// tickQ wraps s in a JS backtick template literal.
+// Safe because the SVG constants contain no backtick characters.
+func tickQ(s string) string { return "`" + s + "`" }
 
 // ── Template helpers ──────────────────────────────────────────────────────────
 
@@ -108,24 +139,25 @@ func avatarColor(name string) string {
 	return avatarPalette[h]
 }
 
-// shortDate formats a time as "02 Jan 2006".
+// shortDate formats a time as "02 Jan 2006" in IST.
 func shortDate(t time.Time) string {
-	return t.Local().Format("02 Jan 2006")
+	return istFmt(t, "02 Jan 2006")
 }
 
 func shortTime(t *time.Time) string {
 	if t == nil {
 		return ""
 	}
-	now := time.Now()
-	if t.Year() == now.Year() && t.YearDay() == now.YearDay() {
-		return t.Format("15:04")
+	ist := t.In(istLoc)
+	now := time.Now().In(istLoc)
+	if ist.Year() == now.Year() && ist.YearDay() == now.YearDay() {
+		return ist.Format("15:04")
 	}
-	return t.Format("02 Jan")
+	return ist.Format("02 Jan")
 }
 
 func shortTimestamp(t time.Time) string {
-	return t.Local().Format("15:04")
+	return istFmt(t, "15:04")
 }
 
 func truncate(s string, n int) string {

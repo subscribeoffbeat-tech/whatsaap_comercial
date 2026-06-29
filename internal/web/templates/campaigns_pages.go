@@ -172,12 +172,12 @@ func CampaignsPage(agent *mw.AgentClaims, cs []db.Campaign, dailyCap int64) temp
 				xShow := fmt.Sprintf(`tab==='all'||tab===%s`, jsLit(tabStatus))
 
 				// Date: prefer scheduled, then completed, then created.
-				dateStr := c.CreatedAt.Format("02 Jan 2006")
+				dateStr := istFmt(c.CreatedAt, "02 Jan 2006")
 				if c.CompletedAt != nil {
-					dateStr = c.CompletedAt.Format("02 Jan 2006")
+					dateStr = istFmt(*c.CompletedAt, "02 Jan 2006")
 				}
 				if c.ScheduledAt != nil {
-					dateStr = c.ScheduledAt.Format("02 Jan 2006")
+					dateStr = istFmt(*c.ScheduledAt, "02 Jan 2006")
 				}
 
 				// Status badge.
@@ -283,7 +283,7 @@ func CampaignRecipientRows(recipients []db.CampaignRecipient) templ.Component {
 			}
 			sentAt := "—"
 			if r.SentAt != nil {
-				sentAt = r.SentAt.Format("02 Jan 15:04")
+				sentAt = istFmt(*r.SentAt, "02 Jan 15:04")
 			}
 			note := "—"
 			if r.SkipReason != nil && *r.SkipReason != "" {
@@ -339,12 +339,12 @@ func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport, failed 
 		}
 
 		// ── Header ──────────────────────────────────────────────────────────
-		dateStr := report.CreatedAt.Format("02 Jan 2006")
+		dateStr := istFmt(report.CreatedAt, "02 Jan 2006")
 		if report.CompletedAt != nil {
-			dateStr = report.CompletedAt.Format("02 Jan 2006")
+			dateStr = istFmt(*report.CompletedAt, "02 Jan 2006")
 		}
 		if report.ScheduledAt != nil {
-			dateStr = report.ScheduledAt.Format("02 Jan 2006")
+			dateStr = istFmt(*report.ScheduledAt, "02 Jan 2006")
 		}
 
 		badgeVariant := report.Status
@@ -719,7 +719,7 @@ Export list</a>
 				avatarColor := avatarColor(fr.Name)
 				timeStr := "—"
 				if fr.FailedAt != nil {
-					timeStr = fr.FailedAt.Format("3:04 PM")
+					timeStr = istFmt(*fr.FailedAt, "3:04 PM")
 				}
 				catInfo := catBadgeMap[fr.FailCategory]
 				catBadge := fmt.Sprintf(`<span class="badge %s">%s</span>`, catInfo[0], catInfo[1])
@@ -1694,7 +1694,7 @@ func WizardReviewPage(agent *mw.AgentClaims, state WizardState, tmpl *db.Templat
 
 		schedInfo := "Send immediately"
 		if state.ScheduleType == "scheduled" && state.ScheduledAt != nil {
-			schedInfo = "Scheduled for " + state.ScheduledAt.Format("02 Jan 2006 15:04 IST")
+			schedInfo = "Scheduled for " + istFmt(*state.ScheduledAt, "02 Jan 2006 15:04") + " IST"
 		}
 		tmplName := ""
 		tmplCategory := state.Category

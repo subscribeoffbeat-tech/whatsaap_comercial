@@ -6,9 +6,24 @@ import (
 	"fmt"
 	"html"
 	"strings"
+	"time"
 
 	mw "whatsapptool/internal/web/middleware"
 )
+
+// istLoc is Asia/Kolkata. The whole app displays timestamps in IST (the business
+// runs in IST); times are stored in UTC and converted for display.
+var istLoc = func() *time.Location {
+	if loc, err := time.LoadLocation("Asia/Kolkata"); err == nil {
+		return loc
+	}
+	return time.FixedZone("IST", 5*60*60+30*60)
+}()
+
+// istFmt formats a time in IST using the given layout.
+func istFmt(t time.Time, layout string) string {
+	return t.In(istLoc).Format(layout)
+}
 
 // NavItem defines one entry in the topnav navigation.
 type NavItem struct {

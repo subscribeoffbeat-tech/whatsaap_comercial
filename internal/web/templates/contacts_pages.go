@@ -530,7 +530,7 @@ func ContactDetail(c *db.Contact, tags []db.Tag, notes []db.ContactNote, allTags
 			companyRow,
 			industryRow,
 			optedBadge,
-			c.CreatedAt.Format("02 Jan 2006"),
+			istFmt(c.CreatedAt, "02 Jan 2006"),
 		); err != nil {
 			return err
 		}
@@ -651,7 +651,7 @@ func ContactNoteList(notes []db.ContactNote) templ.Component {
 		for _, n := range notes {
 			if _, err := fmt.Fprintf(w,
 				`<div class="note-item"><div class="note-body">%s</div><div class="note-meta">%s</div></div>`,
-				html.EscapeString(n.Body), n.CreatedAt.Format("02 Jan 2006 15:04"),
+				html.EscapeString(n.Body), istFmt(n.CreatedAt, "02 Jan 2006 15:04"),
 			); err != nil {
 				return err
 			}
