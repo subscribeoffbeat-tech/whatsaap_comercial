@@ -599,6 +599,7 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 		} else {
 			fullCampaign := db.Campaign{
 				ID:                campaign.ID,
+				TemplateID:        tmpl.ID,
 				TemplateName:      tmpl.Name,
 				TemplateLanguage:  tmpl.Language,
 				Category:          tmpl.Category,
