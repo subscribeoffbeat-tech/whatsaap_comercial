@@ -34,6 +34,67 @@ func TemplateBodyText(tmpl db.Template) string {
 	return ""
 }
 
+// templateFooterText returns the FOOTER text from a template, if any.
+func templateFooterText(tmpl db.Template) string {
+	for _, comp := range tmpl.Components {
+		if t, _ := comp["type"].(string); strings.EqualFold(t, "FOOTER") {
+			s, _ := comp["text"].(string)
+			return s
+		}
+	}
+	return ""
+}
+
+// templateButtons returns the buttons (label + type) from a template, if any.
+func templateButtons(tmpl db.Template) []map[string]any {
+	for _, comp := range tmpl.Components {
+		if t, _ := comp["type"].(string); strings.EqualFold(t, "BUTTONS") {
+			raw, _ := comp["buttons"].([]any)
+			out := make([]map[string]any, 0, len(raw))
+			for _, b := range raw {
+				if m, ok := b.(map[string]any); ok {
+					out = append(out, m)
+				}
+			}
+			return out
+		}
+	}
+	return nil
+}
+
+// renderSentMessage builds a representative rendering of the campaign message:
+// the template body with WhatsApp formatting applied, and each {{n}} placeholder
+// replaced by a highlighted token showing the campaign's fallback value (with a
+// tooltip naming the personalised source). Each contact received their own
+// values; the fallback is shown as a stand-in. Returns safe HTML.
+func renderSentMessage(body string, varMap, fallbacks map[string]string) string {
+	h := formatWA(body) // escapes + *bold*/_italic_ + line breaks; {{n}} preserved
+	return varPlaceholderRe.ReplaceAllStringFunc(h, func(m string) string {
+		idx := varPlaceholderRe.FindStringSubmatch(m)[1]
+		val := ""
+		if fallbacks != nil {
+			val = strings.TrimSpace(fallbacks[idx])
+		}
+		src := ""
+		if varMap != nil {
+			src = strings.TrimSpace(varMap[idx])
+		}
+		label := val
+		if label == "" {
+			if src != "" {
+				label = src
+			} else {
+				label = "{{" + idx + "}}"
+			}
+		}
+		title := "Personalised per contact"
+		if src != "" {
+			title = "From " + src
+		}
+		return `<span class="rpt-msg-var" title="` + html.EscapeString(title) + `">` + html.EscapeString(label) + `</span>`
+	})
+}
+
 // ExtractVarNames returns sorted unique variable indices found in body text, e.g. ["1","2"].
 func ExtractVarNames(body string) []string {
 	seen := map[string]bool{}
@@ -332,7 +393,7 @@ func CampaignProgressBar(campaign db.Campaign) templ.Component {
 	})
 }
 
-func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport, failed []db.FailedRecipient, hourly []db.HourlyCount) templ.Component {
+func CampaignReportPage(agent *mw.AgentClaims, report db.CampaignReport, failed []db.FailedRecipient, hourly []db.HourlyCount, tmpl *db.Template) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if _, err := io.WriteString(w, ShellOpen(agent, "/campaigns", "Campaign — "+report.Name, "")); err != nil {
 			return err
@@ -545,6 +606,69 @@ Export
 		// Right column.
 		if _, err = io.WriteString(w, `<div class="rpt-right">`); err != nil {
 			return err
+		}
+
+		// Message-sent card — shows the actual template that went out, rendered
+		// as a WhatsApp bubble with header media, body, footer and buttons.
+		if tmpl != nil {
+			if _, err = io.WriteString(w, `<div class="rpt-card rpt-msg-card"><div class="rpt-card-title" style="margin-bottom:12px">Message sent</div><div class="rpt-msg-bubble">`); err != nil {
+				return err
+			}
+			// Header media chip (image/video/document templates).
+			if mt := report.HeaderMediaType; mt != "" {
+				icon := "📄"
+				switch mt {
+				case "image":
+					icon = "🖼️"
+				case "video":
+					icon = "🎬"
+				}
+				if _, err = fmt.Fprintf(w, `<div class="rpt-msg-media">%s %s header</div>`, icon, html.EscapeString(strings.Title(mt))); err != nil {
+					return err
+				}
+			}
+			// Body with variables substituted/highlighted.
+			body := renderSentMessage(TemplateBodyText(*tmpl), report.TemplateVariables, report.Fallbacks)
+			if _, err = fmt.Fprintf(w, `<div class="rpt-msg-text">%s</div>`, body); err != nil {
+				return err
+			}
+			// Footer.
+			if ft := templateFooterText(*tmpl); ft != "" {
+				if _, err = fmt.Fprintf(w, `<div class="rpt-msg-footer">%s</div>`, html.EscapeString(ft)); err != nil {
+					return err
+				}
+			}
+			if _, err = io.WriteString(w, `</div>`); err != nil { // rpt-msg-bubble
+				return err
+			}
+			// Buttons (below the bubble, WhatsApp-style).
+			if btns := templateButtons(*tmpl); len(btns) > 0 {
+				if _, err = io.WriteString(w, `<div class="rpt-msg-btns">`); err != nil {
+					return err
+				}
+				for _, b := range btns {
+					label, _ := b["text"].(string)
+					btype, _ := b["type"].(string)
+					icon := ""
+					switch strings.ToUpper(btype) {
+					case "URL":
+						icon = "🔗 "
+					case "PHONE_NUMBER":
+						icon = "📞 "
+					case "QUICK_REPLY":
+						icon = "↩️ "
+					}
+					if _, err = fmt.Fprintf(w, `<div class="rpt-msg-btn">%s%s</div>`, icon, html.EscapeString(label)); err != nil {
+						return err
+					}
+				}
+				if _, err = io.WriteString(w, `</div>`); err != nil {
+					return err
+				}
+			}
+			if _, err = io.WriteString(w, `<div class="rpt-msg-note">Highlighted values are fallbacks — each contact received their own personalised values.</div></div>`); err != nil {
+				return err
+			}
 		}
 
 		// Campaign info card.

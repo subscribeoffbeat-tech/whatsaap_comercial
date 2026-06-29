@@ -961,6 +961,50 @@
 .rpt-dist-hint { font-size: 12px; color: var(--text-secondary); text-align: center; }
 .rpt-dist-empty { font-size: 13px; color: var(--text-secondary); text-align: center; padding: 24px; }
 
+/* Message-sent card (shows the actual template that went out) */
+.rpt-msg-card { margin-bottom: 16px; }
+.rpt-msg-bubble {
+  background: #e7ffdb;
+  border: 1px solid #c5ebb4;
+  border-radius: 8px 8px 8px 2px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #111b21;
+  box-shadow: 0 1px 1px rgba(0,0,0,0.06);
+}
+.rpt-msg-media {
+  background: rgba(0,0,0,0.04);
+  border-radius: 6px;
+  padding: 14px 10px;
+  text-align: center;
+  font-size: 12px;
+  color: #4b5a63;
+  margin-bottom: 8px;
+}
+.rpt-msg-text { white-space: normal; word-break: break-word; }
+.rpt-msg-text strong { font-weight: 700; }
+.rpt-msg-footer { margin-top: 8px; font-size: 12px; color: #667781; }
+.rpt-msg-var {
+  background: #fff3cd;
+  border-bottom: 1px dashed #c9a227;
+  border-radius: 2px;
+  padding: 0 2px;
+  cursor: help;
+}
+.rpt-msg-btns { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.rpt-msg-btn {
+  text-align: center;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #027eb5;
+}
+.rpt-msg-note { margin-top: 10px; font-size: 11px; color: var(--text-secondary); line-height: 1.4; }
+
 /* Campaign info card */
 .rpt-info-card { }
 .rpt-info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; gap: 8px; }

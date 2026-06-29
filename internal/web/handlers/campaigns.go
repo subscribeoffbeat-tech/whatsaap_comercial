@@ -631,9 +631,14 @@ func (h *CampaignHandler) Report(w http.ResponseWriter, r *http.Request) {
 	}
 	failed, _ := db.GetFailedRecipients(r.Context(), h.pool, id)
 	hourly, _ := db.GetHourlySendDistribution(r.Context(), h.pool, id)
+	// Load the template so the report can show the actual message that went out.
+	tmpl, terr := db.GetTemplate(r.Context(), h.pool, report.TemplateID)
+	if terr != nil {
+		log.Printf("report load template %s: %v", report.TemplateID, terr)
+	}
 	agent := mw.AgentFromCtx(r.Context())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	templates.CampaignReportPage(agent, *report, failed, hourly).Render(r.Context(), w)
+	templates.CampaignReportPage(agent, *report, failed, hourly, tmpl).Render(r.Context(), w)
 }
 
 func (h *CampaignHandler) ProgressPartial(w http.ResponseWriter, r *http.Request) {
