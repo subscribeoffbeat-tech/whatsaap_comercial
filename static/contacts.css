@@ -654,6 +654,8 @@
   gap: 6px;
   min-width: 160px;
   max-width: 240px;
+  max-height: 280px;
+  overflow-y: auto;
 }
 .ct-tag-opt {
   display: inline-block;
