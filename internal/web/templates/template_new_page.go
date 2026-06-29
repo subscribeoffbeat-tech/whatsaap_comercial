@@ -165,14 +165,14 @@ func TemplateNewPage(
           @drop.prevent="handleFileDrop($event)">
           <!-- Hidden file input — accept changes based on header type -->
           <input type="file" x-ref="hfile" name="header_file"
-            :accept="headerType==='image'?'image/jpeg,image/png,image/webp':headerType==='video'?'video/mp4,video/3gpp':'application/pdf'"
+            :accept="headerType==='image'?'image/jpeg,image/png,image/webp':headerType==='video'?'video/mp4,video/3gpp':'.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt'"
             :disabled="headerType==='none'||headerType==='text'"
             @change="previewHeaderFile($event)"
             class="sr-only">
 
           <!-- Empty state -->
           <div x-show="!headerFileName">
-            <svg class="tn-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="32" height="32">
+            <svg class="tn-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="32" height="32">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="17 8 12 3 7 8"/>
               <line x1="12" y1="3" x2="12" y2="15"/>
@@ -191,7 +191,7 @@ func TemplateNewPage(
 
           <!-- Video / document preview -->
           <div x-show="headerFileName && headerType!=='image'">
-            <svg class="tn-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="28" height="28">
+            <svg class="tn-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="28" height="28">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
@@ -215,6 +215,18 @@ func TemplateNewPage(
       </div>
     </div>
 
+    <!-- Example values — appear automatically when the body has {{N}} variables -->
+    <div class="form-group" style="margin:0" x-show="vars.length>0" x-cloak>
+      <label class="form-label">Example values <span class="req">*</span></label>
+      <p class="tn-label-hint" style="margin:-2px 0 8px">Meta needs a sample for each variable to approve the template. These also act as the fallback when a contact's value is empty.</p>
+      <template x-for="n in vars" :key="n">
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+          <span style="font-family:ui-monospace,monospace;font-size:13px;color:var(--brand-600,#1a7f5a);min-width:46px;font-weight:600" x-text="'{{'+n+'}}'"></span>
+          <input type="text" class="form-input" :name="'var_example_'+n" x-model="examples[n]" placeholder="e.g. Rahul" style="flex:1" autocomplete="off">
+        </div>
+      </template>
+    </div>
+
     <div class="form-group" style="margin:0">
       <label class="form-label">Footer <span class="tn-label-hint">(optional)</span></label>
       <input type="text" name="footer" x-model="footer" class="form-input" placeholder="Reply STOP to opt out" maxlength="60">
@@ -233,16 +245,20 @@ func TemplateNewPage(
       <button type="button" class="btn btn-secondary btn-sm" @click="addButton()" x-show="buttons.length<3">+ Add button</button>
     </div>
     <template x-for="(btn,i) in buttons" :key="i">
-      <div class="tmpl-btn-row" style="margin-top:8px">
-        <select :name="'btn_type_'+i" x-model="btn.type" class="form-input form-input-sm" style="width:140px;flex-shrink:0">
-          <option value="QUICK_REPLY">Quick reply</option>
-          <option value="URL">URL</option>
-          <option value="PHONE_NUMBER">Call</option>
-        </select>
-        <input :name="'btn_label_'+i" x-model="btn.label" type="text" class="form-input" placeholder="Button label" style="flex:1;min-width:0">
-        <button type="button" @click="removeButton(i)" title="Remove" class="tn-del-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-        </button>
+      <div style="margin-top:8px">
+        <div class="tmpl-btn-row">
+          <select :name="'btn_type_'+i" x-model="btn.type" class="form-input form-input-sm" style="width:140px;flex-shrink:0">
+            <option value="QUICK_REPLY">Quick reply</option>
+            <option value="URL">Visit website (URL)</option>
+            <option value="PHONE_NUMBER">Call</option>
+          </select>
+          <input :name="'btn_label_'+i" x-model="btn.label" type="text" class="form-input" placeholder="Button label" maxlength="25" style="flex:1;min-width:0">
+          <button type="button" @click="removeButton(i)" title="Remove" class="tn-del-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
+        </div>
+        <input x-show="btn.type==='URL'" x-cloak :name="'btn_url_'+i" x-model="btn.url" type="url" class="form-input form-input-sm" placeholder="https://www.example.com" style="margin-top:6px;width:100%">
+        <input x-show="btn.type==='PHONE_NUMBER'" x-cloak :name="'btn_phone_'+i" x-model="btn.phone" type="tel" class="form-input form-input-sm" placeholder="+91 98765 43210" style="margin-top:6px;width:100%">
       </div>
     </template>
     <p x-show="buttons.length===0" x-cloak style="color:var(--text-muted);font-size:13px;margin:8px 0 0">No buttons added. Buttons let contacts quickly reply or take action.</p>
@@ -314,11 +330,12 @@ func TemplateNewPage(
 func tnXData(name, slug, category, language, body string) string {
 	prefix := fmt.Sprintf(
 		`{name:%s,slug:%s,category:%s,language:%s,headerType:'none',headerText:'',body:%s,footer:'',buttons:[],`+
-			`headerFileName:'',headerPreviewURL:'',`,
+			`headerFileName:'',headerPreviewURL:'',examples:{},`,
 		jsLit(name), jsLit(slug), jsLit(category), jsLit(language), jsLit(body),
 	)
 	suffix := `` +
 		`get varCount(){return(this.body.match(/\{\{\d+\}\}/g)||[]).length},` +
+		`get vars(){return[...new Set((this.body.match(/\{\{(\d+)\}\}/g)||[]).map(s=>s.replace(/[^0-9]/g,'')))].sort((a,b)=>a-b)},` +
 		`get charCount(){return this.body.length},` +
 		`updateSlug(){this.slug=this.name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')},` +
 		`addButton(){if(this.buttons.length<3)this.buttons.push({type:'QUICK_REPLY',label:'',url:'',phone:''})},` +
@@ -340,6 +357,7 @@ func tnXData(name, slug, category, language, body string) string {
 		`this.$nextTick(()=>{ta.selectionStart=ta.selectionEnd=s+txt.length;ta.focus()})},` +
 		`renderBody(t){if(!t)return'<span style="color:var(--text-muted)">Your message body...</span>';` +
 		`t=t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');` +
+		`t=t.replace(/\{\{(\d+)\}\}/g,(m,n)=>{const v=this.examples[n];return v?'<span class="preview-var-fill">'+v.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>':'<span class="preview-var-ph">'+m+'</span>'});` +
 		`t=t.replace(/\*([^*\n]+)\*/g,'<strong>$1</strong>');` +
 		`t=t.replace(/_([^_\n]+)_/g,'<em>$1</em>');` +
 		`return t.replace(/\n/g,'<br>')}}`
