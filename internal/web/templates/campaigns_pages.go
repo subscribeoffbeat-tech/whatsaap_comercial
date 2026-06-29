@@ -671,6 +671,12 @@ Export
 			}
 		}
 
+		// Close the sidebar (holds only the message card) and the two-column body;
+		// the three summary cards below sit together in their own full-width row.
+		if _, err = io.WriteString(w, `</div></div><div class="rpt-cards3">`); err != nil {
+			return err
+		}
+
 		// Campaign info card.
 		audienceStr := fmt.Sprintf("%s contacts", fmtNum(report.TotalRecipients))
 		_, err = fmt.Fprintf(w, `
@@ -757,10 +763,7 @@ Export
 			}
 		}
 
-		if _, err = io.WriteString(w, `</div>`); err != nil { // rpt-right
-			return err
-		}
-		if _, err = io.WriteString(w, `</div>`); err != nil { // rpt-body
+		if _, err = io.WriteString(w, `</div>`); err != nil { // rpt-cards3
 			return err
 		}
 

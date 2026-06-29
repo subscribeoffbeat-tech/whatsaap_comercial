@@ -1005,6 +1005,10 @@
 }
 .rpt-msg-note { margin-top: 10px; font-size: 11px; color: var(--text-secondary); line-height: 1.4; }
 
+/* Three summary cards in one full-width row (Campaign info, Read rate, Failure breakdown) */
+.rpt-cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .rpt-cards3 { grid-template-columns: 1fr; } }
+
 /* Campaign info card */
 .rpt-info-card { }
 .rpt-info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; gap: 8px; }
