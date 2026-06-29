@@ -21,7 +21,7 @@ templ NewContactPage(agent *mw.AgentClaims, tags []db.Tag, errMsg string) {
 		</div>
 		<div class="nc-body">
 			<div class="card nc-form-card">
-				<form method="POST" action="/contacts/new">
+				<form method="POST" action="/contacts/new" x-ref="ncForm" @submit.prevent="flushAndSubmit()">
 					<div class="nc-row">
 						<div class="form-group">
 							<label class="form-label">Full name <span class="nc-req">*</span></label>
@@ -142,6 +142,12 @@ templ NewContactPage(agent *mw.AgentClaims, tags []db.Tag, errMsg string) {
 	    },
 	    removeTag(n) {
 	      this.tags = this.tags.filter(t => t !== n);
+	    },
+	    flushAndSubmit() {
+	      // Capture any tag still typed in the box (user clicked Save without Enter),
+	      // then submit once Alpine has updated the hidden tags field.
+	      if (this.tagInput.trim()) { this.addTag(this.tagInput); this.tagInput = ''; }
+	      this.$nextTick(() => this.$refs.ncForm.submit());
 	    }
 	  };
 	}
