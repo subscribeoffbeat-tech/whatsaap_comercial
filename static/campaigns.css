@@ -1006,7 +1006,7 @@
 .rpt-msg-note { margin-top: 10px; font-size: 11px; color: var(--text-secondary); line-height: 1.4; }
 
 /* Three summary cards in one full-width row (Campaign info, Read rate, Failure breakdown) */
-.rpt-cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+.rpt-cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: stretch; }
 @media (max-width: 900px) { .rpt-cards3 { grid-template-columns: 1fr; } }
 
 /* Campaign info card */
