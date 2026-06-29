@@ -5,12 +5,42 @@ package templates
 
 import (
 	"fmt"
+	"html"
+	"regexp"
 	"strings"
 	"time"
 
 	"whatsapptool/internal/db"
 	"whatsapptool/internal/whatsapp"
 )
+
+// WhatsApp text formatting markers.
+var (
+	waMono   = regexp.MustCompile("```([^`\n]+?)```")
+	waBold   = regexp.MustCompile(`\*([^*\n]+?)\*`)
+	waItalic = regexp.MustCompile(`_([^_\n]+?)_`)
+	waStrike = regexp.MustCompile(`~([^~\n]+?)~`)
+)
+
+// formatWA renders WhatsApp text formatting (*bold*, _italic_, ~strike~,
+// ```mono```) plus line breaks into safe HTML. The text is HTML-escaped first,
+// so message content can never inject markup.
+func formatWA(s string) string {
+	s = html.EscapeString(s)
+	s = waMono.ReplaceAllString(s, "<code>$1</code>")
+	s = waBold.ReplaceAllString(s, "<strong>$1</strong>")
+	s = waItalic.ReplaceAllString(s, "<em>$1</em>")
+	s = waStrike.ReplaceAllString(s, "<del>$1</del>")
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	s = strings.ReplaceAll(s, "\n", "<br>")
+	return s
+}
+
+// messageBodyHTML is messageBody with WhatsApp formatting applied, as safe HTML.
+func messageBodyHTML(msg *db.Message) string {
+	return formatWA(messageBody(msg))
+}
 
 // winBadgeClass returns the 24h-window badge class based on urgency: green while
 // there's plenty of time, amber under 2 hours, red once the window has closed.
