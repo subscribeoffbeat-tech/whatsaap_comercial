@@ -922,7 +922,7 @@ func humanizeFailReason(reason, category string) string {
 		// which refers to the user blocking the business number on WhatsApp.
 		return "Skipped — contact opted out (or was blocked) before send"
 	case strings.Contains(r, "131049"):
-		return "Blocked by Meta's per-user marketing limit (healthy-ecosystem cap) — try a smaller send or space out marketing messages"
+		return "Meta declined this recipient (131049, healthy-ecosystem cap): Meta limits marketing per person across ALL businesses to prevent fatigue — not related to whether you messaged them before. Try again in a few days, or reach them with a utility/service message."
 	case strings.Contains(r, "131026"):
 		return "Undeliverable — recipient can't receive this message (not on WhatsApp, or can't receive this template type)"
 	case strings.Contains(r, "131047"):
