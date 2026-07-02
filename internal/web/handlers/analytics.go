@@ -38,6 +38,7 @@ func (h *AnalyticsHandler) Page(w http.ResponseWriter, r *http.Request) {
 	var overview db.OverviewStats
 	var byCat []db.CategoryCost
 	var byCamp []db.CampaignCost
+	var byMonth []db.MonthlyCost
 	var agentStats []db.AgentStat
 
 	if agent.Role == "agent" {
@@ -71,6 +72,10 @@ func (h *AnalyticsHandler) Page(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("analytics cost by campaign: %v", err)
 		}
+		byMonth, err = db.CostByMonth(ctx, h.pool)
+		if err != nil {
+			log.Printf("analytics cost by month: %v", err)
+		}
 		agentStats, err = db.AgentPerformance(ctx, h.pool, from, to)
 		if err != nil {
 			log.Printf("analytics agents: %v", err)
@@ -94,12 +99,19 @@ func (h *AnalyticsHandler) Page(w http.ResponseWriter, r *http.Request) {
 		Days:       days,
 		ByCat:      byCat,
 		ByCampaign: byCamp,
+		ByMonth:    byMonth,
 		Quality:    qi,
 		AgentStats: agentStats,
 	}).Render(ctx, w)
 }
 
 func (h *AnalyticsHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
+	// The export contains cost data — restrict to admin/manager, matching the
+	// on-page cost tables (which are hidden from agents).
+	if agent := mw.AgentFromCtx(r.Context()); agent == nil || agent.Role == "agent" {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	from, to := parseDateRange(r)
 	byCat, err := db.CostByCategory(r.Context(), h.pool, from, to)
 	if err != nil {

@@ -21,6 +21,7 @@ type AnalyticsData struct {
 	Days       []db.DayStat
 	ByCat      []db.CategoryCost
 	ByCampaign []db.CampaignCost
+	ByMonth    []db.MonthlyCost
 	Quality    db.QualityInfo
 	AgentStats []db.AgentStat
 }
@@ -108,8 +109,7 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
     <span class="an-date-arrow">→</span>
     <input type="date" name="to" value="%s">
     <button class="btn btn-primary btn-sm" type="submit">Apply</button>
-    <a class="btn btn-secondary btn-sm an-export-btn" href="/analytics/export.csv">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    <a class="btn btn-secondary btn-sm an-export-btn" href="/analytics/export.csv">` + ExportIconSVG + `
       Export CSV
     </a>
   </form>
@@ -304,6 +304,29 @@ func AnalyticsPage(agent *mw.AgentClaims, data AnalyticsData) templ.Component {
 		}
 
 		// ── Bottom: cost tables side-by-side (admin/manager only) ─────────────
+		// ── Monthly expense (running history, all months) ─────────────────────
+		if !isAgent && len(data.ByMonth) > 0 {
+			if _, err := io.WriteString(w, `<section class="an-section">
+<h2 class="an-section-title">Monthly expense</h2>
+<p class="an-section-sub">Total WhatsApp spend per calendar month (IST), incl. 18% GST.</p>
+<table class="an-table an-month-table">
+<thead><tr><th>MONTH</th><th>MESSAGES SENT</th><th>MARKETING</th><th>UTILITY</th><th>AUTH</th><th>TOTAL</th></tr></thead>
+<tbody>`); err != nil {
+				return err
+			}
+			for _, m := range data.ByMonth {
+				if _, err := fmt.Fprintf(w,
+					`<tr><td class="an-month-cell">%s</td><td>%d</td><td>₹%.2f</td><td>₹%.2f</td><td>₹%.2f</td><td class="an-month-total">₹%.2f</td></tr>`,
+					html.EscapeString(m.Label), m.Sent, m.Marketing, m.Utility, m.Auth, m.Total,
+				); err != nil {
+					return err
+				}
+			}
+			if _, err := io.WriteString(w, `</tbody></table></section>`); err != nil {
+				return err
+			}
+		}
+
 		if !isAgent && (len(data.ByCat) > 0 || len(data.ByCampaign) > 0) {
 			if _, err := io.WriteString(w, `<div class="an-bottom-grid">`); err != nil {
 				return err

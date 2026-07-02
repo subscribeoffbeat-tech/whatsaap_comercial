@@ -173,6 +173,53 @@ func CostByCampaign(ctx context.Context, pool *pgxpool.Pool, from, to time.Time)
 	return out, rows.Err()
 }
 
+// MonthlyCost holds spend for one calendar month (IST), split by category.
+type MonthlyCost struct {
+	Month     string  // sort key, "2006-01"
+	Label     string  // display, "Jan 2006"
+	Sent      int64   // successfully sent/delivered/read
+	Marketing float64
+	Utility   float64
+	Auth      float64
+	Total     float64
+}
+
+// CostByMonth returns per-month spend across ALL history (most recent first,
+// capped at 24 months). Months are bucketed in IST — the business runs in IST,
+// and "Cost this month" on the dashboard should line up with the current IST
+// month. Unlike the other cost queries this deliberately ignores the date-range
+// filter: the monthly view is a running history, not a windowed slice.
+func CostByMonth(ctx context.Context, pool *pgxpool.Pool) ([]MonthlyCost, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT
+		  to_char((created_at AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM')      AS ym,
+		  to_char((created_at AT TIME ZONE 'Asia/Kolkata'), 'Mon YYYY')     AS label,
+		  COUNT(*) FILTER (WHERE status IN ('sent','delivered','read'))     AS sent,
+		  COALESCE(SUM(cost_inr) FILTER (WHERE category = 'marketing'), 0)  AS marketing,
+		  COALESCE(SUM(cost_inr) FILTER (WHERE category = 'utility'), 0)    AS utility,
+		  COALESCE(SUM(cost_inr) FILTER (WHERE category IN ('auth','authentication')), 0) AS auth,
+		  COALESCE(SUM(cost_inr), 0)                                        AS total
+		FROM messages
+		WHERE direction = 'outbound'
+		GROUP BY 1, 2
+		ORDER BY 1 DESC
+		LIMIT 24
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MonthlyCost
+	for rows.Next() {
+		var m MonthlyCost
+		if err := rows.Scan(&m.Month, &m.Label, &m.Sent, &m.Marketing, &m.Utility, &m.Auth, &m.Total); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 // ── Quality / tier ────────────────────────────────────────────────────────────
 
 // QualityInfo holds the current tier, daily usage, and quality rating.
@@ -264,18 +311,21 @@ type AgentStat struct {
 	ConvsResolved  int64
 }
 
-// AgentPerformance returns per-agent stats for the date range.
+// AgentPerformance returns per-agent stats for the date range. Counts come from
+// independent subqueries so there's no cross-product fan-out between an agent's
+// messages and conversations.
 func AgentPerformance(ctx context.Context, pool *pgxpool.Pool, from, to time.Time) ([]AgentStat, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT
 		  a.id::text,
 		  a.name,
-		  COUNT(DISTINCT m.id) FILTER (WHERE m.direction='outbound' AND m.created_at >= $1 AND m.created_at < $2) AS messages_sent,
-		  COUNT(DISTINCT conv.id) FILTER (WHERE conv.status='closed' AND conv.updated_at >= $1 AND conv.updated_at < $2) AS convs_resolved
+		  (SELECT COUNT(*) FROM messages m
+		     WHERE m.sent_by = a.id AND m.direction = 'outbound'
+		       AND m.created_at >= $1 AND m.created_at < $2) AS messages_sent,
+		  (SELECT COUNT(*) FROM conversations conv
+		     WHERE conv.assigned_to = a.id AND conv.status = 'closed'
+		       AND conv.updated_at >= $1 AND conv.updated_at < $2) AS convs_resolved
 		FROM agents a
-		LEFT JOIN conversations conv ON conv.assigned_to = a.id
-		LEFT JOIN messages m ON m.sent_by = a.id
-		GROUP BY a.id, a.name
 		ORDER BY messages_sent DESC
 	`, from, to)
 	if err != nil {

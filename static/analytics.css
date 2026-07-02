@@ -50,6 +50,13 @@
   color: var(--text-primary);
   margin: 0 0 16px;
 }
+.an-section-sub {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin: -10px 0 14px;
+}
+.an-month-table .an-month-cell { font-weight: 600; }
+.an-month-table .an-month-total { font-weight: 700; }
 
 /* ── Main two-column grid: chart + sidebar ───────────────────────── */
 .an-main-grid {
