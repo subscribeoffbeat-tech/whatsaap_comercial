@@ -213,7 +213,9 @@ func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 	} else {
-		log.Printf("WARN: SMTP not configured; skipping reset email for agent %s", agent.ID)
+		// No SMTP — surface the reset link in the logs so an admin can recover it.
+		resetLink := h.baseURL + "/reset-password?token=" + url.QueryEscape(token)
+		log.Printf("WARN: SMTP not configured; password reset link for %s: %s", agent.Email, resetLink)
 	}
 
 	http.Redirect(w, r, successURL, http.StatusSeeOther)

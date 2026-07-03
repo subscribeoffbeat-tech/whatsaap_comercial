@@ -163,6 +163,13 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role := r.FormValue("role")
+	// Don't allow demoting the last active admin (would lock out admin access).
+	if role != "admin" {
+		if last, _ := db.IsLastActiveAdmin(r.Context(), h.pool, id); last {
+			http.Error(w, "Can't change role — this is the last active admin.", http.StatusBadRequest)
+			return
+		}
+	}
 	if err := db.UpdateAgentRole(r.Context(), h.pool, id, role); err != nil {
 		log.Printf("update role %s: %v", id, err)
 	}
@@ -179,6 +186,13 @@ func (h *TeamHandler) SetActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	active := r.FormValue("active") == "true"
+	// Don't allow deactivating the last active admin.
+	if !active {
+		if last, _ := db.IsLastActiveAdmin(r.Context(), h.pool, id); last {
+			http.Error(w, "Can't deactivate the last active admin.", http.StatusBadRequest)
+			return
+		}
+	}
 	if err := db.SetAgentActive(r.Context(), h.pool, id, active); err != nil {
 		log.Printf("set active %s: %v", id, err)
 	}
@@ -196,6 +210,10 @@ func (h *TeamHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	actor := mw.AgentFromCtx(r.Context())
 	if actor != nil && actor.ID == id {
 		http.Error(w, "cannot delete yourself", http.StatusBadRequest)
+		return
+	}
+	if last, _ := db.IsLastActiveAdmin(r.Context(), h.pool, id); last {
+		http.Error(w, "Can't delete the last active admin.", http.StatusBadRequest)
 		return
 	}
 	if err := db.DeleteAgent(r.Context(), h.pool, id); err != nil {
@@ -240,14 +258,17 @@ func (h *TeamHandler) Reinvite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	agentRec, agentErr := db.GetAgentByID(r.Context(), h.pool, id)
+	inviteURL := h.baseURL + "/invite/" + token
 	if agentErr == nil && h.mailer != nil {
 		actor := mw.AgentFromCtx(r.Context())
 		inviterName := "A colleague"
 		if actor != nil {
 			inviterName = actor.Name
 		}
-		inviteURL := h.baseURL + "/invite/" + token
 		go h.sendInviteEmail(agentRec.Email, agentRec.Name, inviterName, agentRec.Role, inviteURL, "")
+	} else {
+		// No SMTP — surface the refreshed link in the logs so it's recoverable.
+		log.Printf("WARN: SMTP not configured; refreshed invite link: %s", inviteURL)
 	}
 
 	destEmail := "the team member"

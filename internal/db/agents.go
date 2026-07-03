@@ -176,6 +176,28 @@ func DeleteAgent(ctx context.Context, pool *pgxpool.Pool, agentID string) error 
 	return err
 }
 
+// IsLastActiveAdmin reports whether the given agent is an active admin AND the
+// only one left — used to prevent locking the org out of admin access.
+func IsLastActiveAdmin(ctx context.Context, pool *pgxpool.Pool, agentID string) (bool, error) {
+	var role string
+	var active bool
+	if err := pool.QueryRow(ctx,
+		`SELECT role, active FROM agents WHERE id = $1::uuid`, agentID,
+	).Scan(&role, &active); err != nil {
+		return false, err
+	}
+	if role != "admin" || !active {
+		return false, nil
+	}
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM agents WHERE role = 'admin' AND active = TRUE`,
+	).Scan(&n); err != nil {
+		return false, err
+	}
+	return n <= 1, nil
+}
+
 // SetPasswordResetToken stores a 30-minute password reset token for the agent.
 func SetPasswordResetToken(ctx context.Context, pool *pgxpool.Pool, agentID, token string, expiresAt time.Time) error {
 	_, err := pool.Exec(ctx, `
@@ -229,6 +251,14 @@ func UpdateAgentProfile(ctx context.Context, pool *pgxpool.Pool, agentID, name, 
 		UPDATE agents SET name=$1, email=$2, phone=$3, timezone=$4, updated_at=NOW()
 		WHERE id=$5::uuid
 	`, name, email, phoneVal, timezone, agentID)
+	return err
+}
+
+// UpdateAgentPassword sets a new bcrypt password hash for the agent.
+func UpdateAgentPassword(ctx context.Context, pool *pgxpool.Pool, agentID, hash string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE agents SET password_hash = $1, updated_at = NOW() WHERE id = $2::uuid
+	`, hash, agentID)
 	return err
 }
 

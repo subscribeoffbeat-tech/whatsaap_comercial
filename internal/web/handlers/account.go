@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 
 	"whatsapptool/internal/db"
 	mw "whatsapptool/internal/web/middleware"
@@ -26,6 +27,7 @@ func NewAccountHandler(pool *pgxpool.Pool, jwtSecret []byte) *AccountHandler {
 func (h *AccountHandler) Mount(r chi.Router) {
 	r.Get("/", h.Page)
 	r.Post("/profile", h.UpdateProfile)
+	r.Post("/password", h.ChangePassword)
 	r.Post("/notifications", h.UpdateNotifications)
 	r.Post("/signout-all", h.SignOutAll)
 }
@@ -83,6 +85,48 @@ func (h *AccountHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 			SameSite: http.SameSiteLaxMode,
 			Expires:  time.Now().Add(24 * time.Hour),
 		})
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// ChangePassword verifies the current password and sets a new one.
+func (h *AccountHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	agent := mw.AgentFromCtx(r.Context())
+	if agent == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	_ = r.ParseForm()
+	current := r.FormValue("current_password")
+	next := r.FormValue("new_password")
+	confirm := r.FormValue("confirm_password")
+
+	if len(next) < 8 {
+		http.Error(w, "New password must be at least 8 characters.", http.StatusUnprocessableEntity)
+		return
+	}
+	if next != confirm {
+		http.Error(w, "New passwords don't match.", http.StatusUnprocessableEntity)
+		return
+	}
+	a, err := db.GetAgentByID(r.Context(), h.pool, agent.ID)
+	if err != nil {
+		http.Error(w, "account error", http.StatusInternalServerError)
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(a.PasswordHash), []byte(current)) != nil {
+		http.Error(w, "Current password is incorrect.", http.StatusUnprocessableEntity)
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(next), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if err := db.UpdateAgentPassword(r.Context(), h.pool, agent.ID, string(hash)); err != nil {
+		log.Printf("change password %s: %v", agent.ID, err)
+		http.Error(w, "failed to update password", http.StatusInternalServerError)
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
