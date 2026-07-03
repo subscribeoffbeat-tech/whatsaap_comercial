@@ -58,6 +58,44 @@ templ dashboardPageInner(agent *mw.AgentClaims, stats db.DashboardStats, recent 
 		} else if stats.QualityRating == "yellow" {
 			@templ.Raw(CalloutHTML("warning", "Your WhatsApp phone quality has dropped. Review your messaging to avoid sending restrictions."))
 		}
+		<!-- Quick action tiles (top, for fast access). These all lead to
+		     Manager+ pages, so hide them from agents to avoid 403 dead-ends. -->
+		if !isAgent {
+			<div class="qa-grid">
+			<a class="qa-tile" href="/campaigns/new">
+				<span class="qa-ico qa-ico--violet">
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
+				</span>
+				<span class="qa-label">New campaign</span>
+			</a>
+			<a class="qa-tile" href="/contacts/new">
+				<span class="qa-ico qa-ico--blue">
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+				</span>
+				<span class="qa-label">Add contact</span>
+			</a>
+			<a class="qa-tile" href="/contacts/import">
+				<span class="qa-ico qa-ico--green">
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+				</span>
+				<span class="qa-label">Import CSV</span>
+			</a>
+			<a class="qa-tile" href="/templates/new">
+				<span class="qa-ico qa-ico--amber">
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+				</span>
+				<span class="qa-label">New template</span>
+			</a>
+			if !isAgent {
+				<a class="qa-tile" href="/automation">
+					<span class="qa-ico qa-ico--pink">
+						<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+					</span>
+					<span class="qa-label">New automation</span>
+				</a>
+			}
+		</div>
+		}
 		<!-- 4 stat cards -->
 		<div class="stat-grid">
 			<div class="stat-card">
@@ -117,59 +155,44 @@ templ dashboardPageInner(agent *mw.AgentClaims, stats db.DashboardStats, recent 
 				<div style="font-size:12px;color:var(--text-muted);margin-top:6px">Meta phone rating</div>
 			</div>
 		</div>
-		<!-- Bottom: campaigns table + quick actions -->
-		<div class="g-grid g-split-8-4" style="align-items:start">
-			<div class="card-static">
-				<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-					<h2 style="margin:0;font-size:15px;font-weight:600;color:var(--text-strong)">Recent campaigns</h2>
-					<a class="btn btn-secondary btn-sm" href="/campaigns">View all</a>
-				</div>
-				if len(recent) == 0 {
-					@templ.Raw(EmptyStateHTML(EmptyIconCampaigns, "No campaigns yet", "Launch your first broadcast to get started.", []EmptyAction{{Label: "New campaign", Primary: true, HREF: "/campaigns/new"}}))
-				} else {
-					<table class="an-table tbl">
-						<thead>
+		<!-- Recent campaigns (full width) -->
+		<div class="card-static">
+			<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+				<h2 style="margin:0;font-size:15px;font-weight:600;color:var(--text-strong)">Recent campaigns</h2>
+				<a class="btn btn-secondary btn-sm" href="/campaigns">View all</a>
+			</div>
+			if len(recent) == 0 {
+				@templ.Raw(EmptyStateHTML(EmptyIconCampaigns, "No campaigns yet", "Launch your first broadcast to get started.", []EmptyAction{{Label: "New campaign", Primary: true, HREF: "/campaigns/new"}}))
+			} else {
+				<table class="an-table tbl">
+					<thead>
+						<tr>
+							<th scope="col">CAMPAIGN</th>
+							<th scope="col">STATUS</th>
+							<th scope="col">SENT</th>
+							<th scope="col">DELIVERED</th>
+							<th scope="col">FAILED</th>
+							if !isAgent {
+								<th scope="col">COST</th>
+							}
+						</tr>
+					</thead>
+					<tbody>
+						for _, c := range recent {
 							<tr>
-								<th scope="col">CAMPAIGN</th>
-								<th scope="col">STATUS</th>
-								<th scope="col">SENT</th>
-								<th scope="col">DELIVERED</th>
-								<th scope="col">FAILED</th>
+								<td><a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/report", c.ID)) } style="font-weight:500">{ c.Name }</a></td>
+								<td>@templ.Raw(BadgeHTML(c.Status, c.Status))</td>
+								<td>{ strconv.Itoa(c.SentCount) }</td>
+								<td>{ strconv.Itoa(c.DeliveredCount) }</td>
+								<td>{ strconv.Itoa(c.FailedCount) }</td>
 								if !isAgent {
-									<th scope="col">COST</th>
+									<td>&#8377;{ fmt.Sprintf("%.2f", c.CostTotalINR) }</td>
 								}
 							</tr>
-						</thead>
-						<tbody>
-							for _, c := range recent {
-								<tr>
-									<td><a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/report", c.ID)) } style="font-weight:500">{ c.Name }</a></td>
-									<td>@templ.Raw(BadgeHTML(c.Status, c.Status))</td>
-									<td>{ strconv.Itoa(c.SentCount) }</td>
-									<td>{ strconv.Itoa(c.DeliveredCount) }</td>
-									<td>{ strconv.Itoa(c.FailedCount) }</td>
-									if !isAgent {
-										<td>&#8377;{ fmt.Sprintf("%.2f", c.CostTotalINR) }</td>
-									}
-								</tr>
-							}
-						</tbody>
-					</table>
-				}
-			</div>
-			<div class="card-static">
-				<h2 style="margin:0 0 14px;font-size:15px;font-weight:600;color:var(--text-strong)">Quick actions</h2>
-				<div style="display:flex;flex-direction:column;gap:8px">
-					<a class="btn btn-primary" href="/campaigns/new" style="text-align:center">+ New campaign</a>
-					<a class="btn btn-secondary btn-sm" href="/inbox" style="text-align:center">💬 Open inbox</a>
-					<a class="btn btn-secondary btn-sm" href="/contacts" style="text-align:center">👥 View contacts</a>
-					<a class="btn btn-secondary btn-sm" href="/contacts/import" style="text-align:center">⬆ Import contacts</a>
-					<a class="btn btn-secondary btn-sm" href="/templates" style="text-align:center">📋 Templates</a>
-					if !isAgent {
-						<a class="btn btn-secondary btn-sm" href="/analytics" style="text-align:center">📊 Analytics</a>
-					}
-				</div>
-			</div>
+						}
+					</tbody>
+				</table>
+			}
 		</div>
 	</div>
 	@templ.Raw(ShellClose())
