@@ -1,0 +1,124 @@
+package templates
+
+import (
+	"fmt"
+	"whatsapptool/internal/db"
+	mw "whatsapptool/internal/web/middleware"
+)
+
+// EditContactPage mirrors the New Contact form layout, pre-filled for editing.
+templ EditContactPage(agent *mw.AgentClaims, c *db.Contact, tags []db.Tag, currentTags []string, errMsg string) {
+	@templ.Raw(ShellOpen(agent, "/contacts", "Edit Contact", ""))
+	<div class="page-wrap nc-pg" x-data={ editContactXData(c, currentTags) }>
+		if errMsg != "" {
+			@templ.Raw(FormBanner(errMsg))
+		}
+		<div class="nc-hd">
+			@Button(BtnGhost, BtnMd, fmt.Sprintf("/contacts/%s/view", c.ID), ncChevronLeftSVG, "", templ.Attributes{"aria-label": "Back to profile"})
+			<div>
+				<div class="screen-title">Edit Contact</div>
+				<div class="screen-subtitle">Update this contact's details</div>
+			</div>
+		</div>
+		<div class="nc-body">
+			<div class="card nc-form-card">
+				<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/contacts/%s/update", c.ID)) }>
+					<div class="nc-row">
+						<div class="form-group">
+							<label class="form-label">Full name <span class="nc-req">*</span></label>
+							<input class="form-input" type="text" name="name" x-model="name" placeholder="Priya Sharma" required autocomplete="off"/>
+						</div>
+						<div class="form-group">
+							<label class="form-label">WhatsApp number <span class="nc-req">*</span></label>
+							<input class="form-input" type="tel" name="phone" x-model="phone" placeholder="+91 98765 43210" required/>
+						</div>
+					</div>
+					<div class="nc-row">
+						<div class="form-group">
+							<label class="form-label">Email <span class="nc-opt">(optional)</span></label>
+							<input class="form-input" type="email" name="email" x-model="email" placeholder="priya@example.com"/>
+						</div>
+						<div class="form-group">
+							<label class="form-label">City <span class="nc-opt">(optional)</span></label>
+							<select class="form-input" name="city" x-model="city">
+								<option value="">Select city...</option>
+								for _, ct := range indianCities {
+									<option value={ ct }>{ ct }</option>
+								}
+							</select>
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="form-label">Tags <span class="nc-opt">(optional)</span></label>
+						<div class="nc-tag-pills">
+							if len(tags) == 0 {
+								<span style="color:var(--text-secondary);font-size:13px">No tags yet — create tags in the contacts list first.</span>
+							}
+							for _, t := range tags {
+								@TagPill(TagToggle, t.Name, TagColorDefault, false, templ.Attributes{
+									":class": fmt.Sprintf("{'tag-pill--on':tags.includes('%s')}", jsStr(t.Name)),
+									"@click": fmt.Sprintf("toggleTag('%s')", jsStr(t.Name)),
+								})
+							}
+						</div>
+						<input type="hidden" name="tags" :value="tags.join(',')"/>
+					</div>
+					<label class="nc-consent-row">
+						<div>
+							<div class="nc-consent-title">Marketing consent</div>
+							<div class="nc-consent-desc">Contact has opted in to receive WhatsApp messages</div>
+						</div>
+						@Toggle("opt_in", c.OptedIn, templ.Attributes{"value": "on", "x-model": "optedIn"})
+					</label>
+					<div class="form-group" style="margin-top:20px">
+						<label class="form-label">Add note <span class="nc-opt">(optional)</span></label>
+						<textarea class="form-input nc-notes" name="notes" placeholder="Add an internal note about this contact..." rows="3"></textarea>
+					</div>
+					<div class="nc-footer">
+						@Button(BtnSecondary, BtnMd, fmt.Sprintf("/contacts/%s/view", c.ID), "", "Cancel", nil)
+						@Button(BtnPrimary, BtnMd, "", "", "Save changes", templ.Attributes{
+							"type":      "submit",
+							":disabled": "!name.trim() || phone.trim().length < 5",
+							":class":    "{'btn-disabled':!name.trim() || phone.trim().length < 5}",
+						})
+					</div>
+				</form>
+			</div>
+			<div class="nc-preview-card">
+				<div class="nc-preview-label">CONTACT PREVIEW</div>
+				<div class="nc-preview-body">
+					<div class="nc-preview-av" x-text="initials"></div>
+					<div>
+						<div class="nc-preview-name" x-text="name.trim() || 'Full name'"></div>
+						<div class="nc-preview-city" x-text="city || 'City'"></div>
+					</div>
+				</div>
+				<div class="nc-preview-phone" x-text="phone || '+91'"></div>
+				<div class="nc-preview-consent">
+					<span class="consent-dot" :class="optedIn ? 'consent-dot--in' : 'consent-dot--out'"></span>
+					<span x-text="optedIn ? 'Opted in' : 'Opted out'" :style="optedIn ? 'color:var(--accent)' : 'color:var(--danger)'"></span>
+				</div>
+			</div>
+		</div>
+		<script>
+		function ncEditApp(init) {
+		  return {
+		    name: init.name || '', phone: init.phone || '+91', email: init.email || '',
+		    city: init.city || '', optedIn: !!init.optedIn, tags: init.tags || [],
+		    get initials() {
+		      const p = this.name.trim().split(/\s+/).filter(Boolean);
+		      if (!p.length) return '?';
+		      let i = p[0].charAt(0);
+		      if (p.length > 1) i += p[p.length-1].charAt(0);
+		      return i.toUpperCase();
+		    },
+		    toggleTag(n) {
+		      const i = this.tags.indexOf(n);
+		      if (i >= 0) this.tags.splice(i,1); else this.tags.push(n);
+		    }
+		  };
+		}
+		</script>
+	</div>
+	@templ.Raw(ShellClose())
+}

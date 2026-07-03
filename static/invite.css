@@ -16,33 +16,11 @@
   .inv-preview    { display: none; }
 }
 
-/* ── Back button ─────────────────────────────────────────────────── */
-.inv-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-muted);
-  text-decoration: none;
-  margin-bottom: 20px;
-}
-.inv-back:hover { color: var(--text-primary); }
-.inv-back-icon {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-card);
-}
 
 /* ── Form card ───────────────────────────────────────────────────── */
 .inv-form-card { padding: 24px 28px; }
 .inv-form-hd   { margin-bottom: 22px; }
-.inv-form-title { font-size: 22px; font-weight: 700; color: var(--text-primary); }
+.inv-form-title { font-size: 22px; font-weight: 700; color: var(--text); }
 .inv-form-sub   { font-size: 13px; color: var(--text-muted); margin-top: 5px; }
 
 /* Two-field row: name + email */
@@ -99,8 +77,8 @@
   box-shadow: var(--shadow-card);
 }
 .inv-email-hd {
-  background: var(--success, #10b981);
-  color: #fff;
+  background: var(--success);
+  color: var(--text-on-fill);
   padding: 14px 18px;
   display: flex;
   align-items: center;
@@ -115,14 +93,14 @@
 }
 .inv-email-msg {
   font-size: 14px;
-  color: var(--text-primary);
+  color: var(--text);
   line-height: 1.55;
   margin-bottom: 14px;
 }
 .inv-email-cta {
   display: block;
-  background: var(--success, #10b981);
-  color: #fff;
+  background: var(--success);
+  color: var(--text-on-fill);
   text-align: center;
   padding: 12px;
   border-radius: var(--radius);

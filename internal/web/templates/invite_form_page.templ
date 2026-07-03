@@ -1,0 +1,93 @@
+package templates
+
+import (
+	"fmt"
+	mw "whatsapptool/internal/web/middleware"
+)
+
+templ InviteFormPage(agent *mw.AgentClaims, errMsg string, prefillName, prefillEmail, prefillRole, prefillMsg string) {
+	@templ.Raw(ShellOpen(agent, "/team", "Invite team member", ""))
+	<div class="page-wrap">
+		@Button(BtnGhost, BtnMd, "/team", invBackSVG, "", templ.Attributes{
+			"aria-label": "Back to team",
+			"style":      "margin-bottom:20px",
+		})
+		<div class="inv-page-wrap" x-data="inviteApp()">
+			<!-- Form card -->
+			<div class="card-static inv-form-card">
+				if errMsg != "" {
+					@templ.Raw(FormBanner(errMsg))
+				}
+				<div class="inv-form-hd">
+					<div class="inv-form-title">Invite team member</div>
+					<div class="inv-form-sub">They'll receive an email to join your workspace</div>
+				</div>
+				<form method="post" action="/team/invite">
+					<div class="inv-row-2">
+						<div class="form-group">
+							<label class="form-label" for="inv-name">Full name <span class="req">*</span></label>
+							<input id="inv-name" class="form-input" type="text" name="name" value={ prefillName }
+								placeholder="Aarav Mehta" required x-model="invName"
+								@input.debounce="invName=$el.value"/>
+						</div>
+						<div class="form-group">
+							<label class="form-label" for="inv-email">Work email <span class="req">*</span></label>
+							<input id="inv-email" class="form-input" type="email" name="email" value={ prefillEmail }
+								placeholder="aarav@theoffbeat.agency" required/>
+						</div>
+					</div>
+					<div class="form-group">
+						<div class="inv-role-label">Role</div>
+						<div class="inv-role-cards">
+							for _, rc := range invRoleCards {
+								<label class="au-option-card" :class={ fmt.Sprintf("{'au-option-card--sel':role==='%s'}", rc.val) }>
+									if rc.val == invPrefillRole(prefillRole) {
+										<input type="radio" name="role" value={ rc.val } x-model="role" class="sr-only" checked/>
+									} else {
+										<input type="radio" name="role" value={ rc.val } x-model="role" class="sr-only"/>
+									}
+									<span class="au-option-body">
+										<span class="au-option-title">{ rc.title }</span>
+										<span class="au-option-desc">{ rc.desc }</span>
+									</span>
+									<span class="au-option-check" :class={ fmt.Sprintf("{'au-option-check--on':role==='%s'}", rc.val) }></span>
+								</label>
+							}
+						</div>
+					</div>
+					<div class="form-group">
+						<label class="form-label" for="inv-msg">Personal message <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+						<textarea id="inv-msg" class="form-input" name="personal_message" rows="3"
+							placeholder="Hey! I&#39;d like you to join our WhatsApp workspace on Offbeat ChatFlow...">{ prefillMsg }</textarea>
+					</div>
+					<div class="inv-form-footer">
+						@Button(BtnSecondary, BtnMd, "/team", "", "Cancel", nil)
+						@Button(BtnPrimary, BtnMd, "", "", "Send invite", templ.Attributes{"type": "submit"})
+					</div>
+				</form>
+			</div>
+			<!-- Preview sidebar -->
+			<aside class="inv-preview">
+				<div class="inv-email-card">
+					<div class="inv-email-hd">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+						Offbeat ChatFlow
+					</div>
+					<div class="inv-email-body">
+						<div class="inv-email-msg">
+							<span x-text="(invName||'Your colleague')"></span> has invited you to join their WhatsApp workspace.
+						</div>
+						<div class="inv-email-cta">Accept invitation →</div>
+						<div class="inv-email-expiry">Sent to their email. Expires in 7 days.</div>
+					</div>
+				</div>
+				<div class="inv-role-preview">
+					<div class="inv-role-preview-label">Role permissions</div>
+					<div class="inv-role-preview-desc" x-text="roleDesc"></div>
+				</div>
+			</aside>
+		</div>
+	</div>
+	@templ.Raw(inviteAppScript(invPrefillRole(prefillRole), inviterName(agent)))
+	@templ.Raw(ShellClose())
+}

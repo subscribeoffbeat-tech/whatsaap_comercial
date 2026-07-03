@@ -1,0 +1,125 @@
+package templates
+
+import (
+	"whatsapptool/internal/db"
+	mw "whatsapptool/internal/web/middleware"
+)
+
+templ AccountPage(agent *mw.AgentClaims, a *db.Agent, flash string) {
+	@templ.Raw(ShellOpen(agent, "/account", "My Account", ""))
+	<div class="page-wrap acct-wrap">
+		if flash != "" {
+			@templ.Raw(FormBanner(flash))
+		}
+		<div class="acct-hd">
+			<div class="screen-title">My Account</div>
+			<div class="screen-subtitle">Manage your profile, password and notifications</div>
+		</div>
+		<div class="acct-cards">
+			<!-- Profile card -->
+			<div class="card acct-card">
+				<div class="acct-card-title">Profile</div>
+				<div class="acct-profile-hd">
+					<div class="acct-av">{ avatarInitials(a.Name) }</div>
+					<div>
+						<div class="acct-name">{ a.Name }</div>
+						<div class="acct-email-disp">{ a.Email }</div>
+						@StatusBadge(roleBadgeVariant(acctRole(agent, a)), roleBadgeLabel(acctRole(agent, a)))
+					</div>
+				</div>
+				<form hx-post="/account/profile" hx-swap="none"
+					hx-on:htmx:after-request="if(event.detail.successful)window.__showToast('success','Profile saved')">
+					<div class="acct-form-grid">
+						<div class="form-group">
+							<label class="form-label">Full name</label>
+							<input class="form-input" type="text" name="name" value={ a.Name } required/>
+						</div>
+						<div class="form-group">
+							<label class="form-label">Email</label>
+							<input class="form-input" type="email" name="email" value={ a.Email } required/>
+						</div>
+						<div class="form-group">
+							<label class="form-label">Phone</label>
+							<input class="form-input" type="tel" name="phone" value={ acctPhone(a) } placeholder="+91 98765 43210"/>
+						</div>
+						<div class="form-group">
+							<label class="form-label">Timezone</label>
+							<select class="form-input" name="timezone">
+								for _, tz := range timezones {
+									if a.Timezone == tz.v {
+										<option value={ tz.v } selected>{ tz.l }</option>
+									} else {
+										<option value={ tz.v }>{ tz.l }</option>
+									}
+								}
+							</select>
+						</div>
+					</div>
+					<div class="acct-form-footer">
+						@Button(BtnPrimary, BtnMd, "", "", "Save profile", templ.Attributes{"type": "submit"})
+					</div>
+				</form>
+			</div>
+			<!-- Password card -->
+			<div class="card acct-card">
+				<div class="acct-card-title">Password</div>
+				<form hx-post="/account/password" hx-swap="none"
+					hx-on:htmx:after-request="if(event.detail.successful){window.__showToast('success','Password updated');this.reset()}">
+					<div class="acct-form-grid">
+						<div class="form-group">
+							<label class="form-label">Current password</label>
+							<input class="form-input" type="password" name="current_password" autocomplete="current-password" required/>
+						</div>
+						<div class="form-group">
+							<label class="form-label">New password <span style="font-weight:400;font-size:12px;color:var(--text-muted)">(min 8 chars)</span></label>
+							<input class="form-input" type="password" name="new_password" autocomplete="new-password" minlength="8" required/>
+						</div>
+						<div class="form-group">
+							<label class="form-label">Confirm new password</label>
+							<input class="form-input" type="password" name="confirm_password" autocomplete="new-password" minlength="8" required/>
+						</div>
+					</div>
+					<div class="acct-form-footer">
+						@Button(BtnPrimary, BtnMd, "", "", "Update password", templ.Attributes{"type": "submit"})
+					</div>
+				</form>
+			</div>
+			<!-- Notifications card -->
+			<div class="card acct-card">
+				<div class="acct-card-title">Notifications</div>
+				<form id="notif-form">
+					@acctNotifRow("notif_new_message", "New message", "Alert when a contact sends a message to inbox", acctNotifPref(a, "notif_new_message"))
+					@acctNotifRow("notif_campaign_complete", "Campaign complete", "Notify when a campaign finishes sending", acctNotifPref(a, "notif_campaign_complete"))
+					@acctNotifRow("notif_team_activity", "Team activity", "Updates on what your team members are doing", acctNotifPref(a, "notif_team_activity"))
+					@acctNotifRow("notif_weekly_report", "Weekly report", "Summary email every Monday morning", acctNotifPref(a, "notif_weekly_report"))
+				</form>
+			</div>
+			<!-- Sign out -->
+			<div class="card acct-card acct-danger-card">
+				<div>
+					<div class="acct-danger-title">Sign out</div>
+					<div class="acct-danger-desc">Sign out of ChatFlow on this device</div>
+				</div>
+				<form method="POST" action="/account/signout-all">
+					<button class="btn acct-signout-btn" type="submit">Sign out</button>
+				</form>
+			</div>
+		</div>
+	</div>
+	@templ.Raw(ShellClose())
+}
+
+templ acctNotifRow(key, title, desc string, checked bool) {
+	<label class="acct-notif-row">
+		<div class="acct-notif-info">
+			<div class="acct-notif-title">{ title }</div>
+			<div class="acct-notif-desc">{ desc }</div>
+		</div>
+		@Toggle(key, checked, templ.Attributes{
+			"hx-post":    "/account/notifications",
+			"hx-include": "closest form",
+			"hx-trigger": "change",
+			"hx-swap":    "none",
+		})
+	</label>
+}

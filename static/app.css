@@ -144,7 +144,6 @@ a { color: inherit; text-decoration: none; }
   flex-shrink: 0;
   border: none;
   padding: 0;
-  outline: none;
 }
 .topnav-avatar:hover { filter: brightness(0.9); }
 
@@ -564,16 +563,6 @@ tbody tr:last-child td { border-bottom: none; }
   box-shadow: var(--shadow-brand_hover);
   transform: translateY(-1px);
 }
-.btn-accent {
-  background: var(--accent);
-  color: var(--text-on-fill);
-  box-shadow: var(--shadow-brand);
-}
-.btn-accent:hover {
-  background: var(--accent-dark);
-  box-shadow: var(--shadow-brand_hover);
-  transform: translateY(-1px);
-}
 .btn-secondary {
   background: var(--bg-card);
   color: var(--text);
@@ -605,14 +594,6 @@ tbody tr:last-child td { border-bottom: none; }
 .btn-icon:active { transform: scale(0.92); }
 .btn[disabled], .btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 
-/* BEM variants (v1 compat) */
-.btn--primary  { background: var(--primary); color: var(--text-on-fill); border: none; box-shadow: var(--shadow-brand); }
-.btn--primary:hover { background: var(--primary-dark); }
-.btn--secondary { background: var(--bg-card); color: var(--text); border: 1.5px solid var(--border); }
-.btn--secondary:hover { background: var(--accent-lighter); border-color: var(--accent); color: var(--accent); }
-.btn--danger { background: var(--danger-light); color: var(--danger); border: 1px solid var(--danger-border); }
-.btn--danger:hover { background: var(--danger); color: var(--text-on-fill); border-color: var(--danger); }
-
 /* ── Badges ─────────────────────────────────────────────────────────────────── */
 .badge {
   display: inline-flex;
@@ -624,11 +605,14 @@ tbody tr:last-child td { border-bottom: none; }
   font-weight: 600;
   white-space: nowrap;
 }
-.badge-success { background: var(--success-light); color: var(--success-text); }
-.badge-warning { background: var(--warning-light); color: var(--warning-text); }
-.badge-danger  { background: var(--danger-light);  color: var(--danger); }
-.badge-info    { background: var(--info-light);    color: var(--info); }
-.badge-neutral { background: var(--accent-lighter); color: var(--text-secondary); }
+.badge-success  { background: var(--success-light); color: var(--success-text); }
+.badge-warning  { background: var(--warning-light); color: var(--warning-text); }
+.badge-danger   { background: var(--danger-light);  color: var(--danger); }
+.badge-info     { background: var(--info-light);    color: var(--info); }
+.badge-neutral  { background: var(--accent-lighter); color: var(--text-secondary); }
+.badge-approved { background: var(--success-light); color: var(--success-strong); }
+.badge-pending  { background: var(--warning-light); color: var(--warning-text); }
+.badge-sending  { background: color-mix(in srgb,var(--accent) 12%,transparent); color: var(--accent); border: 1.5px solid color-mix(in srgb,var(--accent) 30%,transparent); font-weight: 600; }
 .badge-primary { background: var(--primary-light); color: var(--primary-dark); }
 .badge-accent  { background: var(--accent-lighter);  color: var(--accent); }
 .badge-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
@@ -670,7 +654,7 @@ tbody tr:last-child td { border-bottom: none; }
   outline: none;
   width: 100%;
 }
-.form-input:focus {
+.form-input:focus-visible {
   border-color: var(--accent);
   box-shadow: var(--shadow-focus);
 }
@@ -695,7 +679,7 @@ select.form-input {
   outline: none;
   transition: border-color var(--duration-base), box-shadow var(--duration-base);
 }
-.field input:focus, .field select:focus, .field textarea:focus {
+.field input:focus-visible, .field select:focus-visible, .field textarea:focus-visible {
   border-color: var(--accent);
   box-shadow: var(--shadow-focus);
 }
@@ -1524,17 +1508,17 @@ code {
 /* ── My Account page ─────────────────────────────────────── */
 .acct-wrap { max-width: 680px; }
 .acct-hd { margin-bottom: 24px; }
-.acct-flash { background: var(--success-light,#f0fdf4); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 16px; font-size: 13px; color: var(--accent); margin-bottom: 16px; }
+
 .acct-cards { display: flex; flex-direction: column; gap: 16px; }
 .acct-card { padding: 24px 28px; }
 .acct-card-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 20px; }
 
 /* Profile header */
 .acct-profile-hd { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-.acct-av { width: 64px; height: 64px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.acct-av { width: 64px; height: 64px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: var(--text-on-fill); flex-shrink: 0; }
 .acct-name { font-size: 18px; font-weight: 700; color: var(--text); }
 .acct-email-disp { font-size: 13px; color: var(--text-secondary); margin-top: 2px; margin-bottom: 8px; }
-.acct-role-badge { display: inline-block; padding: 3px 12px; font-size: 12px; font-weight: 600; border-radius: 20px; background: var(--accent-light,#e6f9f0); color: var(--accent); border: 1px solid var(--accent-border,#a7f3d0); text-transform: capitalize; }
+
 
 /* Profile form */
 .acct-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -1548,12 +1532,112 @@ code {
 /* Toggle switch */
 .acct-toggle-cb { appearance: none; -webkit-appearance: none; width: 44px; height: 24px; border-radius: 12px; background: var(--border); position: relative; cursor: pointer; flex-shrink: 0; transition: background .2s; }
 .acct-toggle-cb:checked { background: var(--accent); }
-.acct-toggle-cb::after { content:''; position:absolute; width:20px; height:20px; border-radius:50%; background:#fff; top:2px; left:2px; transition:left .2s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+.acct-toggle-cb::after { content:''; position:absolute; width:20px; height:20px; border-radius:50%; background: var(--text-on-fill); top:2px; left:2px; transition:left .2s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
 .acct-toggle-cb:checked::after { left:22px; }
 
 /* Danger card */
-.acct-danger-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1.5px solid var(--danger-light, #fee2e2) !important; }
+.acct-danger-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1.5px solid var(--danger-light) !important; }
 .acct-danger-title { font-size: 14px; font-weight: 600; color: var(--danger); }
 .acct-danger-desc { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
 .acct-signout-btn { padding: 8px 20px; font-size: 14px; font-weight: 600; color: var(--danger); background: transparent; border: 1.5px solid var(--danger); border-radius: 8px; cursor: pointer; white-space: nowrap; }
-.acct-signout-btn:hover { background: var(--danger-light, #fee2e2); }
+.acct-signout-btn:hover { background: var(--danger-light); }
+
+/* ── Canonical Batch-0 Components ──────────────────────────────────────────── */
+/* Create-only. Adopted page-by-page in Phase-3 batches. No existing selector  */
+/* is modified here. All values reference design tokens — no raw hex.           */
+
+/* ── TagPill ─────────────────────────────────────────────────────────────────── */
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 500;
+  border: 1.5px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  line-height: 1;
+  transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+  cursor: default;
+}
+button.tag-pill { cursor: pointer; }
+button.tag-pill:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-lighter); }
+.tag-pill--on { background: var(--accent-lighter); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+/* Token-mapped colour modifiers (TagColor enum) — no raw hex */
+.tag-pill--green  { background: var(--accent-lighter); border-color: var(--accent);        color: var(--accent); }
+.tag-pill--blue   { background: var(--info-light);     border-color: var(--info);           color: var(--info); }
+.tag-pill--amber  { background: var(--warning-light);  border-color: var(--warning);        color: var(--warning-text); }
+.tag-pill--red    { background: var(--danger-light);   border-color: var(--danger);         color: var(--danger); }
+.tag-pill--purple { background: var(--primary-light);  border-color: var(--primary-dark);   color: var(--primary-dark); }
+
+/* ── TagChip ─────────────────────────────────────────────────────────────────── */
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--accent-lighter);
+  color: var(--text);
+  border: 1.5px solid var(--border);
+}
+.tag-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 14px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color var(--duration-fast);
+}
+.tag-chip-remove:hover { color: var(--danger); }
+
+/* Token-mapped colour modifiers — mirrors tag-pill enum; no raw hex */
+.tag-chip--green  { background: var(--accent-lighter); border-color: var(--accent);      color: var(--accent); }
+.tag-chip--blue   { background: var(--info-light);     border-color: var(--info);         color: var(--info); }
+.tag-chip--amber  { background: var(--warning-light);  border-color: var(--warning);      color: var(--warning-text); }
+.tag-chip--red    { background: var(--danger-light);   border-color: var(--danger);       color: var(--danger); }
+.tag-chip--purple { background: var(--primary-light);  border-color: var(--primary-dark); color: var(--primary-dark); }
+
+/* ── ConsentIndicator ───────────────────────────────────────────────────────── */
+/* .consent-dot--in/out are shared by ConsentIndicator(ConsentDot) AND the Alpine */
+/* nc-preview-dot in new_contact_page.go — single CSS rule covers both.          */
+.consent-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.consent-dot--in  { background: var(--accent); }
+.consent-dot--out { background: var(--danger); }
+
+/* ConsentBadge — pill form; used with .badge base class */
+.consent-badge--on  { background: var(--success-light); color: var(--success-strong); }
+.consent-badge--off { background: var(--danger-light);  color: var(--danger); }
+
+/* ── Dashboard quick-action tiles ────────────────────────────────────────── */
+.qa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.qa-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px 12px; background: #fff; border: 1px solid var(--border, #e2e8f0); border-radius: 14px; text-decoration: none; transition: box-shadow .15s, transform .15s, border-color .15s; }
+.qa-tile:hover { box-shadow: 0 6px 18px rgba(15,23,42,.08); transform: translateY(-2px); border-color: #cbd5e1; }
+.qa-ico { width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+.qa-ico--violet { background: #ede9fe; color: #7c3aed; }
+.qa-ico--blue   { background: #dbeafe; color: #2563eb; }
+.qa-ico--green  { background: #dcfce7; color: #16a34a; }
+.qa-ico--amber  { background: #fef3c7; color: #d97706; }
+.qa-ico--pink   { background: #fae8ff; color: #c026d3; }
+.qa-label { font-size: 14px; font-weight: 600; color: var(--text-strong, #0f172a); }
