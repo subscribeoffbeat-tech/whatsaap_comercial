@@ -104,8 +104,6 @@
 .cat-authentication { background: var(--warning-light);   color: var(--warning-text); }
 
 /* ── Template status badge aliases ──────────────────────────────── */
-.badge-approved   { background: var(--success-light); color: var(--success-strong); }
-.badge-pending    { background: var(--warning-light); color: var(--warning-text); }
 .badge-rejected   { background: var(--danger-light);  color: var(--danger-text); }
 .badge-submitted  { background: var(--info-bg);        color: var(--info-text); }
 .badge-paused     { background: var(--warning-light); color: var(--warning-text); }
@@ -216,7 +214,7 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
   color: var(--text);
   min-width: 0;
 }
-.form-input-sm:focus { outline: none; border-color: var(--accent); }
+.form-input-sm:focus-visible { border-color: var(--accent); box-shadow: var(--shadow-focus); }
 .tmpl-btn-row select.form-input-sm { min-width: 130px; }
 .tmpl-btn-row input.form-input-sm  { flex: 1; min-width: 100px; }
 
@@ -555,6 +553,9 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
   flex-wrap: wrap;
   margin-top: 6px;
 }
+/* Intentional Button exclusion: stays bespoke — text-label format shortcuts
+   (bold, italic, {{1}}) have no structural relationship to .btn. See Button()
+   in components.go for the rationale. */
 .tn-tool-btn {
   padding: 4px 10px;
   border: 1px solid var(--border);
@@ -692,7 +693,8 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
 .tmpl-filter-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .tmpl-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); padding: 0 12px; flex: 1; min-width: 240px; }
 .tmpl-search svg { color: var(--text-secondary); flex-shrink: 0; }
-.tmpl-search-input { flex: 1; border: none; background: transparent; padding: 9px 0; font-size: 14px; color: var(--text); outline: none; }
+.tmpl-search-input { flex: 1; border: none; background: transparent; padding: 9px 0; font-size: 14px; color: var(--text); }
+.tmpl-search-input:focus-visible { border-color: var(--accent); box-shadow: var(--shadow-focus); outline: none; }
 .tmpl-cat-tabs { display: flex; gap: 4px; }
 .tmpl-cat-tab { padding: 7px 16px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--bg-card); font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text-secondary); letter-spacing: 0.04em; transition: all .12s; }
 .tmpl-cat-tab.active { border-color: var(--accent); background: var(--accent); color: #fff; }
@@ -707,6 +709,10 @@ dialog.tmpl-dialog form { padding: 20px 22px; }
 .sdot--green { background: #22c55e; }
 .sdot--orange { background: #f59e0b; }
 .sdot--red { background: #ef4444; }
+.sdot--gray { background: #9ca3af; }
+
+.tmpl-hdr-radio { display: inline-flex; align-items: center; padding: 5px 12px; border: 1px solid var(--border, #d1d5db); border-radius: 999px; font-size: 13px; cursor: pointer; user-select: none; background: #fff; }
+.tmpl-hdr-radio--on { border-color: var(--brand-600, #1a7f5a); background: var(--brand-50, #e8f5ef); color: var(--brand-700, #15623f); font-weight: 600; }
 
 /* Template card v2 */
 .tmpl-gallery2 { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
