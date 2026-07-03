@@ -20,10 +20,10 @@ func TestMatchesRule_Keyword_Exact(t *testing.T) {
 		Keyword:      strPtr("PRICE"),
 		KeywordMatch: "exact",
 	}
-	assert.True(t, matchesRule(rule, "PRICE", false, time.Now()))
-	assert.True(t, matchesRule(rule, "price", false, time.Now()), "case-insensitive")
-	assert.False(t, matchesRule(rule, "what is the PRICE?", false, time.Now()), "substring not exact")
-	assert.False(t, matchesRule(rule, "", false, time.Now()))
+	assert.True(t, matchesRule(rule, "PRICE", false, time.Now(), false))
+	assert.True(t, matchesRule(rule, "price", false, time.Now(), false), "case-insensitive")
+	assert.False(t, matchesRule(rule, "what is the PRICE?", false, time.Now(), false), "substring not exact")
+	assert.False(t, matchesRule(rule, "", false, time.Now(), false))
 }
 
 func TestMatchesRule_Keyword_Contains(t *testing.T) {
@@ -32,9 +32,9 @@ func TestMatchesRule_Keyword_Contains(t *testing.T) {
 		Keyword:      strPtr("book"),
 		KeywordMatch: "contains",
 	}
-	assert.True(t, matchesRule(rule, "I want to book a slot", false, time.Now()))
-	assert.True(t, matchesRule(rule, "BOOK NOW", false, time.Now()), "case-insensitive")
-	assert.False(t, matchesRule(rule, "call me", false, time.Now()))
+	assert.True(t, matchesRule(rule, "I want to book a slot", false, time.Now(), false))
+	assert.True(t, matchesRule(rule, "BOOK NOW", false, time.Now(), false), "case-insensitive")
+	assert.False(t, matchesRule(rule, "call me", false, time.Now(), false))
 }
 
 func TestMatchesRule_Keyword_EmptyKeyword(t *testing.T) {
@@ -43,7 +43,7 @@ func TestMatchesRule_Keyword_EmptyKeyword(t *testing.T) {
 		Keyword:      strPtr(""),
 		KeywordMatch: "exact",
 	}
-	assert.False(t, matchesRule(rule, "anything", false, time.Now()))
+	assert.False(t, matchesRule(rule, "anything", false, time.Now(), false))
 }
 
 func TestMatchesRule_Keyword_NilKeyword(t *testing.T) {
@@ -52,13 +52,13 @@ func TestMatchesRule_Keyword_NilKeyword(t *testing.T) {
 		Keyword:      nil,
 		KeywordMatch: "exact",
 	}
-	assert.False(t, matchesRule(rule, "anything", false, time.Now()))
+	assert.False(t, matchesRule(rule, "anything", false, time.Now(), false))
 }
 
 func TestMatchesRule_Welcome_NewContact(t *testing.T) {
 	rule := &db.AutomationRule{TriggerType: "welcome"}
-	assert.True(t, matchesRule(rule, "hi", true, time.Now()))
-	assert.False(t, matchesRule(rule, "hi", false, time.Now()), "not new contact")
+	assert.True(t, matchesRule(rule, "hi", true, time.Now(), false))
+	assert.False(t, matchesRule(rule, "hi", false, time.Now(), false), "not new contact")
 }
 
 func TestMatchesRule_Away_QuietHours(t *testing.T) {
@@ -68,14 +68,14 @@ func TestMatchesRule_Away_QuietHours(t *testing.T) {
 	nightIST := time.Date(2024, 1, 1, 22, 0, 0, 0, ist)  // 22:00 IST — quiet
 	dayIST   := time.Date(2024, 1, 1, 12, 0, 0, 0, ist)  // 12:00 IST — not quiet
 
-	assert.True(t, matchesRule(rule, "hi", false, nightIST))
-	assert.False(t, matchesRule(rule, "hi", false, dayIST))
+	assert.True(t, matchesRule(rule, "hi", false, nightIST, true))
+	assert.False(t, matchesRule(rule, "hi", false, dayIST, false))
 }
 
 func TestMatchesRule_Stop_NeverFires(t *testing.T) {
 	rule := &db.AutomationRule{TriggerType: "stop"}
 	// STOP is handled in inbox handler, never by the engine.
-	assert.False(t, matchesRule(rule, "STOP", false, time.Now()))
+	assert.False(t, matchesRule(rule, "STOP", false, time.Now(), false))
 }
 
 // ── Priority — first match wins ───────────────────────────────────────────────
@@ -95,7 +95,7 @@ func TestFirstMatchWins(t *testing.T) {
 	now := time.Now()
 	first := -1
 	for _, r := range rules {
-		if matchesRule(r, "hi there", false, now) {
+		if matchesRule(r, "hi there", false, now, false) {
 			first = int(r.ID)
 			break
 		}
