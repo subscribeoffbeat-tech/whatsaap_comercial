@@ -46,6 +46,18 @@ func ListAgentLimits(ctx context.Context, pool *pgxpool.Pool) (map[string]*Agent
 	return out, rows.Err()
 }
 
+// AgentMessagesThisMonth counts an agent's outbound messages since the start of
+// the current month — used to enforce the per-agent monthly cap.
+func AgentMessagesThisMonth(ctx context.Context, pool *pgxpool.Pool, agentID string) (int64, error) {
+	var n int64
+	err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM messages
+		WHERE sent_by = $1::uuid AND direction = 'outbound'
+		  AND created_at >= DATE_TRUNC('month', NOW())
+	`, agentID).Scan(&n)
+	return n, err
+}
+
 // SetAgentMsgCap upserts the monthly message cap for an agent (0 = unlimited).
 func SetAgentMsgCap(ctx context.Context, pool *pgxpool.Pool, agentID string, cap int) error {
 	_, err := pool.Exec(ctx,
