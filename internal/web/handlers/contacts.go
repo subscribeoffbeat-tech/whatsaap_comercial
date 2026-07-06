@@ -571,13 +571,13 @@ func (h *ContactsHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Form path (from the panel edit form) — returns the refreshed panel.
 	_ = r.ParseForm()
-	phone := normalizeWAPhone(r.FormValue("phone"))
+	phone, perr := db.NormalizePhone(r.FormValue("phone"))
 	editErr := func(msg string) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = templates.ContactEditForm(c, msg).Render(r.Context(), w)
 	}
-	if phone == "" {
-		editErr("Phone number is required.")
+	if perr != nil {
+		editErr("Invalid phone: " + perr.Error())
 		return
 	}
 
@@ -613,26 +613,6 @@ func (h *ContactsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// normalizeWAPhone trims and normalizes a phone to E.164-ish form (leading + and digits).
-func normalizeWAPhone(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	var b strings.Builder
-	for i, r := range s {
-		if r >= '0' && r <= '9' {
-			b.WriteRune(r)
-		} else if r == '+' && i == 0 {
-			b.WriteRune(r)
-		}
-	}
-	out := b.String()
-	if out != "" && !strings.HasPrefix(out, "+") {
-		out = "+" + out
-	}
-	return out
-}
 
 // ── Delete (admin only — DPDP / delete-on-request) ────────────────────────────
 

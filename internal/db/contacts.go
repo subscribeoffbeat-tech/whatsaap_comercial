@@ -355,16 +355,23 @@ func BulkInsertContacts(ctx context.Context, pool *pgxpool.Pool, contacts []Cont
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	batch := &pgx.Batch{}
 	for _, c := range contacts {
 		custom, _ := json.Marshal(c.CustomFields)
-		var id string
-		scanErr := tx.QueryRow(ctx, `
+		batch.Queue(`
 			INSERT INTO contacts (wa_phone, name, email, industry, custom_fields, opted_in, opt_in_source, opt_in_at)
 			VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, NOW())
 			ON CONFLICT (wa_phone) DO NOTHING
 			RETURNING id::text
-		`, c.WAPhone, c.Name, c.Email, c.Industry, string(custom), c.OptedIn, c.OptInSource).Scan(&id)
+		`, c.WAPhone, c.Name, c.Email, c.Industry, string(custom), c.OptedIn, c.OptInSource)
+	}
 
+	br := tx.SendBatch(ctx, batch)
+	defer br.Close()
+
+	for range contacts {
+		var id string
+		scanErr := br.QueryRow().Scan(&id)
 		if scanErr == nil {
 			inserted++
 		} else if errors.Is(scanErr, pgx.ErrNoRows) {
@@ -373,6 +380,7 @@ func BulkInsertContacts(ctx context.Context, pool *pgxpool.Pool, contacts []Cont
 			return inserted, skipped, scanErr
 		}
 	}
+
 	return inserted, skipped, tx.Commit(ctx)
 }
 
@@ -468,25 +476,26 @@ func RemoveContactTag(ctx context.Context, pool *pgxpool.Pool, contactID string,
 }
 
 func BulkAddTag(ctx context.Context, pool *pgxpool.Pool, contactIDs []string, tagID int64) error {
-	for _, id := range contactIDs {
-		if _, err := pool.Exec(ctx, `
-			INSERT INTO contact_tags (contact_id, tag_id) VALUES ($1::uuid, $2) ON CONFLICT DO NOTHING
-		`, id, tagID); err != nil {
-			return err
-		}
+	if len(contactIDs) == 0 {
+		return nil
 	}
-	return nil
+	_, err := pool.Exec(ctx, `
+		INSERT INTO contact_tags (contact_id, tag_id)
+		SELECT unnest($1::uuid[]), $2
+		ON CONFLICT DO NOTHING
+	`, contactIDs, tagID)
+	return err
 }
 
 func BulkRemoveTag(ctx context.Context, pool *pgxpool.Pool, contactIDs []string, tagID int64) error {
-	for _, id := range contactIDs {
-		if _, err := pool.Exec(ctx, `
-			DELETE FROM contact_tags WHERE contact_id = $1::uuid AND tag_id = $2
-		`, id, tagID); err != nil {
-			return err
-		}
+	if len(contactIDs) == 0 {
+		return nil
 	}
-	return nil
+	_, err := pool.Exec(ctx, `
+		DELETE FROM contact_tags
+		WHERE tag_id = $2 AND contact_id = ANY($1::uuid[])
+	`, contactIDs, tagID)
+	return err
 }
 
 func GetContactTags(ctx context.Context, pool *pgxpool.Pool, contactID string) ([]Tag, error) {
