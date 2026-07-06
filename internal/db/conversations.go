@@ -69,68 +69,74 @@ func ChooseAgent(agents []AgentLoad) *string {
 // GetOrCreateByContact returns the existing conversation for a contact or
 // creates a new one with status "open".
 func GetOrCreateByContact(ctx context.Context, pool *pgxpool.Pool, contactID string) (*Conversation, error) {
+	tid := effectiveTenantID(ctx)
 	row := pool.QueryRow(ctx, `
-		INSERT INTO conversations (contact_id)
-		VALUES ($1::uuid)
+		INSERT INTO conversations (contact_id, tenant_id)
+		VALUES ($1::uuid, $2::uuid)
 		ON CONFLICT (contact_id) DO UPDATE
 		  SET updated_at = NOW()   -- no-op update to satisfy RETURNING
 		RETURNING
 		  id::text, contact_id::text, assigned_to::text,
 		  status, last_inbound_at, last_message_at, created_at, updated_at
-	`, contactID)
+	`, contactID, tid)
 	return scanConversation(row)
 }
 
-// Get returns a single conversation by ID.
+// GetConversation returns a single conversation by ID.
 func GetConversation(ctx context.Context, pool *pgxpool.Pool, id string) (*Conversation, error) {
+	tid := effectiveTenantID(ctx)
 	row := pool.QueryRow(ctx, `
 		SELECT
 		  id::text, contact_id::text, assigned_to::text,
 		  status, last_inbound_at, last_message_at, created_at, updated_at
 		FROM conversations
-		WHERE id = $1::uuid
-	`, id)
+		WHERE tenant_id = $2::uuid AND id = $1::uuid
+	`, id, tid)
 	return scanConversation(row)
 }
 
 // SetLastInbound updates last_inbound_at (opening/resetting the 24h window)
 // and also sets last_message_at and status to "open".
 func SetLastInbound(ctx context.Context, pool *pgxpool.Pool, convID string, t time.Time) error {
+	tid := effectiveTenantID(ctx)
 	_, err := pool.Exec(ctx, `
 		UPDATE conversations
 		SET last_inbound_at = $2,
 		    last_message_at = $2,
 		    status          = 'open',
 		    updated_at      = NOW()
-		WHERE id = $1::uuid
-	`, convID, t)
+		WHERE tenant_id = $3::uuid AND id = $1::uuid
+	`, convID, t, tid)
 	return err
 }
 
 // TouchLastMessage bumps last_message_at without changing the inbound window.
 func TouchLastMessage(ctx context.Context, pool *pgxpool.Pool, convID string, t time.Time) error {
+	tid := effectiveTenantID(ctx)
 	_, err := pool.Exec(ctx, `
 		UPDATE conversations
 		SET last_message_at = $2, updated_at = NOW()
-		WHERE id = $1::uuid
-	`, convID, t)
+		WHERE tenant_id = $3::uuid AND id = $1::uuid
+	`, convID, t, tid)
 	return err
 }
 
 // AssignRoundRobin assigns the conversation to the available agent with the
 // fewest open conversations. Returns the chosen agent ID (nil = left unassigned).
 func AssignRoundRobin(ctx context.Context, pool *pgxpool.Pool, convID string) (*string, error) {
+	tid := effectiveTenantID(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT a.id::text,
 		       COUNT(c.id) AS open_convs
 		FROM agents a
 		LEFT JOIN conversations c
 		       ON c.assigned_to = a.id AND c.status = 'open'
-		WHERE a.available = TRUE
+		WHERE a.tenant_id = $1::uuid
+		  AND a.available = TRUE
 		  AND a.role      = 'agent'
 		GROUP BY a.id
 		ORDER BY open_convs ASC, a.created_at ASC
-	`)
+	`, tid)
 	if err != nil {
 		return nil, fmt.Errorf("query agent loads: %w", err)
 	}
@@ -156,23 +162,25 @@ func AssignRoundRobin(ctx context.Context, pool *pgxpool.Pool, convID string) (*
 	_, err = pool.Exec(ctx, `
 		UPDATE conversations
 		SET assigned_to = $2::uuid, updated_at = NOW()
-		WHERE id = $1::uuid AND assigned_to IS NULL
-	`, convID, *chosen)
+		WHERE tenant_id = $3::uuid AND id = $1::uuid AND assigned_to IS NULL
+	`, convID, *chosen, tid)
 	return chosen, err
 }
 
 // SetStatus updates the conversation status (open|closed|pending).
 func SetStatus(ctx context.Context, pool *pgxpool.Pool, convID, status string) error {
+	tid := effectiveTenantID(ctx)
 	_, err := pool.Exec(ctx, `
 		UPDATE conversations
 		SET status = $2, updated_at = NOW()
-		WHERE id = $1::uuid
-	`, convID, status)
+		WHERE tenant_id = $3::uuid AND id = $1::uuid
+	`, convID, status, tid)
 	return err
 }
 
-// List returns conversations matching the filter for the inbox list pane.
+// ListConversations returns conversations matching the filter for the inbox list pane.
 func ListConversations(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([]ConvListRow, error) {
+	tid := effectiveTenantID(ctx)
 	limit := f.Limit
 	if limit == 0 {
 		limit = 50
@@ -201,14 +209,15 @@ func ListConversations(ctx context.Context, pool *pgxpool.Pool, f ListFilter) ([
 		  ORDER BY created_at DESC
 		  LIMIT 1
 		) m ON TRUE
-		WHERE ($1::text IS NULL OR c.status = $1)
+		WHERE c.tenant_id = $5::uuid
+		  AND ($1::text IS NULL OR c.status = $1)
 		  AND ($2::text IS NULL OR (
 		         $2 = ''  AND c.assigned_to IS NULL
 		      OR $2 != '' AND c.assigned_to = $2::uuid
 		  ))
 		ORDER BY c.last_message_at DESC NULLS LAST
 		LIMIT $3 OFFSET $4
-	`, nilIfEmpty(f.Status), f.AssignedTo, limit, f.Offset)
+	`, nilIfEmpty(f.Status), f.AssignedTo, limit, f.Offset, tid)
 	if err != nil {
 		return nil, fmt.Errorf("list conversations: %w", err)
 	}

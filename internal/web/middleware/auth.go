@@ -29,11 +29,12 @@ var jwtHeaderB64 = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","
 
 // AgentClaims is stored in the JWT payload and injected into request context.
 type AgentClaims struct {
-	ID    string `json:"sub"`
-	Email string `json:"email"`
-	Name  string `json:"name"`
-	Role  string `json:"role"`
-	Exp   int64  `json:"exp"`
+	ID       string `json:"sub"`
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	Role     string `json:"role"`
+	TenantID string `json:"tenant_id,omitempty"`
+	Exp      int64  `json:"exp"`
 }
 
 type ctxKey string
@@ -41,13 +42,14 @@ type ctxKey string
 const ctxAgentKey ctxKey = "agent"
 
 // IssueToken creates a signed JWT for the given claims.
-func IssueToken(secret []byte, id, email, name, role string) (string, error) {
+func IssueToken(secret []byte, id, email, name, role, tenantID string) (string, error) {
 	claims := AgentClaims{
-		ID:    id,
-		Email: email,
-		Name:  name,
-		Role:  role,
-		Exp:   time.Now().Add(tokenTTL).Unix(),
+		ID:       id,
+		Email:    email,
+		Name:     name,
+		Role:     role,
+		TenantID: tenantID,
+		Exp:      time.Now().Add(tokenTTL).Unix(),
 	}
 	payload, err := json.Marshal(claims)
 	if err != nil {

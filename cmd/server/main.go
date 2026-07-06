@@ -75,14 +75,15 @@ func main() {
 	campaigns.StartScheduledDispatcher(ctx, pool, riverClient, hub)
 
 	// Handlers
-	inboxH      := handlers.NewInboxHandler(pool, waClient, hub)
+	inboxH      := handlers.NewInboxHandler(pool, hub)
 	contactsH   := handlers.NewContactsHandler(pool)
-	tmplsH      := handlers.NewTemplatesHandler(pool, waClient)
-	cmpgnsH     := handlers.NewCampaignHandler(pool, riverClient, hub, waClient)
+	tmplsH      := handlers.NewTemplatesHandler(pool)
+	cmpgnsH     := handlers.NewCampaignHandler(pool, riverClient, hub)
 	automationH := handlers.NewAutomationHandler(pool)
 	analyticsH  := handlers.NewAnalyticsHandler(pool)
-	dashboardH  := handlers.NewDashboardHandler(pool, waClient)
+	dashboardH  := handlers.NewDashboardHandler(pool)
 	clicksH     := handlers.NewClickHandler(pool)
+	superAdminH := handlers.NewSuperAdminHandler(pool)
 	jwtSecret   := []byte(cfg.JWTSecret)
 	var mailer *email.Sender
 	if cfg.SMTP.Host != "" {
@@ -165,12 +166,14 @@ func main() {
 	}
 
 	// ── WebSocket (needs auth but not RBAC) ───────────────────────────────────
-	r.With(mw.RequireAuth(jwtSecret)).Get("/ws", hub.ServeWS)
+	r.With(mw.ResolveTenant(pool), mw.RequireAuth(jwtSecret)).Get("/ws", hub.ServeWS)
 
 	// ── All authenticated routes ──────────────────────────────────────────────
 	r.Group(func(r chi.Router) {
+		r.Use(mw.ResolveTenant(pool))
 		r.Use(firstRunCheck)
 		r.Use(mw.RequireAuth(jwtSecret))
+
 
 		// Dashboard
 		r.Get("/", dashboardH.Page)
@@ -221,6 +224,14 @@ func main() {
 			})
 			r.Route("/settings", func(r chi.Router) {
 				settingsH.Mount(r)
+			})
+		})
+
+		// Super Admin routes
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireRole(forbidFn, "super_admin"))
+			r.Route("/admin", func(r chi.Router) {
+				superAdminH.Mount(r)
 			})
 		})
 	})

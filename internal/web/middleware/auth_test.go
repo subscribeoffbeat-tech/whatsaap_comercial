@@ -13,7 +13,7 @@ import (
 var testSecret = []byte("test-secret-key-32-bytes-padding!!")
 
 func TestIssueAndParseToken(t *testing.T) {
-	token, err := IssueToken(testSecret, "uuid-1", "a@b.com", "Alice", "admin")
+	token, err := IssueToken(testSecret, "uuid-1", "a@b.com", "Alice", "admin", "tenant-1")
 	require.NoError(t, err)
 	require.NotEmpty(t, token)
 
@@ -25,7 +25,7 @@ func TestIssueAndParseToken(t *testing.T) {
 }
 
 func TestParseToken_WrongSecret(t *testing.T) {
-	token, _ := IssueToken(testSecret, "uuid-1", "a@b.com", "Alice", "admin")
+	token, _ := IssueToken(testSecret, "uuid-1", "a@b.com", "Alice", "admin", "tenant-1")
 	_, err := parseToken([]byte("wrong-secret"), token)
 	assert.Error(t, err)
 }
@@ -58,7 +58,7 @@ func TestRequireAuth_ValidCookie(t *testing.T) {
 		assert.Equal(t, "admin", agent.Role)
 		w.WriteHeader(http.StatusOK)
 	}))
-	token, _ := IssueToken(testSecret, "uuid-1", "a@b.com", "Alice", "admin")
+	token, _ := IssueToken(testSecret, "uuid-1", "a@b.com", "Alice", "admin", "tenant-1")
 	req := httptest.NewRequest("GET", "/protected", nil)
 	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: token})
 	rr := httptest.NewRecorder()

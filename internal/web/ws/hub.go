@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"whatsapptool/internal/db"
 )
 
 // EventType identifies the kind of event sent to connected agents.
@@ -31,10 +32,11 @@ type Event struct {
 
 // client holds one connected WebSocket session.
 type client struct {
-	id     string
-	conn   *websocket.Conn
-	send   chan []byte
-	convID string // "" = subscribe to all conversations
+	id       string
+	conn     *websocket.Conn
+	send     chan []byte
+	convID   string // "" = subscribe to all conversations
+	tenantID string // partitioned by tenant
 }
 
 // Hub manages all active WebSocket connections and routes events.
@@ -52,13 +54,10 @@ func NewHub(baseURL string) *Hub {
 	return &Hub{
 		clients: make(map[string]*client),
 		upgrader: websocket.Upgrader{
-			// Reject cross-site WebSocket connections: the Origin host must match
-			// the request host or the configured base URL (prevents cross-site
-			// WebSocket hijacking of the authenticated inbox stream).
 			CheckOrigin: func(r *http.Request) bool {
 				origin := r.Header.Get("Origin")
 				if origin == "" {
-					return true // non-browser client (no Origin header)
+					return true // non-browser client
 				}
 				u, err := url.Parse(origin)
 				if err != nil {
@@ -73,7 +72,6 @@ func NewHub(baseURL string) *Hub {
 }
 
 // ServeWS upgrades an HTTP connection to WebSocket and registers the client.
-// Query param ?conv=<id> subscribes to a specific conversation; omit for all.
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -81,12 +79,14 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenantID := db.TenantFromContext(r.Context())
 	id := r.RemoteAddr + "/" + r.URL.String()
 	c := &client{
-		id:     id,
-		conn:   conn,
-		send:   make(chan []byte, 64),
-		convID: r.URL.Query().Get("conv"),
+		id:       id,
+		conn:     conn,
+		send:     make(chan []byte, 64),
+		convID:   r.URL.Query().Get("conv"),
+		tenantID: tenantID,
 	}
 
 	h.mu.Lock()
@@ -97,9 +97,8 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	c.readPump(h) // blocks until disconnect
 }
 
-// BroadcastConversation sends an event to all clients subscribed to convID
-// or to all-conversations (convID == "").
-func (h *Hub) BroadcastConversation(convID string, event Event) {
+// BroadcastConversation sends an event to all clients of the same tenant subscribed to convID.
+func (h *Hub) BroadcastConversation(tenantID, convID string, event Event) {
 	b, err := json.Marshal(event)
 	if err != nil {
 		log.Printf("ws marshal: %v", err)
@@ -108,6 +107,9 @@ func (h *Hub) BroadcastConversation(convID string, event Event) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for _, c := range h.clients {
+		if c.tenantID != tenantID {
+			continue
+		}
 		if c.convID == "" || c.convID == convID {
 			select {
 			case c.send <- b:
@@ -118,9 +120,9 @@ func (h *Hub) BroadcastConversation(convID string, event Event) {
 	}
 }
 
-// BroadcastAll sends an event to every connected client.
-func (h *Hub) BroadcastAll(event Event) {
-	h.BroadcastConversation("", event)
+// BroadcastAll sends an event to every connected client of the same tenant.
+func (h *Hub) BroadcastAll(tenantID string, event Event) {
+	h.BroadcastConversation(tenantID, "", event)
 }
 
 func (h *Hub) unregister(id string) {
@@ -156,7 +158,7 @@ func (c *client) writePump() {
 	}
 }
 
-// readPump consumes inbound messages (currently just pong frames / discard).
+// readPump consumes inbound messages.
 func (c *client) readPump(h *Hub) {
 	defer func() {
 		h.unregister(c.id)

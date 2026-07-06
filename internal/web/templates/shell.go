@@ -43,6 +43,7 @@ var navItems = []NavItem{
 	{Label: "Analytics", Path: "/analytics", Icon: "📊", Roles: nil},
 	{Label: "Team", Path: "/team", Icon: "👤", Roles: []string{"admin"}},
 	{Label: "Settings", Path: "/settings", Icon: "⚙️", Roles: []string{"admin"}},
+	{Label: "Admin", Path: "/admin/tenants", Icon: "🔑", Roles: []string{"super_admin"}},
 }
 
 // canSee returns true if the agent's role can see the nav item.

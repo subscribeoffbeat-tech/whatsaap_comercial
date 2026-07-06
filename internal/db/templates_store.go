@@ -49,8 +49,9 @@ func (t *Template) HeaderMediaFormat() string {
 	return ""
 }
 
-// ListTemplates returns all templates ordered by created_at DESC.
+// ListTemplates returns all templates for the current tenant ordered by created_at DESC.
 func ListTemplates(ctx context.Context, pool *pgxpool.Pool) ([]Template, error) {
+	tid := effectiveTenantID(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT
 		  id::text, name, language, category, status,
@@ -58,8 +59,9 @@ func ListTemplates(ctx context.Context, pool *pgxpool.Pool) ([]Template, error) 
 		  submitted_at, approved_at, created_by::text,
 		  created_at, updated_at
 		FROM templates
+		WHERE tenant_id = $1::uuid
 		ORDER BY created_at DESC
-	`)
+	`, tid)
 	if err != nil {
 		return nil, fmt.Errorf("list templates: %w", err)
 	}
@@ -78,6 +80,7 @@ func ListTemplates(ctx context.Context, pool *pgxpool.Pool) ([]Template, error) 
 
 // GetTemplate returns a single template by ID.
 func GetTemplate(ctx context.Context, pool *pgxpool.Pool, id string) (*Template, error) {
+	tid := effectiveTenantID(ctx)
 	row := pool.QueryRow(ctx, `
 		SELECT
 		  id::text, name, language, category, status,
@@ -85,8 +88,8 @@ func GetTemplate(ctx context.Context, pool *pgxpool.Pool, id string) (*Template,
 		  submitted_at, approved_at, created_by::text,
 		  created_at, updated_at
 		FROM templates
-		WHERE id = $1::uuid
-	`, id)
+		WHERE tenant_id = $2::uuid AND id = $1::uuid
+	`, id, tid)
 	t, err := scanTemplate(row)
 	if err != nil {
 		return nil, fmt.Errorf("get template: %w", err)
@@ -96,95 +99,84 @@ func GetTemplate(ctx context.Context, pool *pgxpool.Pool, id string) (*Template,
 
 // CreateTemplate inserts a new template and populates t.ID and t.CreatedAt.
 func CreateTemplate(ctx context.Context, pool *pgxpool.Pool, t *Template) error {
+	tid := effectiveTenantID(ctx)
 	comps, _ := json.Marshal(t.Components)
 	return pool.QueryRow(ctx, `
-		INSERT INTO templates (name, language, category, components, created_by)
-		VALUES ($1, $2, $3, $4::jsonb, $5::uuid)
+		INSERT INTO templates (tenant_id, name, language, category, components, created_by)
+		VALUES ($1::uuid, $2, $3, $4, $5::jsonb, $6::uuid)
 		RETURNING id::text, created_at
-	`, t.Name, t.Language, t.Category, string(comps), t.CreatedBy).
+	`, tid, t.Name, t.Language, t.Category, string(comps), t.CreatedBy).
 		Scan(&t.ID, &t.CreatedAt)
 }
 
 // UpdateTemplate writes name, language, category, and components back to the DB.
-// Only draft (pending) templates should be editable.
-// UpdateTemplate saves edited content. It does NOT change status — a plain save
-// keeps the template a draft (or whatever it was); status only moves to pending
-// via an explicit submit/resubmit, or via Meta webhooks/sync.
 func UpdateTemplate(ctx context.Context, pool *pgxpool.Pool, t *Template) error {
+	tid := effectiveTenantID(ctx)
 	comps, _ := json.Marshal(t.Components)
 	_, err := pool.Exec(ctx, `
 		UPDATE templates
-		SET name = $2, language = $3, category = $4, components = $5::jsonb,
+		SET name = $3, language = $4, category = $5, components = $6::jsonb,
 		    updated_at = NOW()
-		WHERE id = $1::uuid
-	`, t.ID, t.Name, t.Language, t.Category, string(comps))
+		WHERE tenant_id = $1::uuid AND id = $2::uuid
+	`, tid, t.ID, t.Name, t.Language, t.Category, string(comps))
 	return err
 }
 
 // DeleteTemplate removes a template by ID.
 func DeleteTemplate(ctx context.Context, pool *pgxpool.Pool, id string) error {
-	_, err := pool.Exec(ctx, `DELETE FROM templates WHERE id = $1::uuid`, id)
+	tid := effectiveTenantID(ctx)
+	_, err := pool.Exec(ctx, `DELETE FROM templates WHERE tenant_id = $1::uuid AND id = $2::uuid`, tid, id)
 	return err
 }
 
-// SetTemplateWAID records the Meta template ID after a successful API submission
-// and flips the status to "pending".
+// SetTemplateWAID records the Meta template ID after a successful API submission.
 func SetTemplateWAID(ctx context.Context, pool *pgxpool.Pool, localID, waTemplateID string) error {
+	tid := effectiveTenantID(ctx)
 	_, err := pool.Exec(ctx, `
 		UPDATE templates
-		SET wa_template_id = $2, status = 'pending', submitted_at = NOW(), updated_at = NOW()
-		WHERE id = $1::uuid
-	`, localID, waTemplateID)
+		SET wa_template_id = $3, status = 'pending', submitted_at = NOW(), updated_at = NOW()
+		WHERE tenant_id = $1::uuid AND id = $2::uuid
+	`, tid, localID, waTemplateID)
 	return err
 }
 
-// SyncTemplateStatusByName reconciles a local template's status with Meta,
-// matched by name (names are unique in this single-tenant app, which avoids
-// language-format mismatches like "en" vs "en_US"). Only rows whose status
-// actually differs are touched. Drafts never submitted to Meta aren't in Meta's
-// list, so they're left alone.
+// SyncTemplateStatusByName reconciles a local template's status with Meta.
 func SyncTemplateStatusByName(ctx context.Context, pool *pgxpool.Pool, name, status, reason string) error {
-	_, err := pool.Exec(ctx, `
-		UPDATE templates
-		SET status           = $2,
-		    rejection_reason = CASE WHEN $2 = 'rejected' THEN NULLIF($3,'') ELSE NULL END,
-		    approved_at      = CASE WHEN $2 = 'approved' AND approved_at IS NULL THEN NOW() ELSE approved_at END,
-		    updated_at       = NOW()
-		WHERE name = $1 AND status <> $2
-	`, name, status, reason)
-	return err
-}
-
-// SetTemplatePending flips a template back to pending after a successful
-// resubmit/edit to Meta, clearing any prior rejection reason.
-func SetTemplatePending(ctx context.Context, pool *pgxpool.Pool, id string) error {
-	_, err := pool.Exec(ctx, `
-		UPDATE templates
-		SET status = 'pending', rejection_reason = NULL, submitted_at = NOW(), updated_at = NOW()
-		WHERE id = $1::uuid
-	`, id)
-	return err
-}
-
-// SetTemplateStatus updates status from a Meta template_status_update webhook.
-// Meta is authoritative for the language code: it may register a template as
-// "en" even when we submitted "en_US" (or vice-versa). We match by name (names
-// are unique in this single-tenant app) and ADOPT Meta's language, so the local
-// row always matches what Meta actually has. This is critical: the send path
-// addresses templates by name+language, and a stale language causes every send
-// to fail with Meta error 132001 ("template name does not exist in the
-// translation"). Matching by name+language alone would silently no-op and leave
-// the drift in place.
-func SetTemplateStatus(ctx context.Context, pool *pgxpool.Pool, name, language, status, reason string) error {
+	tid := effectiveTenantID(ctx)
 	_, err := pool.Exec(ctx, `
 		UPDATE templates
 		SET status           = $3,
-		    language         = COALESCE(NULLIF($2,''), language),
-		    rejection_reason = CASE WHEN $3 = 'rejected' THEN $4 ELSE rejection_reason END,
-		    approved_at      = CASE WHEN $3 = 'approved' THEN NOW() ELSE approved_at END,
+		    rejection_reason = CASE WHEN $3 = 'rejected' THEN NULLIF($4,'') ELSE NULL END,
+		    approved_at      = CASE WHEN $3 = 'approved' AND approved_at IS NULL THEN NOW() ELSE approved_at END,
 		    updated_at       = NOW()
-		WHERE name = $1
-	`, name, language, status, reason)
+		WHERE tenant_id = $1::uuid AND name = $2 AND status <> $3
+	`, tid, name, status, reason)
+	return err
+}
+
+// SetTemplatePending flips a template back to pending after resubmit.
+func SetTemplatePending(ctx context.Context, pool *pgxpool.Pool, id string) error {
+	tid := effectiveTenantID(ctx)
+	_, err := pool.Exec(ctx, `
+		UPDATE templates
+		SET status = 'pending', rejection_reason = NULL, submitted_at = NOW(), updated_at = NOW()
+		WHERE tenant_id = $1::uuid AND id = $2::uuid
+	`, tid, id)
+	return err
+}
+
+// SetTemplateStatus updates status from a Meta webhook.
+func SetTemplateStatus(ctx context.Context, pool *pgxpool.Pool, name, language, status, reason string) error {
+	tid := effectiveTenantID(ctx)
+	_, err := pool.Exec(ctx, `
+		UPDATE templates
+		SET status           = $4,
+		    language         = COALESCE(NULLIF($3,''), language),
+		    rejection_reason = CASE WHEN $4 = 'rejected' THEN $5 ELSE rejection_reason END,
+		    approved_at      = CASE WHEN $4 = 'approved' THEN NOW() ELSE approved_at END,
+		    updated_at       = NOW()
+		WHERE tenant_id = $1::uuid AND name = $2
+	`, tid, name, language, status, reason)
 	return err
 }
 

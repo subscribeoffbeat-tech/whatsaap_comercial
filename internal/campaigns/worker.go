@@ -36,6 +36,7 @@ type SendMessageArgs struct {
 	Category       string   // marketing|utility|authentication
 	Params         []string // resolved body variable values, index 0 = {{1}}
 	BodyText       string   // rendered message body (variables substituted) for the chat
+	TenantID       string   `json:"tenant_id"`
 }
 
 func (SendMessageArgs) Kind() string { return "send_message" }
@@ -64,6 +65,20 @@ func NewSendMessageWorker(pool *pgxpool.Pool, waClient *whatsapp.Client, hub *ws
 // Work implements river.Worker. Each call handles one recipient.
 func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessageArgs]) error {
 	args := job.Args
+	ctx = db.ContextWithTenant(ctx, args.TenantID)
+
+	phoneID, err := db.GetConfigString(ctx, w.pool, args.TenantID, "whatsapp_phone_number_id")
+	if err != nil || phoneID == "" {
+		log.Printf("campaign worker: tenant %s has no whatsapp_phone_number_id configured", args.TenantID)
+		return river.JobCancel(fmt.Errorf("tenant whatsapp credentials not configured"))
+	}
+	wabaID, _ := db.GetConfigString(ctx, w.pool, args.TenantID, "whatsapp_waba_id")
+	token, err := db.GetConfigString(ctx, w.pool, args.TenantID, "whatsapp_access_token")
+	if err != nil || token == "" {
+		log.Printf("campaign worker: tenant %s has no whatsapp_access_token configured", args.TenantID)
+		return river.JobCancel(fmt.Errorf("tenant whatsapp credentials not configured"))
+	}
+	waClient := whatsapp.NewClient(phoneID, wabaID, token)
 
 	// Load the campaign once: needed for control state AND for the header media
 	// (image/video/document templates). Fail closed if it can't be loaded — we
@@ -90,13 +105,13 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 	}
 
 	// Daily limit guard — check before consuming the rate-limiter token.
-	sent, err := db.DailyMessagesSent(ctx, w.pool)
+	sent, err := db.DailyMessagesSent(ctx, w.pool, args.TenantID)
 	if err != nil {
 		// Fail closed: don't risk over-sending past the cap on a DB blip.
 		log.Printf("campaign worker: daily check: %v — deferring", err)
 		return river.JobSnooze(5 * time.Minute)
 	}
-	cap := db.DailyCap(ctx, w.pool)
+	cap := db.DailyCap(ctx, w.pool, args.TenantID)
 	if !LimitGuardCheck(sent, cap) {
 		// Snooze until next day begins (10-minute polling interval).
 		return river.JobSnooze(10 * time.Minute)
@@ -118,7 +133,7 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 		return river.JobCancel(fmt.Errorf("contact %s opted out or blocked before send", args.ContactID))
 	}
 	if args.Category == "marketing" {
-		hours := db.FreqCapHours(ctx, w.pool)
+		hours := db.FreqCapHours(ctx, w.pool, args.TenantID)
 		if capped, err := db.MarketingSentWithin(ctx, w.pool, args.ContactID, hours); err == nil && capped {
 			w.skipRecipient(ctx, args, fmt.Sprintf("frequency cap: already received a marketing message in the last %dh", hours))
 			return river.JobCancel(fmt.Errorf("frequency cap hit for %s before send", args.ContactID))
@@ -136,7 +151,7 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 	if compErr != nil {
 		_ = db.UpdateRecipientFailed(ctx, w.pool, args.RecipientRowID, compErr.Error())
 		done, _ := db.IncrCampaignFailed(ctx, w.pool, args.CampaignID)
-		w.broadcastProgress(args.CampaignID)
+		w.broadcastProgress(args.TenantID, args.CampaignID)
 		if done {
 			_ = db.UpdateCampaignStatus(ctx, w.pool, args.CampaignID, "completed")
 		}
@@ -144,14 +159,14 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 	}
 
 	// Call Meta API.
-	waID, sendErr := w.waClient.SendTemplate(ctx, args.WAPhone, args.TemplateName, args.LangCode, components)
+	waID, sendErr := waClient.SendTemplate(ctx, args.WAPhone, args.TemplateName, args.LangCode, components)
 
 	if sendErr != nil {
 		// Stale header-media ID: re-upload the stored file for a fresh ID and let
 		// River retry (the next attempt reloads the campaign with the new ID).
 		// Bounded by maxSendAttempts so a persistent media problem still fails.
 		if camp.HeaderMediaPath != "" && whatsapp.IsMediaError(sendErr) && job.Attempt < maxSendAttempts {
-			if newID, upErr := w.reuploadHeaderMedia(ctx, camp); upErr == nil {
+			if newID, upErr := w.reuploadHeaderMedia(ctx, waClient, camp); upErr == nil {
 				log.Printf("campaign worker: re-uploaded stale header media for campaign %s → %s, retrying", camp.ID, newID)
 				return sendErr // transient: retry picks up the fresh media ID
 			} else {
@@ -162,7 +177,7 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 		if isPermanent {
 			_ = db.UpdateRecipientFailed(ctx, w.pool, args.RecipientRowID, sendErr.Error())
 			done, _ := db.IncrCampaignFailed(ctx, w.pool, args.CampaignID)
-			w.broadcastProgress(args.CampaignID)
+			w.broadcastProgress(args.TenantID, args.CampaignID)
 			if done {
 				_ = db.UpdateCampaignStatus(ctx, w.pool, args.CampaignID, "completed")
 			}
@@ -179,7 +194,7 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 	if convErr != nil {
 		log.Printf("campaign worker: conversation for %s (post-send, not retrying): %v", args.ContactID, convErr)
 		done, _ := db.IncrCampaignSent(ctx, w.pool, args.CampaignID, 0)
-		w.broadcastProgress(args.CampaignID)
+		w.broadcastProgress(args.TenantID, args.CampaignID)
 		if done {
 			_ = db.UpdateCampaignStatus(ctx, w.pool, args.CampaignID, "completed")
 		}
@@ -187,7 +202,7 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 	}
 
 	// Load rates for cost stamping.
-	rates := db.LoadRates(ctx, w.pool)
+	rates := db.LoadRates(ctx, w.pool, args.TenantID)
 	cost := CalcCost(args.Category, rates)
 
 	// Record the message row. Store the rendered body so the chat shows the
@@ -216,7 +231,7 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 	// Update recipient and campaign counters.
 	_ = db.UpdateRecipientSent(ctx, w.pool, args.RecipientRowID, msg.ID)
 	done, _ := db.IncrCampaignSent(ctx, w.pool, args.CampaignID, cost)
-	w.broadcastProgress(args.CampaignID)
+	w.broadcastProgress(args.TenantID, args.CampaignID)
 	if done {
 		_ = db.UpdateCampaignStatus(ctx, w.pool, args.CampaignID, "completed")
 	}
@@ -230,7 +245,7 @@ func (w *SendMessageWorker) Work(ctx context.Context, job *river.Job[SendMessage
 func (w *SendMessageWorker) failRecipient(ctx context.Context, args SendMessageArgs, reason string) {
 	_ = db.UpdateRecipientFailed(ctx, w.pool, args.RecipientRowID, reason)
 	done, _ := db.IncrCampaignFailed(ctx, w.pool, args.CampaignID)
-	w.broadcastProgress(args.CampaignID)
+	w.broadcastProgress(args.TenantID, args.CampaignID)
 	if done {
 		_ = db.UpdateCampaignStatus(ctx, w.pool, args.CampaignID, "completed")
 	}
@@ -243,17 +258,17 @@ func (w *SendMessageWorker) failRecipient(ctx context.Context, args SendMessageA
 func (w *SendMessageWorker) skipRecipient(ctx context.Context, args SendMessageArgs, reason string) {
 	_ = db.UpdateRecipientSkipped(ctx, w.pool, args.RecipientRowID, reason)
 	done, _ := db.IncrCampaignSkipped(ctx, w.pool, args.CampaignID)
-	w.broadcastProgress(args.CampaignID)
+	w.broadcastProgress(args.TenantID, args.CampaignID)
 	if done {
 		_ = db.UpdateCampaignStatus(ctx, w.pool, args.CampaignID, "completed")
 	}
 }
 
-func (w *SendMessageWorker) broadcastProgress(campaignID string) {
+func (w *SendMessageWorker) broadcastProgress(tenantID, campaignID string) {
 	if w.hub == nil {
 		return
 	}
-	w.hub.BroadcastAll(ws.Event{
+	w.hub.BroadcastAll(tenantID, ws.Event{
 		Type: ws.EventCampaignProgress,
 		Data: map[string]any{"campaign_id": campaignID},
 	})
@@ -324,9 +339,9 @@ func buildComponents(params []string, headerMediaType, headerMediaID string) ([]
 
 // reuploadHeaderMedia re-uploads the campaign's stored header file to Meta for a
 // fresh media ID and persists it on the campaign.
-func (w *SendMessageWorker) reuploadHeaderMedia(ctx context.Context, camp *db.Campaign) (string, error) {
+func (w *SendMessageWorker) reuploadHeaderMedia(ctx context.Context, waClient *whatsapp.Client, camp *db.Campaign) (string, error) {
 	mime := mimeForMedia(camp.HeaderMediaPath, camp.HeaderMediaType)
-	newID, err := w.waClient.UploadMedia(ctx, camp.HeaderMediaPath, mime)
+	newID, err := waClient.UploadMedia(ctx, camp.HeaderMediaPath, mime)
 	if err != nil {
 		return "", err
 	}
@@ -461,6 +476,7 @@ func EnqueueCampaignJobs(ctx context.Context, pool *pgxpool.Pool, rc *river.Clie
 			Category:       campaign.Category,
 			Params:         params,
 			BodyText:       renderTemplateBody(rawBody, params),
+			TenantID:       campaign.TenantID,
 		}
 
 		if _, err := rc.InsertTx(ctx, tx, args, &river.InsertOpts{

@@ -78,16 +78,16 @@ func (h *OnboardingHandler) CreateAdmin(w http.ResponseWriter, r *http.Request) 
 		templates.OnboardingPage("Server error, please try again").Render(r.Context(), w)
 		return
 	}
-	agent, err := db.CreateAdminAgent(r.Context(), h.pool, name, email, hash)
+	agent, err := db.CreateAdminAgent(r.Context(), h.pool, name, email, hash, "00000000-0000-0000-0000-000000000000")
 	if err != nil {
 		log.Printf("create admin: %v", err)
 		templates.OnboardingPage("Email already in use or database error").Render(r.Context(), w)
 		return
 	}
 	// Mark onboarding step-1 complete and issue session.
-	db.SetConfig(r.Context(), h.pool, "onboarding_complete", true) //nolint:errcheck
+	db.SetConfig(r.Context(), h.pool, "00000000-0000-0000-0000-000000000000", "onboarding_complete", true) //nolint:errcheck
 
-	token, err := mw.IssueToken(h.jwtSecret, agent.ID, agent.Email, agent.Name, agent.Role)
+	token, err := mw.IssueToken(h.jwtSecret, agent.ID, agent.Email, agent.Name, agent.Role, "00000000-0000-0000-0000-000000000000")
 	if err != nil {
 		log.Printf("issue token: %v", err)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -104,17 +104,21 @@ func (h *OnboardingHandler) SetupPage(w http.ResponseWriter, r *http.Request) {
 		// WA credentials are env-only — just check if they're non-empty
 		WaConnected: h.waPhoneID != "" && h.waToken != "",
 	}
+	tid := db.TenantFromContext(ctx)
+	if tid == "" {
+		tid = "00000000-0000-0000-0000-000000000000"
+	}
 	// Read per-item completion flags from app_config (set via Meta webhooks or admin settings)
-	if v, err := db.GetConfigBool(ctx, h.pool, "wa_pin_set"); err == nil {
+	if v, err := db.GetConfigBool(ctx, h.pool, tid, "wa_pin_set"); err == nil {
 		status.PinSet = v
 	}
-	if v, err := db.GetConfigBool(ctx, h.pool, "display_name_approved"); err == nil {
+	if v, err := db.GetConfigBool(ctx, h.pool, tid, "display_name_approved"); err == nil {
 		status.DisplayNameOK = v
 	}
-	if v, err := db.GetConfigBool(ctx, h.pool, "business_profile_complete"); err == nil {
+	if v, err := db.GetConfigBool(ctx, h.pool, tid, "business_profile_complete"); err == nil {
 		status.BusinessProfileOK = v
 	}
-	if v, err := db.GetConfigBool(ctx, h.pool, "business_verified"); err == nil {
+	if v, err := db.GetConfigBool(ctx, h.pool, tid, "business_verified"); err == nil {
 		status.BusinessVerified = v
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

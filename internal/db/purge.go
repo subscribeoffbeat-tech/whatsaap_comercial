@@ -8,23 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PurgeOldData deletes conversations (and their messages via CASCADE) that are
-// older than retentionMonths. Returns the number of conversations deleted.
-func PurgeOldData(ctx context.Context, pool *pgxpool.Pool, retentionMonths int64) (int64, error) {
-	cutoff := time.Now().UTC().AddDate(0, -int(retentionMonths), 0)
-	tag, err := pool.Exec(ctx, `
-		DELETE FROM conversations
-		WHERE updated_at < $1
-	`, cutoff)
-	if err != nil {
-		return 0, err
-	}
-	return tag.RowsAffected(), nil
-}
-
-// StartPurgeWorker launches a background goroutine that runs PurgeOldData once
-// per day at startup and then every 24 hours. retentionMonths is re-read from
-// app_config on each run so changes in Settings take effect without restart.
+// StartPurgeWorker launches a background goroutine that runs runPurge once
+// per day at startup and then every 24 hours.
 func StartPurgeWorker(ctx context.Context, pool *pgxpool.Pool) {
 	go func() {
 		ticker := time.NewTicker(24 * time.Hour)
@@ -42,16 +27,38 @@ func StartPurgeWorker(ctx context.Context, pool *pgxpool.Pool) {
 }
 
 func runPurge(ctx context.Context, pool *pgxpool.Pool) {
-	months, err := GetConfigInt(ctx, pool, "data_retention_months")
-	if err != nil || months <= 0 {
-		months = 24
-	}
-	n, err := PurgeOldData(ctx, pool, months)
+	rows, err := pool.Query(ctx, "SELECT id::text FROM tenants")
 	if err != nil {
-		log.Printf("purge: %v", err)
+		log.Printf("purge: list tenants: %v", err)
 		return
 	}
-	if n > 0 {
-		log.Printf("purge: deleted %d conversations older than %d months", n, months)
+	defer rows.Close()
+
+	var tenantIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err == nil {
+			tenantIDs = append(tenantIDs, id)
+		}
+	}
+
+	for _, tid := range tenantIDs {
+		months, err := GetConfigInt(ctx, pool, tid, "data_retention_months")
+		if err != nil || months <= 0 {
+			months = 24
+		}
+		cutoff := time.Now().UTC().AddDate(0, -int(months), 0)
+		tag, err := pool.Exec(ctx, `
+			DELETE FROM conversations
+			WHERE tenant_id = $2::uuid AND updated_at < $1
+		`, cutoff, tid)
+		if err != nil {
+			log.Printf("purge tenant %s: %v", tid, err)
+			continue
+		}
+		n := tag.RowsAffected()
+		if n > 0 {
+			log.Printf("purge: deleted %d conversations older than %d months for tenant %s", n, months, tid)
+		}
 	}
 }

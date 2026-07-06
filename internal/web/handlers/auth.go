@@ -77,7 +77,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := mw.IssueToken(h.jwtSecret, agent.ID, agent.Email, agent.Name, agent.Role)
+	tenantID := ""
+	if agent.TenantID != nil {
+		tenantID = *agent.TenantID
+	}
+	token, err := mw.IssueToken(h.jwtSecret, agent.ID, agent.Email, agent.Name, agent.Role, tenantID)
 	if err != nil {
 		log.Printf("issue token: %v", err)
 		http.Redirect(w, r, "/login?err=Server+error", http.StatusSeeOther)
@@ -151,7 +155,11 @@ func (h *AuthHandler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 		templates.InvitePage(agent.Name, token, "Failed to activate account").Render(r.Context(), w)
 		return
 	}
-	jwtToken, _ := mw.IssueToken(h.jwtSecret, agent.ID, agent.Email, agent.Name, agent.Role)
+	tenantID := ""
+	if agent.TenantID != nil {
+		tenantID = *agent.TenantID
+	}
+	jwtToken, _ := mw.IssueToken(h.jwtSecret, agent.ID, agent.Email, agent.Name, agent.Role, tenantID)
 	mw.SetSessionCookie(w, jwtToken)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

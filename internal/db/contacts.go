@@ -80,10 +80,19 @@ func ValidateImportRow(phone, _ string) (string, error) {
 	return NormalizePhone(phone)
 }
 
+func effectiveTenantID(ctx context.Context) string {
+	tid := TenantFromContext(ctx)
+	if tid == "" {
+		return "00000000-0000-0000-0000-000000000000"
+	}
+	return tid
+}
+
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 
 // ListContacts returns a page of contacts matching the filter and the total count.
 func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter) ([]Contact, int, error) {
+	tid := effectiveTenantID(ctx)
 	limit := f.Limit
 	if limit == 0 {
 		limit = 50
@@ -97,8 +106,6 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 	if f.Industry != "" {
 		industry = &f.Industry
 	}
-	// Effective tag set: prefer the multi-select list; fall back to single TagID.
-	// nil → no tag filter (encoded as SQL NULL).
 	var tagIDs []int64
 	if len(f.TagIDs) > 0 {
 		tagIDs = f.TagIDs
@@ -111,13 +118,14 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 	err := pool.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM contacts c
-		WHERE ($1::text IS NULL OR c.wa_phone ILIKE $1 OR c.name ILIKE $1)
+		WHERE c.tenant_id = $5::uuid
+		  AND ($1::text IS NULL OR c.wa_phone ILIKE $1 OR c.name ILIKE $1)
 		  AND ($2::bigint[] IS NULL OR EXISTS (
 		        SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag_id = ANY($2::bigint[])
 		      ))
 		  AND ($3::boolean IS NULL OR c.opted_in = $3)
 		  AND ($4::text IS NULL OR c.industry = $4)
-	`, search, tagIDs, f.OptedIn, industry).Scan(&total)
+	`, search, tagIDs, f.OptedIn, industry, tid).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count contacts: %w", err)
 	}
@@ -134,7 +142,8 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 		LEFT JOIN contact_tags ct ON ct.contact_id = c.id
 		LEFT JOIN tags t ON t.id = ct.tag_id
 		LEFT JOIN conversations conv ON conv.contact_id = c.id
-		WHERE ($1::text IS NULL OR c.wa_phone ILIKE $1 OR c.name ILIKE $1)
+		WHERE c.tenant_id = $7::uuid
+		  AND ($1::text IS NULL OR c.wa_phone ILIKE $1 OR c.name ILIKE $1)
 		  AND ($2::bigint[] IS NULL OR EXISTS (
 		        SELECT 1 FROM contact_tags ct2 WHERE ct2.contact_id = c.id AND ct2.tag_id = ANY($2::bigint[])
 		      ))
@@ -143,7 +152,7 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 		GROUP BY c.id, conv.last_message_at
 		ORDER BY c.created_at DESC
 		LIMIT $5 OFFSET $6
-	`, search, tagIDs, f.OptedIn, industry, limit, f.Offset)
+	`, search, tagIDs, f.OptedIn, industry, limit, f.Offset, tid)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list contacts: %w", err)
 	}
@@ -196,6 +205,7 @@ func ListContacts(ctx context.Context, pool *pgxpool.Pool, f ListContactsFilter)
 
 // GetContact returns a single contact by ID.
 func GetContact(ctx context.Context, pool *pgxpool.Pool, id string) (*Contact, error) {
+	tid := effectiveTenantID(ctx)
 	row := pool.QueryRow(ctx, `
 		SELECT
 		  id::text, wa_phone, name, email, industry,
@@ -203,8 +213,8 @@ func GetContact(ctx context.Context, pool *pgxpool.Pool, id string) (*Contact, e
 		  opt_in_at, opt_out_at, is_blocked,
 		  created_at, updated_at
 		FROM contacts
-		WHERE id = $1::uuid
-	`, id)
+		WHERE tenant_id = $2::uuid AND id = $1::uuid
+	`, id, tid)
 	c, err := scanContact(row)
 	if err != nil {
 		return nil, fmt.Errorf("get contact: %w", err)
@@ -214,24 +224,26 @@ func GetContact(ctx context.Context, pool *pgxpool.Pool, id string) (*Contact, e
 
 // CreateContact inserts a new contact and populates c.ID and c.CreatedAt.
 func CreateContact(ctx context.Context, pool *pgxpool.Pool, c *Contact) error {
+	tid := effectiveTenantID(ctx)
 	custom, _ := json.Marshal(c.CustomFields)
 	return pool.QueryRow(ctx, `
-		INSERT INTO contacts (wa_phone, name, email, industry, custom_fields, opted_in, opt_in_source, opt_in_at)
-		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+		INSERT INTO contacts (tenant_id, wa_phone, name, email, industry, custom_fields, opted_in, opt_in_source, opt_in_at)
+		VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
 		RETURNING id::text, created_at
-	`, c.WAPhone, c.Name, c.Email, c.Industry, string(custom), c.OptedIn, c.OptInSource, c.OptInAt).
+	`, tid, c.WAPhone, c.Name, c.Email, c.Industry, string(custom), c.OptedIn, c.OptInSource, c.OptInAt).
 		Scan(&c.ID, &c.CreatedAt)
 }
 
 // UpdateContact writes name, email, industry, custom_fields, and opted_in back to the DB.
 func UpdateContact(ctx context.Context, pool *pgxpool.Pool, c *Contact) error {
+	tid := effectiveTenantID(ctx)
 	custom, _ := json.Marshal(c.CustomFields)
 	_, err := pool.Exec(ctx, `
 		UPDATE contacts
-		SET name = $2, email = $3, industry = $4, custom_fields = $5::jsonb, opted_in = $6,
-		    wa_phone = $7, updated_at = NOW()
-		WHERE id = $1::uuid
-	`, c.ID, c.Name, c.Email, c.Industry, string(custom), c.OptedIn, c.WAPhone)
+		SET name = $3, email = $4, industry = $5, custom_fields = $6::jsonb, opted_in = $7,
+		    wa_phone = $8, updated_at = NOW()
+		WHERE tenant_id = $1::uuid AND id = $2::uuid
+	`, tid, c.ID, c.Name, c.Email, c.Industry, string(custom), c.OptedIn, c.WAPhone)
 	return err
 }
 
@@ -318,37 +330,41 @@ func ListContactCampaigns(ctx context.Context, pool *pgxpool.Pool, contactID str
 // SetContactConsent flips a contact's marketing opt-in, stamping the
 // source/timestamp so the consent record stays auditable.
 func SetContactConsent(ctx context.Context, pool *pgxpool.Pool, id string, optedIn bool) error {
+	tid := effectiveTenantID(ctx)
 	_, err := pool.Exec(ctx, `
 		UPDATE contacts
-		SET opted_in      = $2,
-		    opt_in_source = CASE WHEN $2 THEN 'manual_admin' ELSE opt_in_source END,
-		    opt_in_at     = CASE WHEN $2 AND opt_in_at IS NULL THEN NOW() ELSE opt_in_at END,
-		    opt_out_at    = CASE WHEN $2 THEN NULL ELSE NOW() END,
+		SET opted_in      = $3,
+		    opt_in_source = CASE WHEN $3 THEN 'manual_admin' ELSE opt_in_source END,
+		    opt_in_at     = CASE WHEN $3 AND opt_in_at IS NULL THEN NOW() ELSE opt_in_at END,
+		    opt_out_at    = CASE WHEN $3 THEN NULL ELSE NOW() END,
 		    updated_at    = NOW()
-		WHERE id = $1::uuid
-	`, id, optedIn)
+		WHERE tenant_id = $1::uuid AND id = $2::uuid
+	`, tid, id, optedIn)
 	return err
 }
 
 // DeleteContact removes a contact (cascades to tags, notes, conversations).
 func DeleteContact(ctx context.Context, pool *pgxpool.Pool, id string) error {
-	_, err := pool.Exec(ctx, `DELETE FROM contacts WHERE id = $1::uuid`, id)
+	tid := effectiveTenantID(ctx)
+	_, err := pool.Exec(ctx, `DELETE FROM contacts WHERE tenant_id = $1::uuid AND id = $2::uuid`, tid, id)
 	return err
 }
 
 // OptOut marks a contact opted-out by phone number. Called by the STOP handler.
 func OptOut(ctx context.Context, pool *pgxpool.Pool, waPhone string) error {
+	tid := effectiveTenantID(ctx)
 	_, err := pool.Exec(ctx, `
 		UPDATE contacts
 		SET opted_in = FALSE, opt_out_at = NOW(), updated_at = NOW()
-		WHERE wa_phone = $1
-	`, waPhone)
+		WHERE tenant_id = $1::uuid AND wa_phone = $2
+	`, tid, waPhone)
 	return err
 }
 
 // BulkInsertContacts upserts contacts (skips on duplicate wa_phone).
 // Returns (inserted, skipped, error).
 func BulkInsertContacts(ctx context.Context, pool *pgxpool.Pool, contacts []Contact) (inserted, skipped int, err error) {
+	tid := effectiveTenantID(ctx)
 	tx, txErr := pool.Begin(ctx)
 	if txErr != nil {
 		return 0, 0, txErr
@@ -359,11 +375,11 @@ func BulkInsertContacts(ctx context.Context, pool *pgxpool.Pool, contacts []Cont
 	for _, c := range contacts {
 		custom, _ := json.Marshal(c.CustomFields)
 		batch.Queue(`
-			INSERT INTO contacts (wa_phone, name, email, industry, custom_fields, opted_in, opt_in_source, opt_in_at)
-			VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, NOW())
-			ON CONFLICT (wa_phone) DO NOTHING
+			INSERT INTO contacts (tenant_id, wa_phone, name, email, industry, custom_fields, opted_in, opt_in_source, opt_in_at)
+			VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, $8, NOW())
+			ON CONFLICT (tenant_id, wa_phone) DO NOTHING
 			RETURNING id::text
-		`, c.WAPhone, c.Name, c.Email, c.Industry, string(custom), c.OptedIn, c.OptInSource)
+		`, tid, c.WAPhone, c.Name, c.Email, c.Industry, string(custom), c.OptedIn, c.OptInSource)
 	}
 
 	br := tx.SendBatch(ctx, batch)
@@ -387,12 +403,13 @@ func BulkInsertContacts(ctx context.Context, pool *pgxpool.Pool, contacts []Cont
 // GetContactIDMapByPhones returns a phone→contact-id map for the given phones
 // (used by CSV import to apply per-row tags to the right contact).
 func GetContactIDMapByPhones(ctx context.Context, pool *pgxpool.Pool, phones []string) (map[string]string, error) {
+	tid := effectiveTenantID(ctx)
 	if len(phones) == 0 {
 		return nil, nil
 	}
 	rows, err := pool.Query(ctx, `
-		SELECT wa_phone, id::text FROM contacts WHERE wa_phone = ANY($1::text[])
-	`, phones)
+		SELECT wa_phone, id::text FROM contacts WHERE tenant_id = $2::uuid AND wa_phone = ANY($1::text[])
+	`, phones, tid)
 	if err != nil {
 		return nil, err
 	}
@@ -410,12 +427,13 @@ func GetContactIDMapByPhones(ctx context.Context, pool *pgxpool.Pool, phones []s
 
 // GetContactIDsByPhones returns contact IDs for the given E.164 phone numbers.
 func GetContactIDsByPhones(ctx context.Context, pool *pgxpool.Pool, phones []string) ([]string, error) {
+	tid := effectiveTenantID(ctx)
 	if len(phones) == 0 {
 		return nil, nil
 	}
 	rows, err := pool.Query(ctx, `
-		SELECT id::text FROM contacts WHERE wa_phone = ANY($1::text[])
-	`, phones)
+		SELECT id::text FROM contacts WHERE tenant_id = $2::uuid AND wa_phone = ANY($1::text[])
+	`, phones, tid)
 	if err != nil {
 		return nil, err
 	}
@@ -434,6 +452,7 @@ func GetContactIDsByPhones(ctx context.Context, pool *pgxpool.Pool, phones []str
 // GetContactsByIDs returns a map of contactID → Contact for the given IDs.
 // Missing IDs are silently omitted.
 func GetContactsByIDs(ctx context.Context, pool *pgxpool.Pool, ids []string) (map[string]Contact, error) {
+	tid := effectiveTenantID(ctx)
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -442,8 +461,8 @@ func GetContactsByIDs(ctx context.Context, pool *pgxpool.Pool, ids []string) (ma
 		       c.opted_in, c.opt_in_source, c.opt_in_at, c.opt_out_at, c.is_blocked,
 		       c.created_at, c.updated_at
 		FROM contacts c
-		WHERE c.id = ANY($1::uuid[])
-	`, ids)
+		WHERE c.tenant_id = $2::uuid AND c.id = ANY($1::uuid[])
+	`, ids, tid)
 	if err != nil {
 		return nil, fmt.Errorf("get contacts by ids: %w", err)
 	}
@@ -499,13 +518,14 @@ func BulkRemoveTag(ctx context.Context, pool *pgxpool.Pool, contactIDs []string,
 }
 
 func GetContactTags(ctx context.Context, pool *pgxpool.Pool, contactID string) ([]Tag, error) {
+	tid := effectiveTenantID(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT t.id, t.name, t.color, t.created_at
 		FROM tags t
 		JOIN contact_tags ct ON ct.tag_id = t.id
-		WHERE ct.contact_id = $1::uuid
+		WHERE ct.contact_id = $1::uuid AND t.tenant_id = $2::uuid
 		ORDER BY t.name
-	`, contactID)
+	`, contactID, tid)
 	if err != nil {
 		return nil, err
 	}

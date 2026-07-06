@@ -27,16 +27,18 @@ type Agent struct {
 	Phone       *string
 	Timezone    string
 	Preferences map[string]any
+	TenantID    *string // UUID as string
 }
 
 const agentColumns = `id::text, name, email, password_hash, role, available,
 	COALESCE(active, TRUE), invite_token, invite_expires_at, last_active_at,
 	created_at, updated_at,
-	phone, COALESCE(timezone,'Asia/Kolkata'), COALESCE(preferences::text,'{}')`
+	phone, COALESCE(timezone,'Asia/Kolkata'), COALESCE(preferences::text,'{}'),
+	tenant_id::text`
 
 func scanAgent(row rowScanner) (*Agent, error) {
 	a := &Agent{}
-	var inviteToken, phone pgtype.Text
+	var inviteToken, phone, tenantID pgtype.Text
 	var inviteExp, lastActive pgtype.Timestamptz
 	var prefRaw string
 	err := row.Scan(
@@ -44,6 +46,7 @@ func scanAgent(row rowScanner) (*Agent, error) {
 		&a.Active, &inviteToken, &inviteExp, &lastActive,
 		&a.CreatedAt, &a.UpdatedAt,
 		&phone, &a.Timezone, &prefRaw,
+		&tenantID,
 	)
 	if err != nil {
 		return nil, err
@@ -61,6 +64,9 @@ func scanAgent(row rowScanner) (*Agent, error) {
 	}
 	if phone.Valid {
 		a.Phone = &phone.String
+	}
+	if tenantID.Valid {
+		a.TenantID = &tenantID.String
 	}
 	a.Preferences = map[string]any{}
 	_ = json.Unmarshal([]byte(prefRaw), &a.Preferences)
@@ -89,11 +95,12 @@ func GetAgentByInviteToken(ctx context.Context, pool *pgxpool.Pool, token string
 	`, token))
 }
 
-// ListAgents returns all agents ordered by name.
+// ListAgents returns all agents for the current tenant ordered by name.
 func ListAgents(ctx context.Context, pool *pgxpool.Pool) ([]*Agent, error) {
+	tid := effectiveTenantID(ctx)
 	rows, err := pool.Query(ctx, `
-		SELECT `+agentColumns+` FROM agents ORDER BY name ASC
-	`)
+		SELECT `+agentColumns+` FROM agents WHERE tenant_id = $1::uuid ORDER BY name ASC
+	`, tid)
 	if err != nil {
 		return nil, err
 	}
@@ -118,22 +125,22 @@ func CountAgents(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
 
 // CreateInvitedAgent inserts an agent with an invite token (password not yet set).
 // The caller must generate a secure random invite_token.
-func CreateInvitedAgent(ctx context.Context, pool *pgxpool.Pool, name, email, role, inviteToken string, expiresAt time.Time) (*Agent, error) {
+func CreateInvitedAgent(ctx context.Context, pool *pgxpool.Pool, name, email, role, inviteToken string, expiresAt time.Time, tenantID string) (*Agent, error) {
 	return scanAgent(pool.QueryRow(ctx, `
-		INSERT INTO agents (name, email, password_hash, role, active, invite_token, invite_expires_at)
-		VALUES ($1, $2, '', $3, FALSE, $4, $5)
+		INSERT INTO agents (name, email, password_hash, role, active, invite_token, invite_expires_at, tenant_id)
+		VALUES ($1, $2, '', $3, FALSE, $4, $5, $6::uuid)
 		RETURNING `+agentColumns,
-		name, email, role, inviteToken, expiresAt,
+		name, email, role, inviteToken, expiresAt, tenantID,
 	))
 }
 
 // CreateAdminAgent creates the first admin account during onboarding.
-func CreateAdminAgent(ctx context.Context, pool *pgxpool.Pool, name, email, passwordHash string) (*Agent, error) {
+func CreateAdminAgent(ctx context.Context, pool *pgxpool.Pool, name, email, passwordHash string, tenantID string) (*Agent, error) {
 	return scanAgent(pool.QueryRow(ctx, `
-		INSERT INTO agents (name, email, password_hash, role, active)
-		VALUES ($1, $2, $3, 'admin', TRUE)
+		INSERT INTO agents (name, email, password_hash, role, active, tenant_id)
+		VALUES ($1, $2, $3, 'admin', TRUE, $4::uuid)
 		RETURNING `+agentColumns,
-		name, email, passwordHash,
+		name, email, passwordHash, tenantID,
 	))
 }
 

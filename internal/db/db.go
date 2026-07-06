@@ -19,3 +19,29 @@ func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	}
 	return pool, nil
 }
+
+type ctxKey string
+const tenantCtxKey ctxKey = "tenant_id"
+
+// ContextWithTenant injects a tenant UUID string into the context.
+func ContextWithTenant(ctx context.Context, tenantID string) context.Context {
+	return context.WithValue(ctx, tenantCtxKey, tenantID)
+}
+
+// TenantFromContext extracts the tenant UUID string from the context.
+func TenantFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(tenantCtxKey).(string)
+	return v
+}
+
+// TenantParam returns a pointer to the tenant UUID string from context, or nil if unset.
+// Useful for SQL scoping: WHERE ($1::text IS NULL OR tenant_id = $1::uuid)
+func TenantParam(ctx context.Context) *string {
+	v := TenantFromContext(ctx)
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+

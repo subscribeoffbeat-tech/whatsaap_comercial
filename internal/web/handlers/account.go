@@ -75,7 +75,11 @@ func (h *AccountHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Re-issue JWT so the topnav shows the new name immediately.
-	token, err := mw.IssueToken(h.jwtSecret, agent.ID, email, name, agent.Role)
+	tenantID := ""
+	if agent != nil && agent.TenantID != "" {
+		tenantID = agent.TenantID
+	}
+	token, err := mw.IssueToken(h.jwtSecret, agent.ID, email, name, agent.Role, tenantID)
 	if err == nil {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "wt_session",

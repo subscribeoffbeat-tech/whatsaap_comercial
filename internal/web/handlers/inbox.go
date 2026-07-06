@@ -25,13 +25,12 @@ import (
 
 // InboxHandler wires the shared inbox routes.
 type InboxHandler struct {
-	pool     *pgxpool.Pool
-	waClient *whatsapp.Client
-	hub      *ws.Hub
+	pool *pgxpool.Pool
+	hub  *ws.Hub
 }
 
-func NewInboxHandler(pool *pgxpool.Pool, waClient *whatsapp.Client, hub *ws.Hub) *InboxHandler {
-	return &InboxHandler{pool: pool, waClient: waClient, hub: hub}
+func NewInboxHandler(pool *pgxpool.Pool, hub *ws.Hub) *InboxHandler {
+	return &InboxHandler{pool: pool, hub: hub}
 }
 
 // Mount registers all inbox routes on the given router.
@@ -95,7 +94,7 @@ func (h *InboxHandler) GetConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(conv)
+	_ = json.NewEncoder(w).Encode(conv)
 }
 
 // ── Message thread ────────────────────────────────────────────────────────
@@ -162,6 +161,7 @@ type postMessageRequest struct {
 
 func (h *InboxHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	convID := chi.URLParam(r, "id")
+	tid := db.TenantFromContext(r.Context())
 
 	var req postMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -175,14 +175,21 @@ func (h *InboxHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up the contact's E.164 phone number for the Meta API call.
 	contact, err := db.GetContact(r.Context(), h.pool, conv.ContactID)
 	if err != nil {
 		http.Error(w, "contact not found", http.StatusNotFound)
 		return
 	}
 
-	// Attribute the send to the current agent, and enforce their monthly cap.
+	phoneID, _ := db.GetConfigString(r.Context(), h.pool, tid, "whatsapp_phone_number_id")
+	wabaID, _ := db.GetConfigString(r.Context(), h.pool, tid, "whatsapp_waba_id")
+	token, _ := db.GetConfigString(r.Context(), h.pool, tid, "whatsapp_access_token")
+	if phoneID == "" || token == "" {
+		http.Error(w, `{"error":"WhatsApp API credentials not configured for this workspace."}`, http.StatusFailedDependency)
+		return
+	}
+	waClient := whatsapp.NewClient(phoneID, wabaID, token)
+
 	var sentBy *string
 	if agent := mw.AgentFromCtx(r.Context()); agent != nil {
 		id := agent.ID
@@ -196,12 +203,10 @@ func (h *InboxHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build the outbound message + Meta send for the chosen type.
 	var (
-		msg        *db.Message
-		waID       string
-		sendErr    error
-		templateNm string
+		msg     *db.Message
+		waID    string
+		sendErr error
 	)
 
 	if req.Type == "template" {
@@ -210,7 +215,6 @@ func (h *InboxHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"template not found"}`, http.StatusNotFound)
 			return
 		}
-		templateNm = tmpl.Name
 		params := templateBodyParams(tmpl)
 		preview := substituteVars(templateBodyText(tmpl), params)
 		msg = &db.Message{
@@ -229,9 +233,8 @@ func (h *InboxHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = db.TouchLastMessage(r.Context(), h.pool, convID, msg.CreatedAt)
-		waID, sendErr = h.waClient.SendTemplate(r.Context(), contact.WAPhone, tmpl.Name, tmpl.Language, inboxTemplateComponents(params))
+		waID, sendErr = waClient.SendTemplate(r.Context(), contact.WAPhone, tmpl.Name, tmpl.Language, inboxTemplateComponents(params))
 	} else {
-		// Free-form text: only allowed inside the 24h window.
 		if !whatsapp.IsWindowOpen(conv.LastInboundAt) {
 			http.Error(w, `{"error":"24h window closed — send an approved template instead"}`, http.StatusUnprocessableEntity)
 			return
@@ -256,18 +259,14 @@ func (h *InboxHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = db.TouchLastMessage(r.Context(), h.pool, convID, msg.CreatedAt)
-		waID, sendErr = h.waClient.SendText(r.Context(), contact.WAPhone, req.Body)
+		waID, sendErr = waClient.SendText(r.Context(), contact.WAPhone, req.Body)
 	}
-	_ = templateNm
 
 	if sendErr != nil {
 		errMsg := sendErr.Error()
 		_ = db.UpdateMessageStatus(r.Context(), h.pool, msg.ID, "failed", nil, &errMsg)
 		log.Printf("send to %s: %v", conv.ContactID, sendErr)
-		http.Error(w,
-			fmt.Sprintf(`{"error":"send failed: %s"}`, errMsg),
-			http.StatusBadGateway,
-		)
+		http.Error(w, fmt.Sprintf(`{"error":"send failed: %s"}`, errMsg), http.StatusBadGateway)
 		return
 	}
 
@@ -276,7 +275,7 @@ func (h *InboxHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	msg.WAMessageID = &waID
 
-	h.hub.BroadcastConversation(convID, ws.Event{
+	h.hub.BroadcastConversation(tid, convID, ws.Event{
 		Type:           ws.EventNewMessage,
 		ConversationID: convID,
 		Data:           msg,
@@ -298,9 +297,7 @@ func (h *InboxHandler) ResolveConversation(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// Replace the thread with an empty "resolved" state; the button also
-	// reloads the conversation list (client-side) so it drops off the Open tab.
-	fmt.Fprint(w, `<div class="th-wrap" id="thread"><div class="th-empty"><p>&#10003; Conversation resolved</p></div></div>`)
+	_, _ = fmt.Fprint(w, `<div class="th-wrap" id="thread"><div class="th-empty"><p>&#10003; Conversation resolved</p></div></div>`)
 }
 
 // ── Template picker (for sending outside the 24h window) ──────────────────
@@ -313,7 +310,7 @@ func (h *InboxHandler) TemplatePicker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<div class="tpick-overlay" onclick="if(event.target===this)this.remove()">`+
+	_, _ = fmt.Fprintf(w, `<div class="tpick-overlay" onclick="if(event.target===this)this.remove()">`+
 		`<div class="tpick-modal"><div class="tpick-hd"><strong>Send a template</strong>`+
 		`<button class="tpick-close" onclick="this.closest('.tpick-overlay').remove()">&times;</button></div>`+
 		`<div class="tpick-sub">Outside the 24-hour window, only approved templates can be sent.</div>`+
@@ -321,27 +318,26 @@ func (h *InboxHandler) TemplatePicker(w http.ResponseWriter, r *http.Request) {
 	count := 0
 	for _, t := range all {
 		if t.Status != "approved" || templateHasMediaHeader(&t) {
-			continue // only approved, text-only templates are sendable from here
+			continue
 		}
 		count++
 		preview := substituteVars(templateBodyText(&t), templateBodyParams(&t))
 		if len(preview) > 120 {
 			preview = preview[:120] + "…"
 		}
-		fmt.Fprintf(w,
+		_, _ = fmt.Fprintf(w,
 			`<button class="tpick-item" type="button" onclick="sendTemplate('%s','%s');this.closest('.tpick-overlay').remove()">`+
 				`<div class="tpick-name">%s</div><div class="tpick-body">%s</div></button>`,
 			convID, t.ID, htmlEscape(t.Name), htmlEscape(preview))
 	}
 	if count == 0 {
-		fmt.Fprint(w, `<div class="tpick-empty">No approved text templates available. Create &amp; get one approved under Templates.</div>`)
+		_, _ = fmt.Fprint(w, `<div class="tpick-empty">No approved text templates available. Create &amp; get one approved under Templates.</div>`)
 	}
-	fmt.Fprint(w, `</div></div></div>`)
+	_, _ = fmt.Fprint(w, `</div></div></div>`)
 }
 
 // ── Template helpers ──────────────────────────────────────────────────────
 
-// templateBodyText returns the raw BODY text (with {{N}} placeholders).
 func templateBodyText(t *db.Template) string {
 	for _, c := range t.Components {
 		if strings.EqualFold(toStr(c["type"]), "BODY") {
@@ -351,8 +347,6 @@ func templateBodyText(t *db.Template) string {
 	return ""
 }
 
-// templateBodyParams returns the stored example values for the BODY variables,
-// in order — used as the parameters when sending the template.
 func templateBodyParams(t *db.Template) []string {
 	for _, c := range t.Components {
 		if !strings.EqualFold(toStr(c["type"]), "BODY") {
@@ -379,8 +373,6 @@ func templateBodyParams(t *db.Template) []string {
 	return nil
 }
 
-// templateHasMediaHeader reports whether the template uses an image/video/doc
-// header (those need a media parameter we don't collect in the inbox yet).
 func templateHasMediaHeader(t *db.Template) bool {
 	for _, c := range t.Components {
 		if strings.EqualFold(toStr(c["type"]), "HEADER") {
@@ -393,7 +385,6 @@ func templateHasMediaHeader(t *db.Template) bool {
 	return false
 }
 
-// inboxTemplateComponents builds the body-parameter components for SendTemplate.
 func inboxTemplateComponents(params []string) []whatsapp.TemplateComponent {
 	if len(params) == 0 {
 		return nil
@@ -405,7 +396,6 @@ func inboxTemplateComponents(params []string) []whatsapp.TemplateComponent {
 	return []whatsapp.TemplateComponent{{Type: "body", Parameters: ps}}
 }
 
-// substituteVars replaces {{1}},{{2}}… in text with the given params (for display).
 func substituteVars(text string, params []string) string {
 	for i, p := range params {
 		text = strings.ReplaceAll(text, fmt.Sprintf("{{%d}}", i+1), p)
@@ -426,9 +416,9 @@ func htmlEscape(s string) string {
 
 // ── Inbound event handler (called from webhook handler) ──────────────────
 
-// HandleInbound processes a genuinely new inbound WhatsApp message.
 func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMessage) {
-	contactID, err := h.ensureContact(ctx, msg.From)
+	tid := db.TenantFromContext(ctx)
+	contactID, err := h.ensureContact(ctx, tid, msg.From)
 	if err != nil {
 		log.Printf("ensure contact %s: %v", msg.From, err)
 		return
@@ -439,7 +429,7 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 		log.Printf("get/create conversation for %s: %v", msg.From, err)
 		return
 	}
-	isNewContact := conv.LastMessageAt == nil // true when no prior messages
+	isNewContact := conv.LastMessageAt == nil
 
 	now := time.Now().UTC()
 	if err := db.SetLastInbound(ctx, h.pool, conv.ID, now); err != nil {
@@ -450,9 +440,7 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 	if msg.Text != nil {
 		content["body"] = msg.Text.Body
 	}
-	// Preserve inbound media metadata so the inbox shows the caption and the
-	// downloaded file keeps its original name / content-type. Without this the
-	// caption text and document filename were silently dropped.
+
 	var mediaMeta *whatsapp.MediaContent
 	switch {
 	case msg.Image != nil:
@@ -495,10 +483,8 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 		return
 	}
 
-	// STOP/UNSUBSCRIBE: opt-out write is SYNCHRONOUS. context.WithoutCancel ensures
-	// a Meta disconnect cannot abort the write; the 5s timeout prevents a stalled
-	// DB from hanging the webhook worker.
-	if msg.Text != nil && automation.MatchesStopKeyword(msg.Text.Body, db.GetStopKeywords(ctx, h.pool)) {
+	// STOP/UNSUBSCRIBE keyword compliance logic
+	if msg.Text != nil && automation.MatchesStopKeyword(msg.Text.Body, db.GetStopKeywords(ctx, h.pool, tid)) {
 		phone := msg.From
 		if !strings.HasPrefix(phone, "+") {
 			phone = "+" + phone
@@ -514,20 +500,26 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 					log.Printf("STOP CONFIRMATION PANIC phone=%s: %v", phone, r)
 				}
 			}()
-			// Retry the confirmation on transient send failures so the mandated
-			// opt-out acknowledgement isn't silently dropped on a single blip.
-			const attempts = 3
-			for attempt := 1; ; attempt++ {
-				_, err := h.waClient.SendText(context.Background(), phone, automation.StopConfirmMessage)
-				if err == nil {
-					return
+
+			phoneID, _ := db.GetConfigString(context.Background(), h.pool, tid, "whatsapp_phone_number_id")
+			wabaID, _ := db.GetConfigString(context.Background(), h.pool, tid, "whatsapp_waba_id")
+			token, _ := db.GetConfigString(context.Background(), h.pool, tid, "whatsapp_access_token")
+
+			if phoneID != "" && token != "" {
+				waClient := whatsapp.NewClient(phoneID, wabaID, token)
+				const attempts = 3
+				for attempt := 1; ; attempt++ {
+					_, err := waClient.SendText(context.Background(), phone, automation.StopConfirmMessage)
+					if err == nil {
+						return
+					}
+					if whatsapp.IsPermanent(err) || attempt >= attempts {
+						log.Printf("stop confirm send %s failed after %d attempt(s): %v", phone, attempt, err)
+						return
+					}
+					log.Printf("stop confirm send %s attempt %d/%d: %v — retrying", phone, attempt, attempts, err)
+					time.Sleep(time.Duration(attempt) * 2 * time.Second)
 				}
-				if whatsapp.IsPermanent(err) || attempt >= attempts {
-					log.Printf("stop confirm send %s failed after %d attempt(s): %v", phone, attempt, err)
-					return
-				}
-				log.Printf("stop confirm send %s attempt %d/%d: %v — retrying", phone, attempt, attempts, err)
-				time.Sleep(time.Duration(attempt) * 2 * time.Second)
 			}
 		}()
 	} else {
@@ -538,13 +530,22 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 					log.Printf("RunRules panic: %v", r)
 				}
 			}()
-			if _, err := automation.RunRules(context.Background(), h.pool, h.waClient, msg, contactID, conv.ID, isNewContact); err != nil {
-				log.Printf("automation rules for %s: %v", msg.From, err)
+
+			phoneID, _ := db.GetConfigString(context.Background(), h.pool, tid, "whatsapp_phone_number_id")
+			wabaID, _ := db.GetConfigString(context.Background(), h.pool, tid, "whatsapp_waba_id")
+			token, _ := db.GetConfigString(context.Background(), h.pool, tid, "whatsapp_access_token")
+
+			if phoneID != "" && token != "" {
+				waClient := whatsapp.NewClient(phoneID, wabaID, token)
+				bgCtx := db.ContextWithTenant(context.Background(), tid)
+				if _, err := automation.RunRules(bgCtx, h.pool, waClient, msg, contactID, conv.ID, isNewContact); err != nil {
+					log.Printf("automation rules for %s: %v", msg.From, err)
+				}
 			}
 		}()
 	}
 
-	// Download media immediately — Meta URLs expire in ~5 minutes.
+	// Download media
 	if mediaID := msg.MediaID(); mediaID != "" {
 		origName, mime := "", ""
 		if msg.Document != nil {
@@ -559,18 +560,25 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 					log.Printf("downloadMedia panic: %v", r)
 				}
 			}()
-			h.downloadMedia(dbMsg.ID, mediaID, origName, mime)
+
+			phoneID, _ := db.GetConfigString(context.Background(), h.pool, tid, "whatsapp_phone_number_id")
+			wabaID, _ := db.GetConfigString(context.Background(), h.pool, tid, "whatsapp_waba_id")
+			token, _ := db.GetConfigString(context.Background(), h.pool, tid, "whatsapp_access_token")
+
+			if phoneID != "" && token != "" {
+				waClient := whatsapp.NewClient(phoneID, wabaID, token)
+				h.downloadMedia(context.Background(), waClient, dbMsg.ID, mediaID, origName, mime)
+			}
 		}()
 	}
 
-	// Round-robin assign if still unassigned
 	if conv.AssignedTo == nil {
 		if _, err := db.AssignRoundRobin(ctx, h.pool, conv.ID); err != nil {
 			log.Printf("round-robin assign: %v", err)
 		}
 	}
 
-	h.hub.BroadcastConversation(conv.ID, ws.Event{
+	h.hub.BroadcastConversation(tid, conv.ID, ws.Event{
 		Type:           ws.EventNewMessage,
 		ConversationID: conv.ID,
 		Data:           dbMsg,
@@ -579,6 +587,7 @@ func (h *InboxHandler) HandleInbound(ctx context.Context, msg whatsapp.InboundMe
 
 // HandleStatusUpdate applies a delivery/read/failed status.
 func (h *InboxHandler) HandleStatusUpdate(ctx context.Context, status whatsapp.MessageStatus) {
+	tid := db.TenantFromContext(ctx)
 	var errCode, errMsg *string
 	if len(status.Errors) > 0 {
 		code := strconv.Itoa(status.Errors[0].Code)
@@ -588,14 +597,12 @@ func (h *InboxHandler) HandleStatusUpdate(ctx context.Context, status whatsapp.M
 	if err := db.UpdateMessageStatus(ctx, h.pool, status.ID, status.Status, errCode, errMsg); err != nil {
 		log.Printf("update message status %s→%s: %v", status.ID, status.Status, err)
 	}
-	// If this message belongs to a campaign, roll the new delivery status (and
-	// any failure reason) up into the campaign's counters and recipient rows.
 	if cid, ok := db.GetMessageCampaignID(ctx, h.pool, status.ID); ok {
 		if err := db.SyncCampaignStats(ctx, h.pool, cid); err != nil {
 			log.Printf("sync campaign stats %s: %v", cid, err)
 		}
 	}
-	h.hub.BroadcastAll(ws.Event{
+	h.hub.BroadcastAll(tid, ws.Event{
 		Type: ws.EventMessageStatus,
 		Data: map[string]string{"wa_message_id": status.ID, "status": status.Status},
 	})
@@ -603,32 +610,27 @@ func (h *InboxHandler) HandleStatusUpdate(ctx context.Context, status whatsapp.M
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
-func (h *InboxHandler) ensureContact(ctx context.Context, phone string) (string, error) {
+func (h *InboxHandler) ensureContact(ctx context.Context, tenantID, phone string) (string, error) {
 	if !strings.HasPrefix(phone, "+") {
 		phone = "+" + phone
 	}
 	var id string
 	err := h.pool.QueryRow(ctx, `
-		INSERT INTO contacts (wa_phone, opted_in, opt_in_source, opt_in_at)
-		VALUES ($1, FALSE, 'inbound_message', NOW())
-		ON CONFLICT (wa_phone) DO UPDATE SET updated_at = NOW()
+		INSERT INTO contacts (tenant_id, wa_phone, opted_in, opt_in_source, opt_in_at)
+		VALUES ($2::uuid, $1, FALSE, 'inbound_message', NOW())
+		ON CONFLICT (tenant_id, wa_phone) DO UPDATE SET updated_at = NOW()
 		RETURNING id::text
-	`, phone).Scan(&id)
+	`, phone, tenantID).Scan(&id)
 	return id, err
 }
 
-// downloadMedia fetches an inbound media file from Meta and stores it locally.
-// Meta media URLs expire in ~5 minutes and the resolution URL is single-shot, so
-// a transient failure means permanent data loss — we retry with backoff and
-// re-resolve the URL each attempt (the previous URL may have expired).
-func (h *InboxHandler) downloadMedia(messageID, mediaID, origName, mime string) {
-	ctx := context.Background()
+func (h *InboxHandler) downloadMedia(ctx context.Context, waClient *whatsapp.Client, messageID, mediaID, origName, mime string) {
 	const attempts = 3
 	var data []byte
 	for attempt := 1; ; attempt++ {
-		url, _, err := h.waClient.GetMediaURL(ctx, mediaID)
+		url, _, err := waClient.GetMediaURL(ctx, mediaID)
 		if err == nil {
-			data, err = h.waClient.DownloadMedia(ctx, url)
+			data, err = waClient.DownloadMedia(ctx, url)
 		}
 		if err == nil {
 			break
@@ -656,8 +658,6 @@ func (h *InboxHandler) downloadMedia(messageID, mediaID, origName, mime string) 
 	}
 }
 
-// mediaExt picks a file extension from the original document name, falling back
-// to the MIME type, so stored media keeps a sensible extension for serving.
 func mediaExt(origName, mime string) string {
 	if origName != "" {
 		if e := filepath.Ext(origName); e != "" {

@@ -1,4 +1,4 @@
-﻿package handlers
+package handlers
 
 import (
 	"fmt"
@@ -94,8 +94,9 @@ func (h *TeamHandler) Invite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tid := db.TenantFromContext(r.Context())
 	expires := time.Now().Add(7 * 24 * time.Hour)
-	invited, err := db.CreateInvitedAgent(r.Context(), h.pool, name, emailAddr, role, token, expires)
+	invited, err := db.CreateInvitedAgent(r.Context(), h.pool, name, emailAddr, role, token, expires, tid)
 	if err != nil {
 		log.Printf("create invited agent: %v", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

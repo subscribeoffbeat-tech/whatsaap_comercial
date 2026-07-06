@@ -53,18 +53,19 @@ func (h *SettingsHandler) UpdateSending(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	ctx := r.Context()
+	tid := db.TenantFromContext(ctx)
 	actor := mw.AgentFromCtx(ctx)
 	for _, kv := range []struct{ key, form string }{
 		{"quiet_hours_start_ist", "quiet_start"},
 		{"quiet_hours_end_ist", "quiet_end"},
 	} {
 		if v := r.FormValue(kv.form); v != "" {
-			db.SetConfig(ctx, h.pool, kv.key, v) //nolint:errcheck
+			db.SetConfig(ctx, h.pool, tid, kv.key, v) //nolint:errcheck
 		}
 	}
 	if v := r.FormValue("freq_cap_hours"); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-			db.SetConfig(ctx, h.pool, "freq_cap_hours", n) //nolint:errcheck
+			db.SetConfig(ctx, h.pool, tid, "freq_cap_hours", n) //nolint:errcheck
 		}
 	}
 	db.Log(ctx, h.pool, actor.ID, "settings_updated", "config", "sending_rules",
@@ -81,6 +82,7 @@ func (h *SettingsHandler) UpdateCosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	tid := db.TenantFromContext(ctx)
 	actor := mw.AgentFromCtx(ctx)
 	for _, kv := range []struct{ key, form string }{
 		{"marketing_cost_inr", "marketing"},
@@ -90,7 +92,7 @@ func (h *SettingsHandler) UpdateCosts(w http.ResponseWriter, r *http.Request) {
 	} {
 		if v := r.FormValue(kv.form); v != "" {
 			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				db.SetConfig(ctx, h.pool, kv.key, f) //nolint:errcheck
+				db.SetConfig(ctx, h.pool, tid, kv.key, f) //nolint:errcheck
 			}
 		}
 	}
@@ -108,10 +110,11 @@ func (h *SettingsHandler) UpdateRetention(w http.ResponseWriter, r *http.Request
 		return
 	}
 	ctx := r.Context()
+	tid := db.TenantFromContext(ctx)
 	actor := mw.AgentFromCtx(ctx)
 	if v := r.FormValue("retention_months"); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-			db.SetConfig(ctx, h.pool, "data_retention_months", n) //nolint:errcheck
+			db.SetConfig(ctx, h.pool, tid, "data_retention_months", n) //nolint:errcheck
 		}
 	}
 	db.Log(ctx, h.pool, actor.ID, "settings_updated", "config", "data_retention",
@@ -127,6 +130,7 @@ func (h *SettingsHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	ctx := r.Context()
+	tid := db.TenantFromContext(ctx)
 	actor := mw.AgentFromCtx(ctx)
 	for _, kv := range []struct{ key, form string }{
 		{"biz_name", "biz_name"},
@@ -134,7 +138,7 @@ func (h *SettingsHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) 
 		{"biz_address", "biz_address"},
 		{"biz_industry", "biz_industry"},
 	} {
-		db.SetConfig(ctx, h.pool, kv.key, r.FormValue(kv.form)) //nolint:errcheck
+		db.SetConfig(ctx, h.pool, tid, kv.key, r.FormValue(kv.form)) //nolint:errcheck
 	}
 	db.Log(ctx, h.pool, actor.ID, "settings_updated", "config", "business_profile", nil)
 	http.Redirect(w, r, "/settings?tab=profile&saved=1", http.StatusSeeOther)
@@ -186,7 +190,8 @@ var defaultStopKeywords = []string{"STOP", "UNSUBSCRIBE", "OPT OUT", "OPTOUT", "
 
 func loadStopKeywords(r *http.Request, pool *pgxpool.Pool) []string {
 	var raw string
-	pool.QueryRow(r.Context(), `SELECT value#>>'{}' FROM app_config WHERE key='stop_keywords'`).Scan(&raw) //nolint:errcheck
+	tid := db.TenantFromContext(r.Context())
+	pool.QueryRow(r.Context(), `SELECT value#>>'{}' FROM app_config WHERE tenant_id = $2::uuid AND key=$1`, "stop_keywords", tid).Scan(&raw) //nolint:errcheck
 	if raw == "" {
 		return defaultStopKeywords
 	}
@@ -199,8 +204,9 @@ func loadStopKeywords(r *http.Request, pool *pgxpool.Pool) []string {
 
 func saveStopKeywords(r *http.Request, pool *pgxpool.Pool, kws []string) {
 	b, _ := json.Marshal(kws)
-	pool.QueryRow(r.Context(), `INSERT INTO app_config (key,value) VALUES ('stop_keywords',$1::jsonb)
-		ON CONFLICT (key) DO UPDATE SET value=$1::jsonb, updated_at=NOW()`, string(b)).Scan() //nolint:errcheck
+	tid := db.TenantFromContext(r.Context())
+	pool.QueryRow(r.Context(), `INSERT INTO app_config (tenant_id, key, value) VALUES ($2::uuid, 'stop_keywords', $1::jsonb)
+		ON CONFLICT (tenant_id, key) DO UPDATE SET value=$1::jsonb, updated_at=NOW()`, string(b), tid).Scan() //nolint:errcheck
 }
 
 func containsKeyword(kws []string, kw string) bool {
@@ -214,6 +220,7 @@ func containsKeyword(kws []string, kw string) bool {
 
 func (h *SettingsHandler) loadSettings(r *http.Request) templates.SettingsViewData {
 	ctx := r.Context()
+	tid := db.TenantFromContext(ctx)
 	d := templates.SettingsViewData{
 		QuietHoursStart: "21:00",
 		QuietHoursEnd:   "09:00",
@@ -227,25 +234,32 @@ func (h *SettingsHandler) loadSettings(r *http.Request) templates.SettingsViewDa
 		WAAPIVersion:    "v23.0",
 		StopKeywords:    defaultStopKeywords,
 	}
-	if v, err := db.GetConfigFloat(ctx, h.pool, "marketing_cost_inr"); err == nil {
+
+	_, _ = db.GetConfigString(ctx, h.pool, tid, "whatsapp_phone_number_id")
+	wabaID, _ := db.GetConfigString(ctx, h.pool, tid, "whatsapp_waba_id")
+	if wabaID != "" {
+		d.WAWABAId = wabaID
+	}
+
+	if v, err := db.GetConfigFloat(ctx, h.pool, tid, "marketing_cost_inr"); err == nil {
 		d.MarketingCost = v
 	}
-	if v, err := db.GetConfigFloat(ctx, h.pool, "utility_cost_inr"); err == nil {
+	if v, err := db.GetConfigFloat(ctx, h.pool, tid, "utility_cost_inr"); err == nil {
 		d.UtilityCost = v
 	}
-	if v, err := db.GetConfigFloat(ctx, h.pool, "auth_cost_inr"); err == nil {
+	if v, err := db.GetConfigFloat(ctx, h.pool, tid, "auth_cost_inr"); err == nil {
 		d.AuthCost = v
 	}
-	if v, err := db.GetConfigFloat(ctx, h.pool, "gst_rate"); err == nil {
+	if v, err := db.GetConfigFloat(ctx, h.pool, tid, "gst_rate"); err == nil {
 		d.GSTRate = v
 	}
-	if v, err := db.GetConfigInt(ctx, h.pool, "freq_cap_hours"); err == nil {
+	if v, err := db.GetConfigInt(ctx, h.pool, tid, "freq_cap_hours"); err == nil {
 		d.FreqCapHours = v
 	}
-	if v, err := db.GetConfigInt(ctx, h.pool, "data_retention_months"); err == nil {
+	if v, err := db.GetConfigInt(ctx, h.pool, tid, "data_retention_months"); err == nil {
 		d.RetentionMonths = v
 	}
-	if v, err := db.GetConfigInt(ctx, h.pool, "meta_tier"); err == nil {
+	if v, err := db.GetConfigInt(ctx, h.pool, tid, "meta_tier"); err == nil {
 		d.MetaTier = v
 	}
 	qi, _ := db.GetQualityInfo(ctx, h.pool)
@@ -253,7 +267,7 @@ func (h *SettingsHandler) loadSettings(r *http.Request) templates.SettingsViewDa
 
 	tryStr := func(key string) string {
 		var s string
-		h.pool.QueryRow(ctx, `SELECT value#>>'{}' FROM app_config WHERE key=$1`, key).Scan(&s) //nolint:errcheck
+		h.pool.QueryRow(ctx, `SELECT value#>>'{}' FROM app_config WHERE tenant_id = $2::uuid AND key=$1`, key, tid).Scan(&s) //nolint:errcheck
 		return s
 	}
 	if v := tryStr("quiet_hours_start_ist"); v != "" {

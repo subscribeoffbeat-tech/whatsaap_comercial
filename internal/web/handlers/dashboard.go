@@ -17,18 +17,26 @@ import (
 
 // DashboardHandler handles the root dashboard page.
 type DashboardHandler struct {
-	pool     *pgxpool.Pool
-	waClient *whatsapp.Client
+	pool *pgxpool.Pool
 }
 
-func NewDashboardHandler(pool *pgxpool.Pool, waClient *whatsapp.Client) *DashboardHandler {
-	return &DashboardHandler{pool: pool, waClient: waClient}
+func NewDashboardHandler(pool *pgxpool.Pool) *DashboardHandler {
+	return &DashboardHandler{pool: pool}
 }
 
 func (h *DashboardHandler) Page(w http.ResponseWriter, r *http.Request) {
+	tid := db.TenantFromContext(r.Context())
+	phoneID, _ := db.GetConfigString(r.Context(), h.pool, tid, "whatsapp_phone_number_id")
+	wabaID, _ := db.GetConfigString(r.Context(), h.pool, tid, "whatsapp_waba_id")
+	token, _ := db.GetConfigString(r.Context(), h.pool, tid, "whatsapp_access_token")
+
+	var waClient *whatsapp.Client
+	if phoneID != "" && token != "" {
+		waClient = whatsapp.NewClient(phoneID, wabaID, token)
+	}
+
 	// Refresh phone quality + tier from Meta so the widget shows live data
-	// (best-effort, short timeout — never blocks the page).
-	h.syncPhoneHealth(r.Context())
+	h.syncPhoneHealth(r.Context(), waClient)
 
 	stats, err := db.GetDashboardStats(r.Context(), h.pool)
 	if err != nil {
@@ -44,27 +52,31 @@ func (h *DashboardHandler) Page(w http.ResponseWriter, r *http.Request) {
 }
 
 // syncPhoneHealth pulls the phone number's quality rating and messaging tier
-// from Meta and stores them in app_config, so the dashboard quality widget and
-// capacity bar reflect reality. Best-effort with a short timeout.
-func (h *DashboardHandler) syncPhoneHealth(ctx context.Context) {
-	if h.waClient == nil {
+// from Meta and stores them in app_config, scoped by tenant.
+func (h *DashboardHandler) syncPhoneHealth(ctx context.Context, waClient *whatsapp.Client) {
+	if waClient == nil {
 		return
 	}
+	tid := db.TenantFromContext(ctx)
+	if tid == "" {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
 
-	info, err := h.waClient.GetPhoneNumberInfo(ctx)
+	info, err := waClient.GetPhoneNumberInfo(ctx)
 	if err != nil {
 		log.Printf("dashboard phone-health sync: %v", err)
 		return
 	}
 	if q := strings.ToLower(strings.TrimSpace(info.QualityRating)); q != "" {
-		_ = db.SetConfig(ctx, h.pool, "quality_rating", q)
+		_ = db.SetConfig(ctx, h.pool, tid, "quality_rating", q)
 	}
 	if tier := tierToNumber(info.MessagingTier); tier > 0 {
-		_ = db.SetConfig(ctx, h.pool, "meta_tier", tier)
+		_ = db.SetConfig(ctx, h.pool, tid, "meta_tier", tier)
 		// Daily cap = 90% of the tier (hard rule: stop queuing at 90%).
-		_ = db.SetConfig(ctx, h.pool, "daily_message_cap", tier*9/10)
+		_ = db.SetConfig(ctx, h.pool, tid, "daily_message_cap", int64(tier*9/10))
 	}
 }
 

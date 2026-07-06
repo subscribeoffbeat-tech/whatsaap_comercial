@@ -26,12 +26,11 @@ import (
 
 // TemplatesHandler handles all /templates routes.
 type TemplatesHandler struct {
-	pool     *pgxpool.Pool
-	waClient *whatsapp.Client
+	pool *pgxpool.Pool
 }
 
-func NewTemplatesHandler(pool *pgxpool.Pool, waClient *whatsapp.Client) *TemplatesHandler {
-	return &TemplatesHandler{pool: pool, waClient: waClient}
+func NewTemplatesHandler(pool *pgxpool.Pool) *TemplatesHandler {
+	return &TemplatesHandler{pool: pool}
 }
 
 // Mount registers all templates routes.
@@ -46,6 +45,20 @@ func (h *TemplatesHandler) Mount(r chi.Router) {
 	r.Put("/{id}", h.Update)
 	r.Delete("/{id}", h.Delete)
 	r.Post("/{id}/submit", h.Submit)
+}
+
+func (h *TemplatesHandler) getWAClient(ctx context.Context) (*whatsapp.Client, error) {
+	tid := db.TenantFromContext(ctx)
+	phoneID, err := db.GetConfigString(ctx, h.pool, tid, "whatsapp_phone_number_id")
+	if err != nil || phoneID == "" {
+		return nil, fmt.Errorf("Meta WhatsApp credentials (Phone Number ID) not configured in Settings.")
+	}
+	wabaID, _ := db.GetConfigString(ctx, h.pool, tid, "whatsapp_waba_id")
+	token, err := db.GetConfigString(ctx, h.pool, tid, "whatsapp_access_token")
+	if err != nil || token == "" {
+		return nil, fmt.Errorf("Meta WhatsApp credentials (Access Token) not configured in Settings.")
+	}
+	return whatsapp.NewClient(phoneID, wabaID, token), nil
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
@@ -74,7 +87,6 @@ func (h *TemplatesHandler) NewForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TemplatesHandler) CreateFromForm(w http.ResponseWriter, r *http.Request) {
-	// Accept both multipart (file upload) and URL-encoded (no file) forms.
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		_ = r.ParseForm()
 	}
@@ -89,7 +101,6 @@ func (h *TemplatesHandler) CreateFromForm(w http.ResponseWriter, r *http.Request
 	action := r.FormValue("action")
 
 	slug := tmplSlugify(rawName)
-
 	agent := mw.AgentFromCtx(r.Context())
 
 	renderErr := func(msg string) {
@@ -115,6 +126,12 @@ func (h *TemplatesHandler) CreateFromForm(w http.ResponseWriter, r *http.Request
 		language = "en"
 	}
 
+	waClient, waErr := h.getWAClient(r.Context())
+	if waErr != nil && action == "submit" {
+		renderErr(waErr.Error())
+		return
+	}
+
 	var components []map[string]any
 	switch headerType {
 	case "text":
@@ -135,12 +152,12 @@ func (h *TemplatesHandler) CreateFromForm(w http.ResponseWriter, r *http.Request
 			renderErr("Could not read the uploaded header file. Please try again.")
 			return
 		}
-		// Template header media must go through Meta's Resumable Upload API, which
-		// returns a header_handle (a Cloud API media ID is not accepted here).
-		// Detect a real MIME type — browsers/drag-drop sometimes omit it, and
-		// Meta rejects application/octet-stream.
+		if waClient == nil {
+			renderErr("Cannot upload header media: WhatsApp integration is not configured.")
+			return
+		}
 		mimeType := detectHeaderMime(fh, data)
-		handle, uerr := h.waClient.UploadResumable(r.Context(), fh.Filename, mimeType, data)
+		handle, uerr := waClient.UploadResumable(r.Context(), fh.Filename, mimeType, data)
 		if uerr != nil {
 			log.Printf("template header resumable upload: %v", uerr)
 			renderErr("Header upload to Meta failed: " + uerr.Error())
@@ -233,7 +250,7 @@ func (h *TemplatesHandler) CreateFromForm(w http.ResponseWriter, r *http.Request
 			Category:   strings.ToUpper(t.Category),
 			Components: t.Components,
 		}
-		waID, err := h.waClient.SubmitTemplate(r.Context(), req)
+		waID, err := waClient.SubmitTemplate(r.Context(), req)
 		if err != nil {
 			log.Printf("submit template to Meta: %v", err)
 			http.Redirect(w, r, "/templates?flash=Template+saved+as+draft.+Meta+submission+failed.", http.StatusSeeOther)
@@ -249,11 +266,6 @@ func (h *TemplatesHandler) CreateFromForm(w http.ResponseWriter, r *http.Request
 	http.Redirect(w, r, "/templates?flash=Template+saved+as+draft.", http.StatusSeeOther)
 }
 
-// buildBodyExample collects example values for each {{N}} variable in body from
-// the form (fields named var_example_N), ordered by variable number. Meta
-// requires a sample value for every variable or it rejects with INVALID_FORMAT.
-// Returns the example object to attach to the BODY component (nil if the body
-// has no variables) and the list of variable indices missing an example value.
 func buildBodyExample(body string, form func(string) string) (map[string]any, []string) {
 	vars := whatsapp.ExtractVariables(body)
 	if len(vars) == 0 {
@@ -275,10 +287,6 @@ func buildBodyExample(body string, form func(string) string) (map[string]any, []
 	return map[string]any{"body_text": [][]string{vals}}, missing
 }
 
-// detectHeaderMime determines a Meta-acceptable MIME type for an uploaded
-// header file. Browsers and drag-and-drop sometimes omit the part Content-Type
-// (arriving as application/octet-stream), which Meta rejects — so fall back to
-// the file extension, then content sniffing.
 func detectHeaderMime(fh *multipart.FileHeader, data []byte) string {
 	if ct := fh.Header.Get("Content-Type"); ct != "" && ct != "application/octet-stream" {
 		return ct
@@ -312,7 +320,6 @@ func detectHeaderMime(fh *multipart.FileHeader, data []byte) string {
 		return "text/plain"
 	}
 	if ct := http.DetectContentType(data); ct != "" && ct != "application/octet-stream" {
-		// http.DetectContentType may append "; charset=..."; strip it.
 		if i := strings.IndexByte(ct, ';'); i >= 0 {
 			ct = ct[:i]
 		}
@@ -321,9 +328,6 @@ func detectHeaderMime(fh *multipart.FileHeader, data []byte) string {
 	return "application/octet-stream"
 }
 
-// validateComponentsForMeta catches the most common reasons Meta rejects a
-// template at submit time, returning a clear message (empty = looks OK). This
-// runs before the API call so users see plain guidance, not Meta's jargon.
 func validateComponentsForMeta(components []map[string]any) string {
 	for _, c := range components {
 		if !strings.EqualFold(fmt.Sprint(c["type"]), "HEADER") {
@@ -346,7 +350,6 @@ func validateComponentsForMeta(components []map[string]any) string {
 	return ""
 }
 
-// headerHasHandle reports whether a media HEADER carries an example media handle.
 func headerHasHandle(c map[string]any) bool {
 	ex, ok := c["example"].(map[string]any)
 	if !ok {
@@ -361,9 +364,6 @@ func headerHasHandle(c map[string]any) bool {
 	return false
 }
 
-// existingHeaderHandle returns the uploaded media handle from a stored HEADER
-// component, or "" if none — used to keep a header image when editing without
-// re-uploading.
 func existingHeaderHandle(components []map[string]any) string {
 	for _, c := range components {
 		if !strings.EqualFold(fmt.Sprint(c["type"]), "HEADER") {
@@ -389,7 +389,6 @@ func existingHeaderHandle(components []map[string]any) string {
 	return ""
 }
 
-// headerHasText reports whether a TEXT HEADER carries an example header value.
 func headerHasText(c map[string]any) bool {
 	ex, ok := c["example"].(map[string]any)
 	if !ok {
@@ -404,7 +403,6 @@ func headerHasText(c map[string]any) bool {
 	return false
 }
 
-// joinVars formats variable indices for display, e.g. ["1","2"] -> "{{1}}, {{2}}".
 func joinVars(vars []string) string {
 	parts := make([]string, len(vars))
 	for i, v := range vars {
@@ -432,8 +430,6 @@ func tmplSlugify(s string) string {
 // ── Gallery partial ───────────────────────────────────────────────────────────
 
 func (h *TemplatesHandler) Gallery(w http.ResponseWriter, r *http.Request) {
-	// Reconcile local statuses with Meta so approvals/rejections show even if a
-	// webhook was missed. Best-effort with a short timeout — never block the page.
 	h.syncStatusesFromMeta(r.Context())
 
 	tmplList, err := db.ListTemplates(r.Context(), h.pool)
@@ -448,13 +444,17 @@ func (h *TemplatesHandler) Gallery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// syncStatusesFromMeta pulls live template statuses from Meta and reconciles the
-// local DB. Best-effort: a short timeout and any error is logged, never fatal.
 func (h *TemplatesHandler) syncStatusesFromMeta(ctx context.Context) {
+	waClient, waErr := h.getWAClient(ctx)
+	if waErr != nil {
+		log.Printf("template status sync skipped: %v", waErr)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 
-	metaList, err := h.waClient.ListTemplates(ctx)
+	metaList, err := waClient.ListTemplates(ctx)
 	if err != nil {
 		log.Printf("template status sync: %v", err)
 		return
@@ -474,8 +474,6 @@ func (h *TemplatesHandler) syncStatusesFromMeta(ctx context.Context) {
 	}
 }
 
-// mapMetaStatus maps Meta's template status enum to our local status values.
-// Returns "" for genuinely unknown events so callers can skip the update.
 func mapMetaStatus(s string) string {
 	switch strings.ToUpper(strings.TrimSpace(s)) {
 	case "APPROVED", "REINSTATED":
@@ -510,7 +508,7 @@ func (h *TemplatesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if msgs := validateTemplateVars(t, fallbacks); len(msgs) > 0 {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		fmt.Fprint(w, templates.FormBanner(strings.Join(msgs, "; ")))
+		_, _ = fmt.Fprint(w, templates.FormBanner(strings.Join(msgs, "; ")))
 		return
 	}
 	if err := db.CreateTemplate(r.Context(), h.pool, t); err != nil {
@@ -520,7 +518,7 @@ func (h *TemplatesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("HX-Trigger", "templatesUpdated")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Template saved.", "", ""))
+	_, _ = fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Template saved.", "", ""))
 }
 
 // ── Edit form ─────────────────────────────────────────────────────────────────
@@ -542,7 +540,6 @@ func (h *TemplatesHandler) EditForm(w http.ResponseWriter, r *http.Request) {
 
 func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	// Accept multipart (header file upload) or URL-encoded forms.
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		_ = r.ParseForm()
 	}
@@ -558,12 +555,12 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	slug := tmplSlugify(rawName)
 	if slug == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, templates.FormBanner("Template name is required."))
+		_, _ = fmt.Fprint(w, templates.FormBanner("Template name is required."))
 		return
 	}
 	if body == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, templates.FormBanner("Body text is required."))
+		_, _ = fmt.Fprint(w, templates.FormBanner("Body text is required."))
 		return
 	}
 	switch category {
@@ -575,10 +572,13 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 		language = "en"
 	}
 
-	// Existing template: reuse an already-uploaded header handle and preserve
-	// buttons (the editor doesn't edit buttons).
-	existingTmpl, _ := db.GetTemplate(r.Context(), h.pool, id)
+	waClient, waErr := h.getWAClient(r.Context())
+	if waErr != nil && r.FormValue("action") == "resubmit" {
+		editErr(w, waErr.Error())
+		return
+	}
 
+	existingTmpl, _ := db.GetTemplate(r.Context(), h.pool, id)
 	bodyExample, missingEx := buildBodyExample(body, r.FormValue)
 	if r.FormValue("action") == "resubmit" && len(missingEx) > 0 {
 		editErr(w, fmt.Sprintf("Provide an example value for variable %s — Meta requires a sample for every {{N}} placeholder.",
@@ -586,7 +586,6 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Backward-compat: older editor only sent header_text.
 	if headerType == "" {
 		if headerText != "" {
 			headerType = "text"
@@ -606,8 +605,8 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 		if f, fh, ferr := r.FormFile("header_file"); ferr == nil {
 			data, rerr := io.ReadAll(f)
 			f.Close()
-			if rerr == nil && len(data) > 0 {
-				handle, uerr := h.waClient.UploadResumable(r.Context(), fh.Filename, detectHeaderMime(fh, data), data)
+			if rerr == nil && len(data) > 0 && waClient != nil {
+				handle, uerr := waClient.UploadResumable(r.Context(), fh.Filename, detectHeaderMime(fh, data), data)
 				if uerr != nil {
 					log.Printf("edit header upload: %v", uerr)
 					editErr(w, "Header upload to Meta failed: "+uerr.Error())
@@ -616,7 +615,6 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 				hdr["example"] = map[string]any{"header_handle": []string{handle}}
 			}
 		} else if existingTmpl != nil {
-			// No new file — keep the existing uploaded handle if there is one.
 			if handle := existingHeaderHandle(existingTmpl.Components); handle != "" {
 				hdr["example"] = map[string]any{"header_handle": []string{handle}}
 			}
@@ -632,7 +630,6 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if footer != "" {
 		components = append(components, map[string]any{"type": "FOOTER", "text": footer})
 	}
-	// Preserve existing buttons (not edited in this form).
 	if existingTmpl != nil {
 		for _, c := range existingTmpl.Components {
 			if strings.EqualFold(fmt.Sprint(c["type"]), "BUTTONS") {
@@ -654,7 +651,6 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// "Save & Resubmit to Meta" — push the edited content to Meta for review.
 	if r.FormValue("action") == "resubmit" {
 		if msg := validateComponentsForMeta(components); msg != "" {
 			editErr(w, msg)
@@ -668,8 +664,7 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		metaCat := strings.ToUpper(category)
 		if existing.WATemplateID != nil && *existing.WATemplateID != "" {
-			// Template already exists in Meta — edit it (re-enters review).
-			if err := h.waClient.EditTemplate(r.Context(), *existing.WATemplateID, metaCat, components); err != nil {
+			if err := waClient.EditTemplate(r.Context(), *existing.WATemplateID, metaCat, components); err != nil {
 				log.Printf("resubmit (edit) template to Meta: %v", err)
 				editErr(w, "Meta rejected the resubmission: "+err.Error())
 				return
@@ -678,8 +673,7 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 				log.Printf("resubmit: set pending: %v", err)
 			}
 		} else {
-			// Never submitted before — create it.
-			waID, err := h.waClient.SubmitTemplate(r.Context(), whatsapp.SubmitTemplateRequest{
+			waID, err := waClient.SubmitTemplate(r.Context(), whatsapp.SubmitTemplateRequest{
 				Name:       slug,
 				Language:   language,
 				Category:   metaCat,
@@ -696,22 +690,13 @@ func (h *TemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("HX-Trigger", "templatesUpdated")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Resubmitted to Meta — awaiting review.", "", ""))
+		_, _ = fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Resubmitted to Meta — awaiting review.", "", ""))
 		return
 	}
 
 	w.Header().Set("HX-Trigger", "templatesUpdated")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Template updated.", "", ""))
-}
-
-// editErr returns an error fragment as a 422 so the editor form's
-// hx-on::response-error handler shows it in #tmpl-edit-errors without
-// swapping away the form.
-func editErr(w http.ResponseWriter, msg string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusUnprocessableEntity)
-	fmt.Fprintf(w, `<div class="callout callout--danger" style="margin-bottom:8px"><strong>Could not resubmit:</strong> %s</div>`, html.EscapeString(msg))
+	_, _ = fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Template updated.", "", ""))
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -725,7 +710,7 @@ func (h *TemplatesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("HX-Trigger", "templatesUpdated")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Template deleted.", "", ""))
+	_, _ = fmt.Fprint(w, templates.ToastFragment(templates.ToastSuccess, "Template deleted.", "", ""))
 }
 
 // ── Submit to Meta ─────────────────────────────────────────────────────────────
@@ -738,10 +723,16 @@ func (h *TemplatesHandler) Submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Catch common problems before hitting Meta, so the user gets clear guidance.
 	if msg := validateComponentsForMeta(t.Components); msg != "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprintf(w, `<div class="callout callout--danger" style="margin-top:4px"><strong>Can't submit yet:</strong> %s</div>`, html.EscapeString(msg))
+		_, _ = fmt.Fprintf(w, `<div class="callout callout--danger" style="margin-top:4px"><strong>Can't submit yet:</strong> %s</div>`, html.EscapeString(msg))
+		return
+	}
+
+	waClient, waErr := h.getWAClient(r.Context())
+	if waErr != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprintf(w, `<div class="callout callout--danger" style="margin-top:4px"><strong>Configuration Error:</strong> %s</div>`, html.EscapeString(waErr.Error()))
 		return
 	}
 
@@ -751,11 +742,11 @@ func (h *TemplatesHandler) Submit(w http.ResponseWriter, r *http.Request) {
 		Category:   strings.ToUpper(t.Category),
 		Components: t.Components,
 	}
-	waID, err := h.waClient.SubmitTemplate(r.Context(), req)
+	waID, err := waClient.SubmitTemplate(r.Context(), req)
 	if err != nil {
 		log.Printf("submit template to Meta: %v", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprintf(w, `<div class="callout callout--danger" style="margin-top:4px"><strong>Meta rejected:</strong> %s</div>`, err.Error())
+		_, _ = fmt.Fprintf(w, `<div class="callout callout--danger" style="margin-top:4px"><strong>Meta rejected:</strong> %s</div>`, err.Error())
 		return
 	}
 	if err := db.SetTemplateWAID(r.Context(), h.pool, id, waID); err != nil {
@@ -764,24 +755,19 @@ func (h *TemplatesHandler) Submit(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("HX-Trigger", "templatesUpdated")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, `<div style="font-size:12px;color:var(--text-muted);padding:6px 0 2px">⏳ Submitted to Meta — awaiting review (usually 2–5 min)</div>`)
+	_, _ = fmt.Fprint(w, `<div style="font-size:12px;color:var(--text-muted);padding:6px 0 2px">⏳ Submitted to Meta — awaiting review (usually 2–5 min)</div>`)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-// templateRequest is the JSON body for create/update.
 type templateRequest struct {
-	Name       string            `json:"name"`
-	Language   string            `json:"language"`
-	Category   string            `json:"category"`   // marketing|utility|authentication
-	Components []map[string]any  `json:"components"` // Meta components array
-	// Fallbacks maps {{N}} index → default value used when contact field is empty.
-	// Required for every variable in the BODY component. Not sent to Meta.
+	Name       string           `json:"name"`
+	Language   string           `json:"language"`
+	Category   string           `json:"category"`
+	Components []map[string]any `json:"components"`
 	Fallbacks  map[string]string `json:"fallbacks"`
 }
 
-// decodeTemplateRequest parses and validates a create/update body.
-// Returns the db.Template ready for storage and the fallbacks map.
 func decodeTemplateRequest(r *http.Request) (*db.Template, map[string]string, error) {
 	var req templateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -798,26 +784,50 @@ func decodeTemplateRequest(r *http.Request) (*db.Template, map[string]string, er
 	default:
 		return nil, nil, fmt.Errorf("category must be marketing, utility, or authentication")
 	}
-	return &db.Template{
-		Name:       req.Name,
-		Language:   req.Language,
-		Category:   req.Category,
-		Components: req.Components,
-	}, req.Fallbacks, nil
-}
 
-// validateTemplateVars checks that every {{N}} variable in the BODY component
-// has a corresponding entry in the fallbacks map. Returns error messages (empty
-// slice = valid).
-func validateTemplateVars(t *db.Template, fallbacks map[string]string) []string {
-	var errs []string
-	for _, comp := range t.Components {
-		if comp["type"] == "BODY" {
-			text, _ := comp["text"].(string)
-			if missing := whatsapp.ValidateVariables(text, fallbacks); len(missing) > 0 {
-				errs = append(errs, fmt.Sprintf("body variables %v have no fallback default", missing))
+	for _, c := range req.Components {
+		if strings.EqualFold(fmt.Sprint(c["type"]), "BODY") {
+			bodyText := fmt.Sprint(c["text"])
+			vars := whatsapp.ExtractVariables(bodyText)
+			if len(vars) > 0 {
+				var vals []string
+				for _, v := range vars {
+					fallbackVal := req.Fallbacks[v]
+					vals = append(vals, fallbackVal)
+				}
+				c["example"] = map[string]any{"body_text": [][]string{vals}}
 			}
 		}
 	}
-	return errs
+
+	slug := tmplSlugify(req.Name)
+	t := &db.Template{
+		Name:       slug,
+		Language:   req.Language,
+		Category:   req.Category,
+		Components: req.Components,
+	}
+	return t, req.Fallbacks, nil
+}
+
+func validateTemplateVars(t *db.Template, fallbacks map[string]string) []string {
+	var msgs []string
+	for _, c := range t.Components {
+		if strings.EqualFold(fmt.Sprint(c["type"]), "BODY") {
+			bodyText := fmt.Sprint(c["text"])
+			vars := whatsapp.ExtractVariables(bodyText)
+			for _, v := range vars {
+				if strings.TrimSpace(fallbacks[v]) == "" {
+					msgs = append(msgs, fmt.Sprintf("Provide a fallback value for variable {{%s}}", v))
+				}
+			}
+		}
+	}
+	return msgs
+}
+
+func editErr(w http.ResponseWriter, msg string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	fmt.Fprintf(w, `<div class="callout callout--danger" style="margin-bottom:8px"><strong>Could not resubmit:</strong> %s</div>`, html.EscapeString(msg))
 }

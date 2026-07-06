@@ -43,12 +43,13 @@ func IsQuietHoursCfg(ctx context.Context, pool *pgxpool.Pool, t time.Time) bool 
 // quietWindow returns the configured quiet-hours start/end as minutes-of-day.
 func quietWindow(ctx context.Context, pool *pgxpool.Pool) (startMin, endMin int) {
 	startMin, endMin = 21*60, 9*60 // defaults
-	if s, err := db.GetConfigString(ctx, pool, "quiet_hours_start_ist"); err == nil {
+	tid := db.TenantFromContext(ctx)
+	if s, err := db.GetConfigString(ctx, pool, tid, "quiet_hours_start_ist"); err == nil {
 		if m, ok := parseHHMM(s); ok {
 			startMin = m
 		}
 	}
-	if s, err := db.GetConfigString(ctx, pool, "quiet_hours_end_ist"); err == nil {
+	if s, err := db.GetConfigString(ctx, pool, tid, "quiet_hours_end_ist"); err == nil {
 		if m, ok := parseHHMM(s); ok {
 			endMin = m
 		}

@@ -34,11 +34,10 @@ type CampaignHandler struct {
 	pool        *pgxpool.Pool
 	riverClient *river.Client[pgx.Tx]
 	hub         *ws.Hub
-	waClient    *whatsapp.Client
 }
 
-func NewCampaignHandler(pool *pgxpool.Pool, rc *river.Client[pgx.Tx], hub *ws.Hub, wa *whatsapp.Client) *CampaignHandler {
-	return &CampaignHandler{pool: pool, riverClient: rc, hub: hub, waClient: wa}
+func NewCampaignHandler(pool *pgxpool.Pool, rc *river.Client[pgx.Tx], hub *ws.Hub) *CampaignHandler {
+	return &CampaignHandler{pool: pool, riverClient: rc, hub: hub}
 }
 
 // reviewErr re-renders the review step with an error message (used for
@@ -51,7 +50,8 @@ func (h *CampaignHandler) reviewErr(w http.ResponseWriter, r *http.Request, agen
 // freqCapHours returns the admin-configured frequency-cap window (hours),
 // defaulting to 24 (the hard rule: 1 marketing message per contact per 24h).
 func (h *CampaignHandler) freqCapHours(ctx context.Context) int {
-	if v, err := db.GetConfigInt(ctx, h.pool, "freq_cap_hours"); err == nil && v > 0 {
+	tid := db.TenantFromContext(ctx)
+	if v, err := db.GetConfigInt(ctx, h.pool, tid, "freq_cap_hours"); err == nil && v > 0 {
 		return int(v)
 	}
 	return 24
@@ -81,23 +81,27 @@ func (h *CampaignHandler) Mount(r chi.Router) {
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func (h *CampaignHandler) List(w http.ResponseWriter, r *http.Request) {
-	cs, err := db.ListCampaigns(r.Context(), h.pool)
+	ctx := r.Context()
+	tid := db.TenantFromContext(ctx)
+	cs, err := db.ListCampaigns(ctx, h.pool)
 	if err != nil {
 		http.Error(w, "load campaigns: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	dailyCap := db.DailyCap(r.Context(), h.pool)
-	agent := mw.AgentFromCtx(r.Context())
+	dailyCap := db.DailyCap(ctx, h.pool, tid)
+	agent := mw.AgentFromCtx(ctx)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	templates.CampaignsPage(agent, cs, dailyCap).Render(r.Context(), w)
+	templates.CampaignsPage(agent, cs, dailyCap).Render(ctx, w)
 }
 
 // ── Wizard step 1: Basics ─────────────────────────────────────────────────────
 
 func (h *CampaignHandler) NewWizard(w http.ResponseWriter, r *http.Request) {
-	agent := mw.AgentFromCtx(r.Context())
-	rates := db.LoadRates(r.Context(), h.pool)
-	templates.WizardBasicsPage(agent, templates.WizardState{Step: 1, Category: "marketing"}, rates, "").Render(r.Context(), w)
+	ctx := r.Context()
+	tid := db.TenantFromContext(ctx)
+	agent := mw.AgentFromCtx(ctx)
+	rates := db.LoadRates(ctx, h.pool, tid)
+	templates.WizardBasicsPage(agent, templates.WizardState{Step: 1, Category: "marketing"}, rates, "").Render(ctx, w)
 }
 
 func (h *CampaignHandler) WizardBasics(w http.ResponseWriter, r *http.Request) {
@@ -105,8 +109,10 @@ func (h *CampaignHandler) WizardBasics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "parse form", http.StatusBadRequest)
 		return
 	}
-	agent := mw.AgentFromCtx(r.Context())
-	rates := db.LoadRates(r.Context(), h.pool)
+	ctx := r.Context()
+	tid := db.TenantFromContext(ctx)
+	agent := mw.AgentFromCtx(ctx)
+	rates := db.LoadRates(ctx, h.pool, tid)
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	notes := strings.TrimSpace(r.FormValue("notes"))
@@ -141,9 +147,11 @@ func (h *CampaignHandler) WizardTemplate(w http.ResponseWriter, r *http.Request)
 	agent := mw.AgentFromCtx(r.Context())
 
 	if r.FormValue("action") == "back" {
-		rates := db.LoadRates(r.Context(), h.pool)
+		ctx := r.Context()
+		tid := db.TenantFromContext(ctx)
+		rates := db.LoadRates(ctx, h.pool, tid)
 		state.Step = 1
-		templates.WizardBasicsPage(agent, state, rates, "").Render(r.Context(), w)
+		templates.WizardBasicsPage(agent, state, rates, "").Render(ctx, w)
 		return
 	}
 
@@ -268,6 +276,7 @@ func (h *CampaignHandler) WizardAudience(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	agent := mw.AgentFromCtx(r.Context())
+	tid := db.TenantFromContext(r.Context())
 
 	if r.FormValue("action") == "back" {
 		if state.HasVars {
@@ -331,11 +340,11 @@ func (h *CampaignHandler) WizardAudience(w http.ResponseWriter, r *http.Request)
 	state.SkipReport = report
 	// Compute the estimated cost now so the Schedule page shows it (it was only
 	// being calculated on the way to Review, leaving Schedule showing ₹0).
-	rates := db.LoadRates(r.Context(), h.pool)
+	rates := db.LoadRates(r.Context(), h.pool, tid)
 	state.EstCost = campaigns.CalcTotalCost(state.Category, state.EligibleCount, rates)
 
-	dailySent, _ := db.DailyMessagesSent(r.Context(), h.pool)
-	dailyCap := db.DailyCap(r.Context(), h.pool)
+	dailySent, _ := db.DailyMessagesSent(r.Context(), h.pool, tid)
+	dailyCap := db.DailyCap(r.Context(), h.pool, tid)
 	state.DailySent = int(dailySent)
 	state.DailyCap = int(dailyCap)
 	state.Step = 5
@@ -394,7 +403,8 @@ func (h *CampaignHandler) WizardSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	rates := db.LoadRates(r.Context(), h.pool)
+	tid := db.TenantFromContext(r.Context())
+	rates := db.LoadRates(r.Context(), h.pool, tid)
 	state.EstCost = campaigns.CalcTotalCost(tmpl.Category, state.EligibleCount, rates)
 	state.Step = 6
 
@@ -425,6 +435,7 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	tid := db.TenantFromContext(ctx)
 	tmpl, err := db.GetTemplate(ctx, h.pool, state.TemplateID)
 	if err != nil {
 		http.Error(w, "load template: "+err.Error(), http.StatusInternalServerError)
@@ -446,8 +457,8 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// A draft isn't sending now, so the daily cap doesn't apply to it.
 	isDraft := r.FormValue("action") == "draft"
 	if !isDraft {
-		sent, _ := db.DailyMessagesSent(ctx, h.pool)
-		if !campaigns.LimitGuardCheck(sent, db.DailyCap(ctx, h.pool)) {
+		sent, _ := db.DailyMessagesSent(ctx, h.pool, tid)
+		if !campaigns.LimitGuardCheck(sent, db.DailyCap(ctx, h.pool, tid)) {
 			http.Error(w, "Daily send cap reached. Try again tomorrow.", http.StatusTooManyRequests)
 			return
 		}
@@ -495,7 +506,16 @@ func (h *CampaignHandler) Create(w http.ResponseWriter, r *http.Request) {
 		if mimeType == "" {
 			mimeType = "application/octet-stream"
 		}
-		mid, uerr := h.waClient.UploadMediaStream(ctx, bytes.NewReader(headerMediaBytes), headerMediaName, mimeType)
+		phoneID, _ := db.GetConfigString(ctx, h.pool, tid, "whatsapp_phone_number_id")
+		wabaID, _ := db.GetConfigString(ctx, h.pool, tid, "whatsapp_waba_id")
+		token, _ := db.GetConfigString(ctx, h.pool, tid, "whatsapp_access_token")
+		if phoneID == "" || token == "" {
+			h.reviewErr(w, r, agent, state, tmpl, "WhatsApp API credentials are not configured for this workspace.")
+			return
+		}
+		waClient := whatsapp.NewClient(phoneID, wabaID, token)
+
+		mid, uerr := waClient.UploadMediaStream(ctx, bytes.NewReader(headerMediaBytes), headerMediaName, mimeType)
 		if uerr != nil {
 			log.Printf("campaign header media upload to Meta failed: %v", uerr)
 			h.reviewErr(w, r, agent, state, tmpl, "Uploading the media to WhatsApp failed: "+uerr.Error())
@@ -688,7 +708,8 @@ func (h *CampaignHandler) EditDraft(w http.ResponseWriter, r *http.Request) {
 		SegmentTagIDs:     camp.SegmentTags,
 		UseAllContacts:    len(camp.SegmentTags) == 0,
 	}
-	rates := db.LoadRates(ctx, h.pool)
+	tid := db.TenantFromContext(ctx)
+	rates := db.LoadRates(ctx, h.pool, tid)
 	templates.WizardBasicsPage(agent, state, rates, "").Render(ctx, w)
 }
 
@@ -731,8 +752,9 @@ func (h *CampaignHandler) Launch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Respect the daily cap at launch (a draft may sit for days).
-	sent, _ := db.DailyMessagesSent(ctx, h.pool)
-	if !campaigns.LimitGuardCheck(sent, db.DailyCap(ctx, h.pool)) {
+	tid := db.TenantFromContext(ctx)
+	sent, _ := db.DailyMessagesSent(ctx, h.pool, tid)
+	if !campaigns.LimitGuardCheck(sent, db.DailyCap(ctx, h.pool, tid)) {
 		http.Error(w, "Daily send cap reached. Try again tomorrow.", http.StatusTooManyRequests)
 		return
 	}

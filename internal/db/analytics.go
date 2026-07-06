@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,37 +22,42 @@ type OverviewStats struct {
 // GetOverviewStats returns outbound message stats between from and to.
 func GetOverviewStats(ctx context.Context, pool *pgxpool.Pool, from, to time.Time) (OverviewStats, error) {
 	var s OverviewStats
+	tp := TenantParam(ctx)
 	err := pool.QueryRow(ctx, `
 		SELECT
-		  COUNT(*) FILTER (WHERE status IN ('sent','delivered','read'))        AS sent,
-		  COUNT(*) FILTER (WHERE status = 'delivered')                         AS delivered,
-		  COUNT(*) FILTER (WHERE status = 'read')                              AS read,
-		  COUNT(*) FILTER (WHERE status = 'failed')                            AS failed,
-		  COALESCE(SUM(cost_inr), 0)                                           AS cost_inr
-		FROM messages
-		WHERE direction = 'outbound'
-		  AND created_at >= $1 AND created_at < $2
-	`, from, to).Scan(&s.Sent, &s.Delivered, &s.Read, &s.Failed, &s.CostINR)
+		  COUNT(*) FILTER (WHERE m.status IN ('sent','delivered','read'))        AS sent,
+		  COUNT(*) FILTER (WHERE m.status = 'delivered')                         AS delivered,
+		  COUNT(*) FILTER (WHERE m.status = 'read')                              AS read,
+		  COUNT(*) FILTER (WHERE m.status = 'failed')                            AS failed,
+		  COALESCE(SUM(m.cost_inr), 0)                                           AS cost_inr
+		FROM messages m
+		JOIN conversations conv ON conv.id = m.conversation_id
+		WHERE m.direction = 'outbound'
+		  AND ($3::text IS NULL OR conv.tenant_id = $3::uuid)
+		  AND m.created_at >= $1 AND m.created_at < $2
+	`, from, to, tp).Scan(&s.Sent, &s.Delivered, &s.Read, &s.Failed, &s.CostINR)
 	return s, err
 }
 
 // GetAgentOverviewStats returns the same shape as GetOverviewStats but scoped
-// to messages sent by a specific agent (sent_by = agentID). Cost is excluded
-// because agents should not see financial data.
+// to messages sent by a specific agent.
 func GetAgentOverviewStats(ctx context.Context, pool *pgxpool.Pool, from, to time.Time, agentID string) (OverviewStats, error) {
 	var s OverviewStats
+	tp := TenantParam(ctx)
 	err := pool.QueryRow(ctx, `
 		SELECT
-		  COUNT(*) FILTER (WHERE status IN ('sent','delivered','read'))  AS sent,
-		  COUNT(*) FILTER (WHERE status = 'delivered')                   AS delivered,
-		  COUNT(*) FILTER (WHERE status = 'read')                        AS read,
-		  COUNT(*) FILTER (WHERE status = 'failed')                      AS failed,
+		  COUNT(*) FILTER (WHERE m.status IN ('sent','delivered','read'))  AS sent,
+		  COUNT(*) FILTER (WHERE m.status = 'delivered')                   AS delivered,
+		  COUNT(*) FILTER (WHERE m.status = 'read')                        AS read,
+		  COUNT(*) FILTER (WHERE m.status = 'failed')                      AS failed,
 		  0::numeric                                                      AS cost_inr
-		FROM messages
-		WHERE direction = 'outbound'
-		  AND sent_by = $3::uuid
-		  AND created_at >= $1 AND created_at < $2
-	`, from, to, agentID).Scan(&s.Sent, &s.Delivered, &s.Read, &s.Failed, &s.CostINR)
+		FROM messages m
+		JOIN conversations conv ON conv.id = m.conversation_id
+		WHERE m.direction = 'outbound'
+		  AND m.sent_by = $3::uuid
+		  AND ($4::text IS NULL OR conv.tenant_id = $4::uuid)
+		  AND m.created_at >= $1 AND m.created_at < $2
+	`, from, to, agentID, tp).Scan(&s.Sent, &s.Delivered, &s.Read, &s.Failed, &s.CostINR)
 	return s, err
 }
 
@@ -69,18 +73,21 @@ type DayStat struct {
 
 // MessagesPerDay returns daily outbound counts between from and to.
 func MessagesPerDay(ctx context.Context, pool *pgxpool.Pool, from, to time.Time) ([]DayStat, error) {
+	tp := TenantParam(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT
-		  DATE_TRUNC('day', created_at AT TIME ZONE 'Asia/Kolkata') AS day,
-		  COUNT(*) FILTER (WHERE status IN ('sent','delivered','read')) AS sent,
-		  COUNT(*) FILTER (WHERE status IN ('delivered','read'))        AS delivered,
-		  COUNT(*) FILTER (WHERE status = 'failed')                    AS failed
-		FROM messages
-		WHERE direction = 'outbound'
-		  AND created_at >= $1 AND created_at < $2
+		  DATE_TRUNC('day', m.created_at AT TIME ZONE 'Asia/Kolkata') AS day,
+		  COUNT(*) FILTER (WHERE m.status IN ('sent','delivered','read')) AS sent,
+		  COUNT(*) FILTER (WHERE m.status IN ('delivered','read'))        AS delivered,
+		  COUNT(*) FILTER (WHERE m.status = 'failed')                    AS failed
+		FROM messages m
+		JOIN conversations conv ON conv.id = m.conversation_id
+		WHERE m.direction = 'outbound'
+		  AND ($3::text IS NULL OR conv.tenant_id = $3::uuid)
+		  AND m.created_at >= $1 AND m.created_at < $2
 		GROUP BY 1
 		ORDER BY 1
-	`, from, to)
+	`, from, to, tp)
 	if err != nil {
 		return nil, err
 	}
@@ -107,17 +114,20 @@ type CategoryCost struct {
 
 // CostByCategory returns cost breakdown by category for the date range.
 func CostByCategory(ctx context.Context, pool *pgxpool.Pool, from, to time.Time) ([]CategoryCost, error) {
+	tp := TenantParam(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT
-		  COALESCE(category, 'unknown') AS category,
+		  COALESCE(m.category, 'unknown') AS category,
 		  COUNT(*)                       AS cnt,
-		  COALESCE(SUM(cost_inr), 0)    AS cost_inr
-		FROM messages
-		WHERE direction = 'outbound'
-		  AND created_at >= $1 AND created_at < $2
+		  COALESCE(SUM(m.cost_inr), 0)    AS cost_inr
+		FROM messages m
+		JOIN conversations conv ON conv.id = m.conversation_id
+		WHERE m.direction = 'outbound'
+		  AND ($3::text IS NULL OR conv.tenant_id = $3::uuid)
+		  AND m.created_at >= $1 AND m.created_at < $2
 		GROUP BY 1
 		ORDER BY cost_inr DESC
-	`, from, to)
+	`, from, to, tp)
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +153,7 @@ type CampaignCost struct {
 
 // CostByCampaign returns cost breakdown by campaign for the date range.
 func CostByCampaign(ctx context.Context, pool *pgxpool.Pool, from, to time.Time) ([]CampaignCost, error) {
+	tp := TenantParam(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT
 		  m.campaign_id::text,
@@ -151,13 +162,15 @@ func CostByCampaign(ctx context.Context, pool *pgxpool.Pool, from, to time.Time)
 		  COALESCE(SUM(m.cost_inr), 0)   AS cost_inr
 		FROM messages m
 		LEFT JOIN campaigns c ON c.id = m.campaign_id
+		JOIN conversations conv ON conv.id = m.conversation_id
 		WHERE m.direction = 'outbound'
 		  AND m.campaign_id IS NOT NULL
+		  AND ($3::text IS NULL OR conv.tenant_id = $3::uuid)
 		  AND m.created_at >= $1 AND m.created_at < $2
 		GROUP BY 1, 2
 		ORDER BY cost_inr DESC
 		LIMIT 20
-	`, from, to)
+	`, from, to, tp)
 	if err != nil {
 		return nil, err
 	}
@@ -175,36 +188,35 @@ func CostByCampaign(ctx context.Context, pool *pgxpool.Pool, from, to time.Time)
 
 // MonthlyCost holds spend for one calendar month (IST), split by category.
 type MonthlyCost struct {
-	Month     string  // sort key, "2006-01"
-	Label     string  // display, "Jan 2006"
-	Sent      int64   // successfully sent/delivered/read
+	Month     string
+	Label     string
+	Sent      int64
 	Marketing float64
 	Utility   float64
 	Auth      float64
 	Total     float64
 }
 
-// CostByMonth returns per-month spend across ALL history (most recent first,
-// capped at 24 months). Months are bucketed in IST — the business runs in IST,
-// and "Cost this month" on the dashboard should line up with the current IST
-// month. Unlike the other cost queries this deliberately ignores the date-range
-// filter: the monthly view is a running history, not a windowed slice.
+// CostByMonth returns per-month spend across ALL history.
 func CostByMonth(ctx context.Context, pool *pgxpool.Pool) ([]MonthlyCost, error) {
+	tp := TenantParam(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT
-		  to_char((created_at AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM')      AS ym,
-		  to_char((created_at AT TIME ZONE 'Asia/Kolkata'), 'Mon YYYY')     AS label,
-		  COUNT(*) FILTER (WHERE status IN ('sent','delivered','read'))     AS sent,
-		  COALESCE(SUM(cost_inr) FILTER (WHERE category = 'marketing'), 0)  AS marketing,
-		  COALESCE(SUM(cost_inr) FILTER (WHERE category = 'utility'), 0)    AS utility,
-		  COALESCE(SUM(cost_inr) FILTER (WHERE category IN ('auth','authentication')), 0) AS auth,
-		  COALESCE(SUM(cost_inr), 0)                                        AS total
-		FROM messages
-		WHERE direction = 'outbound'
+		  to_char((m.created_at AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM')      AS ym,
+		  to_char((m.created_at AT TIME ZONE 'Asia/Kolkata'), 'Mon YYYY')     AS label,
+		  COUNT(*) FILTER (WHERE m.status IN ('sent','delivered','read'))     AS sent,
+		  COALESCE(SUM(m.cost_inr) FILTER (WHERE m.category = 'marketing'), 0)  AS marketing,
+		  COALESCE(SUM(m.cost_inr) FILTER (WHERE m.category = 'utility'), 0)    AS utility,
+		  COALESCE(SUM(m.cost_inr) FILTER (WHERE m.category IN ('auth','authentication')), 0) AS auth,
+		  COALESCE(SUM(m.cost_inr), 0)                                        AS total
+		FROM messages m
+		JOIN conversations conv ON conv.id = m.conversation_id
+		WHERE m.direction = 'outbound'
+		  AND ($1::text IS NULL OR conv.tenant_id = $1::uuid)
 		GROUP BY 1, 2
 		ORDER BY 1 DESC
 		LIMIT 24
-	`)
+	`, tp)
 	if err != nil {
 		return nil, err
 	}
@@ -224,21 +236,22 @@ func CostByMonth(ctx context.Context, pool *pgxpool.Pool) ([]MonthlyCost, error)
 
 // QualityInfo holds the current tier, daily usage, and quality rating.
 type QualityInfo struct {
-	Tier        int64   // meta_tier from app_config
-	DailyCap    int64   // daily_message_cap from app_config
-	SentToday   int64   // outbound messages since midnight UTC
-	QualityRating string // green|yellow|red (from app_config or computed)
+	Tier          int64
+	DailyCap      int64
+	SentToday     int64
+	QualityRating string
 }
 
 // GetQualityInfo loads tier + usage + quality rating.
 func GetQualityInfo(ctx context.Context, pool *pgxpool.Pool) (QualityInfo, error) {
 	var q QualityInfo
+	tid := effectiveTenantID(ctx)
 
-	// Single round-trip: fetch all three config keys at once.
 	cfg := make(map[string]json.RawMessage)
 	cfgRows, cfgErr := pool.Query(ctx,
 		`SELECT key, value FROM app_config
-		  WHERE key IN ('meta_tier', 'daily_message_cap', 'quality_rating')`,
+		  WHERE tenant_id = $1::uuid AND key IN ('meta_tier', 'daily_message_cap', 'quality_rating')`,
+		tid,
 	)
 	if cfgErr == nil {
 		for cfgRows.Next() {
@@ -251,7 +264,6 @@ func GetQualityInfo(ctx context.Context, pool *pgxpool.Pool) (QualityInfo, error
 		cfgRows.Close()
 	}
 
-	// meta_tier
 	if raw, ok := cfg["meta_tier"]; ok {
 		var n int64
 		if json.Unmarshal(raw, &n) == nil {
@@ -259,7 +271,6 @@ func GetQualityInfo(ctx context.Context, pool *pgxpool.Pool) (QualityInfo, error
 		}
 	}
 
-	// daily_message_cap — same fallback as DailyCap() (900 = 90% of tier-1000)
 	q.DailyCap = 900
 	if raw, ok := cfg["daily_message_cap"]; ok {
 		var n int64
@@ -268,7 +279,6 @@ func GetQualityInfo(ctx context.Context, pool *pgxpool.Pool) (QualityInfo, error
 		}
 	}
 
-	// quality_rating — must be a Meta-supplied string; never infer from usage
 	if raw, ok := cfg["quality_rating"]; ok {
 		var qs string
 		if json.Unmarshal(raw, &qs) == nil {
@@ -276,58 +286,49 @@ func GetQualityInfo(ctx context.Context, pool *pgxpool.Pool) (QualityInfo, error
 			case "green", "yellow", "red":
 				q.QualityRating = qs
 			default:
-				log.Printf("dashboard: quality_rating unexpected value %q — showing Unknown", qs)
 				q.QualityRating = "unknown"
 			}
 		} else {
-			log.Printf("dashboard: quality_rating value is not a string — showing Unknown")
 			q.QualityRating = "unknown"
 		}
 	} else {
-		log.Printf("dashboard: quality_rating key missing from app_config — showing Unknown; update via Meta phone_number_quality_update webhook")
 		q.QualityRating = "unknown"
 	}
 
-	sent, _ := DailyMessagesSent(ctx, pool)
+	sent, _ := DailyMessagesSent(ctx, pool, tid)
 	q.SentToday = sent
 
 	return q, nil
-}
-
-func max64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 // ── Agent performance ─────────────────────────────────────────────────────────
 
 // AgentStat holds per-agent performance numbers.
 type AgentStat struct {
-	AgentID        string
-	AgentName      string
-	MessagesSent   int64
-	ConvsResolved  int64
+	AgentID       string
+	AgentName     string
+	MessagesSent  int64
+	ConvsResolved int64
 }
 
-// AgentPerformance returns per-agent stats for the date range. Counts come from
-// independent subqueries so there's no cross-product fan-out between an agent's
-// messages and conversations.
+// AgentPerformance returns per-agent stats for the date range.
 func AgentPerformance(ctx context.Context, pool *pgxpool.Pool, from, to time.Time) ([]AgentStat, error) {
+	tp := TenantParam(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT
 		  a.id::text,
 		  a.name,
 		  (SELECT COUNT(*) FROM messages m
+		     JOIN conversations conv ON conv.id = m.conversation_id
 		     WHERE m.sent_by = a.id AND m.direction = 'outbound'
 		       AND m.created_at >= $1 AND m.created_at < $2) AS messages_sent,
 		  (SELECT COUNT(*) FROM conversations conv
 		     WHERE conv.assigned_to = a.id AND conv.status = 'closed'
 		       AND conv.updated_at >= $1 AND conv.updated_at < $2) AS convs_resolved
 		FROM agents a
+		WHERE ($3::text IS NULL OR a.tenant_id = $3::uuid)
 		ORDER BY messages_sent DESC
-	`, from, to)
+	`, from, to, tp)
 	if err != nil {
 		return nil, err
 	}
@@ -349,26 +350,29 @@ func AgentPerformance(ctx context.Context, pool *pgxpool.Pool, from, to time.Tim
 type DashboardStats struct {
 	SentToday      int64
 	DeliveredToday int64
-	ChatsWaiting   int64   // open conversations not assigned
+	ChatsWaiting   int64
 	CostThisMonth  float64
 	QualityRating  string
-	DailyCap       int64   // 90%-of-tier cap — same source as WizardAudience and LimitGuardCheck
-	CapUsedToday   int64   // ALL outbound today regardless of status — matches enforcement counter
+	DailyCap       int64
+	CapUsedToday   int64
 }
 
 // GetDashboardStats returns the quick-stat numbers for the dashboard.
 func GetDashboardStats(ctx context.Context, pool *pgxpool.Pool) (DashboardStats, error) {
 	var s DashboardStats
+	tid := effectiveTenantID(ctx)
 
-	// Sent + delivered today (midnight UTC)
+	// Sent + delivered today
 	err := pool.QueryRow(ctx, `
 		SELECT
-		  COUNT(*) FILTER (WHERE status IN ('sent','delivered','read')),
-		  COUNT(*) FILTER (WHERE status = 'delivered' OR status = 'read')
-		FROM messages
-		WHERE direction = 'outbound'
-		  AND created_at >= CURRENT_DATE
-	`).Scan(&s.SentToday, &s.DeliveredToday)
+		  COUNT(*) FILTER (WHERE m.status IN ('sent','delivered','read')),
+		  COUNT(*) FILTER (WHERE m.status = 'delivered' OR m.status = 'read')
+		FROM messages m
+		JOIN conversations conv ON conv.id = m.conversation_id
+		WHERE m.direction = 'outbound'
+		  AND conv.tenant_id = $1::uuid
+		  AND m.created_at >= CURRENT_DATE
+	`, tid).Scan(&s.SentToday, &s.DeliveredToday)
 	if err != nil {
 		return s, err
 	}
@@ -376,28 +380,30 @@ func GetDashboardStats(ctx context.Context, pool *pgxpool.Pool) (DashboardStats,
 	// Unassigned open conversations
 	err = pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM conversations
-		WHERE status = 'open' AND assigned_to IS NULL
-	`).Scan(&s.ChatsWaiting)
+		WHERE tenant_id = $1::uuid AND status = 'open' AND assigned_to IS NULL
+	`, tid).Scan(&s.ChatsWaiting)
 	if err != nil {
 		return s, err
 	}
 
 	// Cost this calendar month
 	err = pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(cost_inr), 0)
-		FROM messages
-		WHERE direction = 'outbound'
-		  AND created_at >= DATE_TRUNC('month', NOW())
-	`).Scan(&s.CostThisMonth)
+		SELECT COALESCE(SUM(m.cost_inr), 0)
+		FROM messages m
+		JOIN conversations conv ON conv.id = m.conversation_id
+		WHERE m.direction = 'outbound'
+		  AND conv.tenant_id = $1::uuid
+		  AND m.created_at >= DATE_TRUNC('month', NOW())
+	`, tid).Scan(&s.CostThisMonth)
 	if err != nil {
 		return s, err
 	}
 
-	// Quality rating + daily cap (qi.DailyCap already calls DailyCap(ctx,pool) — same source as WizardAudience)
+	// Quality rating + daily cap
 	qi, _ := GetQualityInfo(ctx, pool)
 	s.QualityRating = qi.QualityRating
 	s.DailyCap = qi.DailyCap
-	s.CapUsedToday = qi.SentToday // reuse count already fetched by GetQualityInfo
+	s.CapUsedToday = qi.SentToday
 
 	return s, nil
 }

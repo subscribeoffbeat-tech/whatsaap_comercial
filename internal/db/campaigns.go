@@ -41,6 +41,7 @@ type Campaign struct {
 	HeaderMediaPath string // local file path of the uploaded media
 	HeaderMediaID   string // reusable Meta media ID for sending
 	HeaderMediaType string // image | video | document
+	TenantID        string // UUID of the tenant owner
 }
 
 // CampaignRecipient mirrors the campaign_recipients table.
@@ -70,6 +71,7 @@ type CampaignReport struct {
 // Fallbacks is stored in template_variables["_fallbacks"] as a sub-key to keep
 // everything in the same JSONB column.
 func CreateCampaign(ctx context.Context, pool *pgxpool.Pool, c *Campaign) error {
+	tid := effectiveTenantID(ctx)
 	// Pack template_variables + fallbacks into one JSONB blob.
 	tvars := map[string]any{}
 	for k, v := range c.TemplateVariables {
@@ -84,13 +86,13 @@ func CreateCampaign(ctx context.Context, pool *pgxpool.Pool, c *Campaign) error 
 
 	return pool.QueryRow(ctx, `
 		INSERT INTO campaigns
-		    (name, template_id, template_variables, segment_tags, exclude_tags,
+		    (tenant_id, name, template_id, template_variables, segment_tags, exclude_tags,
 		     status, scheduled_at, total_recipients)
 		VALUES
-		    ($1, $2::uuid, $3, $4, $5, $6, $7, $8)
+		    ($1::uuid, $2, $3::uuid, $4, $5, $6, $7, $8, $9)
 		RETURNING id::text
 	`,
-		c.Name, c.TemplateID,
+		tid, c.Name, c.TemplateID,
 		varJSON, tagJSON, exclJSON,
 		c.Status, c.ScheduledAt, c.TotalRecipients,
 	).Scan(&c.ID)
@@ -119,6 +121,7 @@ func SetCampaignHeaderMediaID(ctx context.Context, pool *pgxpool.Pool, id, media
 
 // GetCampaign fetches a campaign by UUID string.
 func GetCampaign(ctx context.Context, pool *pgxpool.Pool, id string) (*Campaign, error) {
+	tp := TenantParam(ctx)
 	return scanCampaign(pool.QueryRow(ctx, `
 		SELECT c.id::text, c.name, c.template_id::text, t.name, t.language, t.category,
 		       c.template_variables, c.segment_tags, c.exclude_tags,
@@ -127,15 +130,17 @@ func GetCampaign(ctx context.Context, pool *pgxpool.Pool, id string) (*Campaign,
 		       c.total_recipients, c.sent_count, c.delivered_count,
 		       c.read_count, c.failed_count, c.skipped_count,
 		       c.cost_total_inr, c.created_at,
-		       COALESCE(c.header_media_path,''), COALESCE(c.header_media_id,''), COALESCE(c.header_media_type,'')
+		       COALESCE(c.header_media_path,''), COALESCE(c.header_media_id,''), COALESCE(c.header_media_type,''),
+		       c.tenant_id::text
 		FROM campaigns c
 		JOIN templates t ON t.id = c.template_id
-		WHERE c.id = $1::uuid
-	`, id))
+		WHERE c.id = $1::uuid AND ($2::text IS NULL OR c.tenant_id = $2::uuid)
+	`, id, tp))
 }
 
 // ListCampaigns returns all campaigns ordered by most recent first.
 func ListCampaigns(ctx context.Context, pool *pgxpool.Pool) ([]Campaign, error) {
+	tp := TenantParam(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT c.id::text, c.name, c.template_id::text, t.name, t.language, t.category,
 		       c.template_variables, c.segment_tags, c.exclude_tags,
@@ -144,12 +149,14 @@ func ListCampaigns(ctx context.Context, pool *pgxpool.Pool) ([]Campaign, error) 
 		       c.total_recipients, c.sent_count, c.delivered_count,
 		       c.read_count, c.failed_count, c.skipped_count,
 		       c.cost_total_inr, c.created_at,
-		       COALESCE(c.header_media_path,''), COALESCE(c.header_media_id,''), COALESCE(c.header_media_type,'')
+		       COALESCE(c.header_media_path,''), COALESCE(c.header_media_id,''), COALESCE(c.header_media_type,''),
+		       c.tenant_id::text
 		FROM campaigns c
 		JOIN templates t ON t.id = c.template_id
+		WHERE ($1::text IS NULL OR c.tenant_id = $1::uuid)
 		ORDER BY c.created_at DESC
 		LIMIT 200
-	`)
+	`, tp)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +176,7 @@ func ListCampaigns(ctx context.Context, pool *pgxpool.Pool) ([]Campaign, error) 
 // dashboard snippets where fetching all 200 rows would waste DB bandwidth.
 // ListCampaigns (LIMIT 200) is unchanged and used by the campaigns list page.
 func ListRecentCampaigns(ctx context.Context, pool *pgxpool.Pool, n int) ([]Campaign, error) {
+	tp := TenantParam(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT c.id::text, c.name, c.template_id::text, t.name, t.language, t.category,
 		       c.template_variables, c.segment_tags, c.exclude_tags,
@@ -177,12 +185,14 @@ func ListRecentCampaigns(ctx context.Context, pool *pgxpool.Pool, n int) ([]Camp
 		       c.total_recipients, c.sent_count, c.delivered_count,
 		       c.read_count, c.failed_count, c.skipped_count,
 		       c.cost_total_inr, c.created_at,
-		       COALESCE(c.header_media_path,''), COALESCE(c.header_media_id,''), COALESCE(c.header_media_type,'')
+		       COALESCE(c.header_media_path,''), COALESCE(c.header_media_id,''), COALESCE(c.header_media_type,''),
+		       c.tenant_id::text
 		FROM campaigns c
 		JOIN templates t ON t.id = c.template_id
+		WHERE ($2::text IS NULL OR c.tenant_id = $2::uuid)
 		ORDER BY c.created_at DESC
 		LIMIT $1
-	`, n)
+	`, n, tp)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +211,8 @@ func ListRecentCampaigns(ctx context.Context, pool *pgxpool.Pool, n int) ([]Camp
 // DeleteCampaign removes a campaign. Its recipients cascade-delete; sent message
 // rows keep their history (the FK sets their campaign_id to NULL).
 func DeleteCampaign(ctx context.Context, pool *pgxpool.Pool, id string) error {
-	_, err := pool.Exec(ctx, `DELETE FROM campaigns WHERE id = $1::uuid`, id)
+	tp := TenantParam(ctx)
+	_, err := pool.Exec(ctx, `DELETE FROM campaigns WHERE id = $1::uuid AND ($2::text IS NULL OR tenant_id = $2::uuid)`, id, tp)
 	return err
 }
 
@@ -215,6 +226,7 @@ func DeleteRecipients(ctx context.Context, pool *pgxpool.Pool, campaignID string
 // UpdateCampaignConfig overwrites an existing campaign's editable configuration
 // (used when saving an edited draft).
 func UpdateCampaignConfig(ctx context.Context, pool *pgxpool.Pool, c *Campaign) error {
+	tp := TenantParam(ctx)
 	tvars := map[string]any{}
 	for k, v := range c.TemplateVariables {
 		tvars[k] = v
@@ -230,21 +242,22 @@ func UpdateCampaignConfig(ctx context.Context, pool *pgxpool.Pool, c *Campaign) 
 		    name = $2, template_id = $3::uuid, template_variables = $4,
 		    segment_tags = $5, exclude_tags = $6, status = $7,
 		    scheduled_at = $8, total_recipients = $9, updated_at = NOW()
-		WHERE id = $1::uuid
-	`, c.ID, c.Name, c.TemplateID, varJSON, tagJSON, exclJSON, c.Status, c.ScheduledAt, c.TotalRecipients)
+		WHERE id = $1::uuid AND ($10::text IS NULL OR tenant_id = $10::uuid)
+	`, c.ID, c.Name, c.TemplateID, varJSON, tagJSON, exclJSON, c.Status, c.ScheduledAt, c.TotalRecipients, tp)
 	return err
 }
 
 // UpdateCampaignStatus updates status and timestamps accordingly.
 func UpdateCampaignStatus(ctx context.Context, pool *pgxpool.Pool, id, status string) error {
+	tp := TenantParam(ctx)
 	_, err := pool.Exec(ctx, `
 		UPDATE campaigns SET
 		    status       = $2,
 		    started_at   = CASE WHEN $2 = 'running'                  THEN NOW() ELSE started_at   END,
 		    completed_at = CASE WHEN $2 IN ('completed','cancelled')  THEN NOW() ELSE completed_at END,
 		    updated_at   = NOW()
-		WHERE id = $1::uuid
-	`, id, status)
+		WHERE id = $1::uuid AND ($3::text IS NULL OR tenant_id = $3::uuid)
+	`, id, status, tp)
 	return err
 }
 
@@ -798,6 +811,7 @@ func scanCampaign(row rowScanner) (*Campaign, error) {
 		&c.ReadCount, &c.FailedCount, &c.SkippedCount,
 		&c.CostTotalINR, &c.CreatedAt,
 		&c.HeaderMediaPath, &c.HeaderMediaID, &c.HeaderMediaType,
+		&c.TenantID,
 	)
 	if err != nil {
 		return nil, err

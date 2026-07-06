@@ -53,15 +53,17 @@ func scanRule(row rowScanner) (*AutomationRule, error) {
 	return r, nil
 }
 
-// ListRules returns all rules ordered by priority ASC (STOP first by trigger_type).
+// ListRules returns all rules for the current tenant ordered by priority ASC.
 func ListRules(ctx context.Context, pool *pgxpool.Pool) ([]*AutomationRule, error) {
+	tid := effectiveTenantID(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT `+ruleColumns+`
 		FROM automation_rules
+		WHERE tenant_id = $1::uuid
 		ORDER BY
 		  CASE trigger_type WHEN 'stop' THEN 0 ELSE 1 END,
 		  priority ASC, id ASC
-	`)
+	`, tid)
 	if err != nil {
 		return nil, err
 	}
@@ -77,16 +79,17 @@ func ListRules(ctx context.Context, pool *pgxpool.Pool) ([]*AutomationRule, erro
 	return rules, rows.Err()
 }
 
-// ListActiveRules returns only active rules, ordered for engine evaluation.
+// ListActiveRules returns only active rules for the current tenant, ordered for engine evaluation.
 func ListActiveRules(ctx context.Context, pool *pgxpool.Pool) ([]*AutomationRule, error) {
+	tid := effectiveTenantID(ctx)
 	rows, err := pool.Query(ctx, `
 		SELECT `+ruleColumns+`
 		FROM automation_rules
-		WHERE active = TRUE
+		WHERE tenant_id = $1::uuid AND active = TRUE
 		ORDER BY
 		  CASE trigger_type WHEN 'stop' THEN 0 ELSE 1 END,
 		  priority ASC, id ASC
-	`)
+	`, tid)
 	if err != nil {
 		return nil, err
 	}
@@ -104,68 +107,74 @@ func ListActiveRules(ctx context.Context, pool *pgxpool.Pool) ([]*AutomationRule
 
 // GetRule fetches a single rule by ID.
 func GetRule(ctx context.Context, pool *pgxpool.Pool, id int64) (*AutomationRule, error) {
+	tid := effectiveTenantID(ctx)
 	return scanRule(pool.QueryRow(ctx, `
-		SELECT `+ruleColumns+` FROM automation_rules WHERE id = $1
-	`, id))
+		SELECT `+ruleColumns+` FROM automation_rules WHERE tenant_id = $2::uuid AND id = $1
+	`, id, tid))
 }
 
 // CreateRule inserts a new rule and populates r.ID / timestamps.
 func CreateRule(ctx context.Context, pool *pgxpool.Pool, r *AutomationRule) error {
+	tid := effectiveTenantID(ctx)
 	var actionType *string
 	if r.ActionType != "" {
 		actionType = &r.ActionType
 	}
 	return pool.QueryRow(ctx, `
 		INSERT INTO automation_rules
-		  (name, trigger_type, keyword, keyword_match, template_id, response_text, action_type, active, priority)
-		VALUES ($1, $2, $3, $4, $5::uuid, $6, $7, $8, $9)
+		  (tenant_id, name, trigger_type, keyword, keyword_match, template_id, response_text, action_type, active, priority)
+		VALUES ($1::uuid, $2, $3, $4, $5, $6::uuid, $7, $8, $9, $10)
 		RETURNING id, created_at, updated_at
-	`, r.Name, r.TriggerType, r.Keyword, r.KeywordMatch,
+	`, tid, r.Name, r.TriggerType, r.Keyword, r.KeywordMatch,
 		r.TemplateID, r.ResponseText, actionType, r.Active, r.Priority,
 	).Scan(&r.ID, &r.CreatedAt, &r.UpdatedAt)
 }
 
 // UpdateRule updates a non-system rule.
 func UpdateRule(ctx context.Context, pool *pgxpool.Pool, r *AutomationRule) error {
+	tid := effectiveTenantID(ctx)
 	var actionType *string
 	if r.ActionType != "" {
 		actionType = &r.ActionType
 	}
 	_, err := pool.Exec(ctx, `
 		UPDATE automation_rules
-		SET name=$1, trigger_type=$2, keyword=$3, keyword_match=$4,
-		    template_id=$5::uuid, response_text=$6, action_type=$7, active=$8, priority=$9, updated_at=NOW()
-		WHERE id=$10 AND trigger_type != 'stop'
-	`, r.Name, r.TriggerType, r.Keyword, r.KeywordMatch,
-		r.TemplateID, r.ResponseText, actionType, r.Active, r.Priority, r.ID)
+		SET name=$3, trigger_type=$4, keyword=$5, keyword_match=$6,
+		    template_id=$7::uuid, response_text=$8, action_type=$9, active=$10, priority=$11, updated_at=NOW()
+		WHERE tenant_id=$1::uuid AND id=$2 AND trigger_type != 'stop'
+	`, tid, r.ID, r.Name, r.TriggerType, r.Keyword, r.KeywordMatch,
+		r.TemplateID, r.ResponseText, actionType, r.Active, r.Priority)
 	return err
 }
 
 // ToggleRule enables/disables a non-system rule.
 func ToggleRule(ctx context.Context, pool *pgxpool.Pool, id int64, active bool) error {
+	tid := effectiveTenantID(ctx)
 	_, err := pool.Exec(ctx, `
-		UPDATE automation_rules SET active=$1, updated_at=NOW()
-		WHERE id=$2 AND trigger_type != 'stop'
-	`, active, id)
+		UPDATE automation_rules SET active=$3, updated_at=NOW()
+		WHERE tenant_id=$1::uuid AND id=$2 AND trigger_type != 'stop'
+	`, tid, id, active)
 	return err
 }
 
 // DeleteRule removes a non-system rule.
 func DeleteRule(ctx context.Context, pool *pgxpool.Pool, id int64) error {
+	tid := effectiveTenantID(ctx)
 	_, err := pool.Exec(ctx, `
-		DELETE FROM automation_rules WHERE id=$1 AND trigger_type != 'stop'
-	`, id)
+		DELETE FROM automation_rules WHERE tenant_id=$1::uuid AND id=$2 AND trigger_type != 'stop'
+	`, tid, id)
 	return err
 }
 
-// EnsureStopRule inserts the system STOP rule if it does not yet exist.
+// EnsureStopRule inserts the system STOP rule if it does not yet exist for the current tenant.
 func EnsureStopRule(ctx context.Context, pool *pgxpool.Pool) error {
+	tid := effectiveTenantID(ctx)
 	_, err := pool.Exec(ctx, `
-		INSERT INTO automation_rules (name, trigger_type, keyword_match, response_text, active, priority)
-		SELECT 'STOP / Opt-out', 'stop', 'exact',
+		INSERT INTO automation_rules (tenant_id, name, trigger_type, keyword_match, response_text, active, priority)
+		SELECT $1::uuid, 'STOP / Opt-out', 'stop', 'exact',
 		  'You have been unsubscribed and will no longer receive marketing messages. Reply START to opt back in.',
 		  TRUE, 0
-		WHERE NOT EXISTS (SELECT 1 FROM automation_rules WHERE trigger_type = 'stop')
-	`)
+		WHERE NOT EXISTS (SELECT 1 FROM automation_rules WHERE tenant_id = $1::uuid AND trigger_type = 'stop')
+	`, tid)
 	return err
 }
